@@ -32,12 +32,27 @@ def alertas_teslabtc():
     """
 
     # Precio actual desde Binance
-    url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+   url_binance = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+url_backup = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+
+precio_actual = None
+
+try:
+    data = requests.get(url_binance, timeout=10)
+    if data.status_code == 200:
+        precio_actual = float(data.json()["price"])
+except Exception:
+    pass
+
+# Backup con Coinbase si Binance falla
+if precio_actual is None:
     try:
-        data = requests.get(url, timeout=5).json()
-        precio_actual = float(data["price"])
+        data2 = requests.get(url_backup, timeout=10)
+        if data2.status_code == 200:
+            precio_actual = float(data2.json()["data"]["amount"])
     except Exception:
-        return {"error": "No se pudo obtener el precio de Binance."}
+        return {"error": "No se pudo obtener el precio real de BTCUSDT desde Binance ni Coinbase."}
+
 
     # Simular niveles de referencia (idealmente vienen del análisis)
     pdh = 126000  # High del día anterior
