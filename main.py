@@ -1,5 +1,6 @@
 # main.py
 from fastapi import FastAPI
+from routers.alertas_router import router as alertas_router
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from datetime import datetime, timedelta
@@ -7,6 +8,7 @@ from zoneinfo import ZoneInfo
 from statistics import mean
 
 app = FastAPI(title="TESLABTC A.P API", version="1.0.0")
+app.include_router(alertas_router)
 
 app.add_middleware(
     CORSMiddleware,
