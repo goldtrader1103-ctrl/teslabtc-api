@@ -1,60 +1,67 @@
 from fastapi import APIRouter
 from datetime import datetime
-import pytz
 import requests
+import pytz
+import os
 
-router = APIRouter(prefix="/alertas", tags=["Alertas TESLABTC"])
+router = APIRouter()
 
-# Configuración de zona horaria (Colombia)
-tz = pytz.timezone("America/Bogota")
+# URL sonido de alerta
+ALERTA_SONIDO_URL = "https://teslabtc-api.onrender.com/static/beep.mp3"
 
-# Función para obtener el precio real de BTC desde Binance
-def obtener_precio_btc():
-    try:
-        resp = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT")
-        data = resp.json()
-        return float(data["price"])
-    except Exception:
-        return None
+# Configurar zona horaria Colombia
+tz_col = pytz.timezone("America/Bogota")
 
-# Definimos las zonas de interés (puedes modificarlas según tus análisis)
-ZONAS_LIQUIDEZ = {
-    "PDH": 126000,  # Previous Day High
-    "PDL": 122000,  # Previous Day Low
-}
+# Rango NY (7:00–13:30 COL)
+HORA_INICIO_NY = (7, 0)
+HORA_FIN_NY = (13, 30)
 
-@router.get("/")
+def sesion_ny_activa():
+    """Verifica si estamos dentro de la sesión NY"""
+    ahora = datetime.now(tz_col)
+    inicio = ahora.replace(hour=HORA_INICIO_NY[0], minute=HORA_INICIO_NY[1])
+    fin = ahora.replace(hour=HORA_FIN_NY[0], minute=HORA_FIN_NY[1])
+    return inicio <= ahora <= fin
+
+@router.get("/alertas")
 def alertas_teslabtc():
-    """Genera alertas automáticas de TESLABTC A.P según precio y sesión NY."""
-    hora_actual = datetime.now(tz)
-    precio_actual = obtener_precio_btc()
+    """
+    Endpoint principal para alertas TESLABTC A.P.
+    Obtiene el precio actual de Binance, verifica zonas de liquidez
+    y activa alerta si hay toque de PDH/PDL.
+    """
 
-    if not precio_actual:
-        return {"error": "No se pudo obtener el precio real de BTCUSDT."}
+    # Precio actual desde Binance
+    url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+    try:
+        data = requests.get(url, timeout=5).json()
+        precio_actual = float(data["price"])
+    except Exception:
+        return {"error": "No se pudo obtener el precio de Binance."}
 
-    # Verificar si estamos en sesión NY (7:00–13:30 COL)
-    hora_num = hora_actual.hour + hora_actual.minute / 60
-    sesion_ny = 7 <= hora_num <= 13.5
-    estado_sesion = "✅ Activa (7:00–13:30 COL)" if sesion_ny else "❌ Fuera de sesión NY"
+    # Simular niveles de referencia (idealmente vienen del análisis)
+    pdh = 126000  # High del día anterior
+    pdl = 124000  # Low del día anterior
 
-    # Detectar si el precio toca zonas de liquidez
+    # Comprobación de toque de liquidez
     alerta = None
-    if precio_actual >= ZONAS_LIQUIDEZ["PDH"]:
-        alerta = f"🔴 BTCUSDT tocó PDH ({ZONAS_LIQUIDEZ['PDH']}) — posible barrida de liquidez superior."
-    elif precio_actual <= ZONAS_LIQUIDEZ["PDL"]:
-        alerta = f"🔵 BTCUSDT tocó PDL ({ZONAS_LIQUIDEZ['PDL']}) — posible barrida de liquidez inferior."
-    else:
-        alerta = "🟢 Sin alertas activas."
+    if precio_actual >= pdh:
+        alerta = f"🔴 Precio tocó PDH ({pdh}) — posible reversión o barrida de liquidez"
+    elif precio_actual <= pdl:
+        alerta = f"🟢 Precio tocó PDL ({pdl}) — posible reacción alcista"
 
+    # Sesión actual
+    sesion = "✅ Activa (7:00–13:30 COL)" if sesion_ny_activa() else "❌ Fuera de sesión NY"
+
+    # Resultado final
     return {
-        "timestamp": hora_actual.strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": datetime.now(tz_col).strftime("%Y-%m-%d %H:%M:%S"),
         "precio_actual": precio_actual,
-        "sesion_NY": estado_sesion,
-        "alerta": alerta,
-        "estado_alerta": "ACTIVA" if "tocó" in alerta else "SILENCIO",
-        "confirmaciones": {
-            "Sesión NY": "✅" if sesion_ny else "❌",
-            "Zonas de Liquidez": ZONAS_LIQUIDEZ,
-        },
-        "mensaje": "📊 TESLABTC A.P: Monitoreo automático de zonas y sesión NY listo."
+        "pdh": pdh,
+        "pdl": pdl,
+        "sesion_NY": sesion,
+        "alerta": alerta if alerta else "Sin alertas activas",
+        "estado_alerta": "ACTIVA" if alerta else "SILENCIO",
+        "alert_sound": ALERTA_SONIDO_URL if alerta else None,
+        "mensaje": "🧠 TESLABTC A.P. monitoreando zonas de liquidez en tiempo real"
     }
