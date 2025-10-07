@@ -3,18 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-# Importar routers
+# Importar routers TESLABTC
 from routers.dashboard_router import router as dashboard_router
 from routers.alertas_router import router as alertas_router
 
-# Crear aplicación
+# Crear app principal
 app = FastAPI(
     title="TESLABTC A.P. Dashboard",
-    description="API unificada TESLABTC A.P. con análisis, alertas y sonido de confirmación.",
-    version="2.0.0"
+    description="API completa TESLABTC A.P — análisis, alertas y sonido de confirmación en tiempo real.",
+    version="2.1.0"
 )
 
-# Permitir acceso desde cualquier origen (útil para conectar con tu GPT)
+# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,21 +23,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Montar carpeta estática (para servir el sonido beep.mp3)
+# Carpeta estática para sonido
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Incluir routers
-app.include_router(dashboard_router)
-app.include_router(alertas_router)
+app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
+app.include_router(alertas_router, prefix="/alertas", tags=["Alertas"])
 
+# Endpoint raíz
 @app.get("/")
 def root():
     return {
-        "status": "✅ TESLABTC A.P. API en línea",
-        "message": "Bienvenida a la API TESLABTC — lista para análisis, alertas y sonido de confirmación.",
-        "endpoints": ["/dashboard", "/alertas"]
+        "message": "🚀 TESLABTC A.P API online",
+        "status": "✅ Sistema operativo",
+        "rutas": ["/dashboard", "/alertas", "/static/beep.mp3"]
     }
 
-# Ejecutar localmente
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
