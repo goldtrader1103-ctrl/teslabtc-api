@@ -15,7 +15,8 @@ def verificar_sesion_ny():
     hora_formateada = obtener_hora_colombia()
 
     inicio_ny = hora_actual.replace(hour=7, minute=0, second=0)
-    fin_ny = hora_actual.replace(hour=13, minute=0, second=0)
+fin_ny = hora_actual.replace(hour=13, minute=30, second=0)
+
 
     if inicio_ny <= hora_actual <= fin_ny:
         estado = "✅ Activa (7:00–13:00 COL)"
