@@ -1,10 +1,8 @@
+# utils/price_utils.py
 import requests
 
-def obtener_precio():
-    try:
-        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        return float(data["price"])
-    except:
-        return None
+def obtener_precio(simbolo: str):
+    url = f"https://api.binance.com/api/v3/ticker/price?symbol={simbolo.upper()}"
+    response = requests.get(url)
+    data = response.json()
+    return float(data["price"])
