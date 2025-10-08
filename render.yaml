@@ -1,8 +1,13 @@
-fastapi==0.115.0
-uvicorn==0.30.3
-requests==2.32.3
-pytz==2024.1
-numpy==1.26.4
-pandas==2.2.3
-python-dotenv==1.0.1
-httpx==0.27.0
+services:
+  - type: web
+    name: teslabtc-api
+    env: python
+    region: oregon
+    plan: free
+    runtime: python3
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: TZ
+        value: America/Bogota
