@@ -1,23 +1,16 @@
 from fastapi import APIRouter
 from datetime import datetime
-import requests
+from utils.price_utils import obtener_precio
 
 router = APIRouter()
 
 @router.get("/alertas")
 def alertas_teslabtc():
     try:
-        # Obtener precio en tiempo real desde Binance
-        url_binance = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
-        response = requests.get(url_binance)
-        data = response.json()
-
-        if "price" not in data:
+        precio_actual = obtener_precio()
+        if not precio_actual:
             return {"error": "No se pudo obtener el precio real de BTCUSDT."}
 
-        precio_actual = float(data["price"])
-
-        # Lógica de ejemplo para alerta
         if precio_actual > 125000:
             alerta = "⚠️ BTCUSDT tocó zona de oferta (PDH)"
             estado = "ACTIVA 🔔"
@@ -34,7 +27,7 @@ def alertas_teslabtc():
             "alerta": alerta,
             "estado_alerta": estado,
             "estrategia": "TESLABTC A.P.",
-            "nota": "Basado en niveles de liquidez y zonas H1/H4."
+            "nota": "Basado en zonas H1/H4 y liquidez."
         }
 
     except Exception as e:
