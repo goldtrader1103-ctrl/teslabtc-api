@@ -1,31 +1,29 @@
-def obtener_klines_binance(symbol="BTCUSDT", interval="1m", limit=100):
+import requests
+
+def obtener_precio():
     """
-    Obtiene las velas OHLC (Open, High, Low, Close) de Binance.
-    Se usa para análisis técnico y cálculo de estructura TESLABTC A.P.
+    Obtiene el precio actual de BTCUSDT desde Binance API con compatibilidad Render.
     """
+    url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+    headers = {
+        "User-Agent": "TESLABTC-API/1.1",
+        "Accept": "application/json",
+        "Cache-Control": "no-cache"
+    }
+
     try:
-        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-        headers = {"User-Agent": "TESLABTC-API/1.0"}
-        response = requests.get(url, headers=headers, timeout=10)
-
-        if response.status_code != 200:
-            print("⚠️ Error al obtener klines:", response.text)
-            return None
-
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
         data = response.json()
-        klines = [
-            {
-                "timestamp": k[0],
-                "open": float(k[1]),
-                "high": float(k[2]),
-                "low": float(k[3]),
-                "close": float(k[4]),
-                "volume": float(k[5]),
-            }
-            for k in data
-        ]
-        return klines
+        precio = float(data.get("price", 0))
+        if precio <= 0:
+            raise ValueError("Precio inválido o cero.")
+        print(f"✅ Precio Binance obtenido: {precio}")
+        return round(precio, 2)
 
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Error HTTP Binance: {e}")
+        return None
     except Exception as e:
-        print("⚠️ Error al obtener datos históricos de Binance:", e)
+        print(f"⚠️ Error inesperado Binance: {e}")
         return None
