@@ -166,4 +166,22 @@ def detectar_estructura(velas: List[Dict], lookback: int = 20) -> Dict:
     }
 # Alias para compatibilidad con versiones previas
 detectar_bos = detectar_estructura
+from datetime import datetime, time, timedelta, timezone
+
+# Zona horaria Colombia
+TZ_COL = timezone(timedelta(hours=-5))
+
+def ahora_col():
+    """Devuelve la hora actual en Colombia."""
+    return datetime.now(TZ_COL)
+
+def sesion_ny_activa() -> bool:
+    """
+    Determina si la sesión de Nueva York (07:00–13:30 COL) está activa.
+    Retorna True si la hora actual está dentro del rango.
+    """
+    hora_actual = ahora_col().time()
+    inicio_ny = time(7, 0)     # 07:00 COL
+    fin_ny = time(13, 30)      # 13:30 COL
+    return inicio_ny <= hora_actual <= fin_ny
 
