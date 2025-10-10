@@ -1,19 +1,20 @@
 import requests
 from datetime import datetime, timedelta, timezone, time
-from typing import List, Dict  # ✅ Necesario para las anotaciones de tipo
+from typing import List, Dict
 
 # Zona horaria Colombia (UTC-5)
 TZ_COL = timezone(timedelta(hours=-5))
 
+
 # =====================================================
 # PRECIO Y DATOS DE BINANCE
 # =====================================================
-
 def obtener_precio():
     """Obtiene el precio actual de BTCUSDT desde Binance."""
     try:
         url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
         r = requests.get(url, timeout=10)
+        r.raise_for_status()
         data = r.json()
         return round(float(data["price"]), 2)
     except Exception as e:
@@ -21,25 +22,35 @@ def obtener_precio():
         return None
 
 
-def obtener_klines(intervalo="5m", limite=200):
-    """Velas históricas de Binance."""
-    url = f"https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval={intervalo}&limit={limite}"
-    r = requests.get(url, timeout=10)
-    data = r.json()
-    return [
-        {
-            "open_time": datetime.fromtimestamp(x[0] / 1000, tz=TZ_COL),
-            "open": float(x[1]),
-            "high": float(x[2]),
-            "low": float(x[3]),
-            "close": float(x[4])
-        } for x in data
-    ]
+def obtener_klines(intervalo: str = "5m", limite: int = 200) -> List[Dict]:
+    """Descarga velas históricas de Binance y las devuelve con TZ_COL."""
+    try:
+        url = "https://api.binance.com/api/v3/klines"
+        params = {"symbol": "BTCUSDT", "interval": intervalo, "limit": limite}
+        r = requests.get(url, params=params, timeout=12)
+        r.raise_for_status()
+        raw = r.json()
+        out: List[Dict] = []
+        for k in raw:
+            # [openTime, open, high, low, close, volume, closeTime, ...]
+            o_time = datetime.fromtimestamp(k[0] / 1000, tz=timezone.utc).astimezone(TZ_COL)
+            out.append({
+                "open_time": o_time,
+                "open": float(k[1]),
+                "high": float(k[2]),
+                "low": float(k[3]),
+                "close": float(k[4]),
+                "volume": float(k[5]),
+            })
+        return out
+    except Exception as e:
+        print("Error obtener_klines:", e)
+        return []
+
 
 # =====================================================
 # DETECCIÓN DE ESTRUCTURA TESLABTC A.P v2.1
 # =====================================================
-
 def detectar_bos(data: List[Dict], base_lookback: int = 20) -> Dict:
     """
     TESLABTC A.P v2.1 — Detección avanzada de BOS y flujo direccional.
@@ -62,12 +73,13 @@ def detectar_bos(data: List[Dict], base_lookback: int = 20) -> Dict:
     highs = [x["high"] for x in data]
     lows = [x["low"] for x in data]
 
-    # ====== Volatilidad dinámica ======
+    # Volatilidad dinámica
     avg_range = sum((h - l) for h, l in zip(highs[-base_lookback:], lows[-base_lookback:])) / base_lookback
-    volatilidad_alta = avg_range > (sum(highs[-base_lookback:]) / base_lookback) * 0.004  # 0.4 %
+    ref_price = sum(highs[-base_lookback:]) / base_lookback
+    volatilidad_alta = (avg_range / max(ref_price, 1e-9)) > 0.004  # 0.4 %
     lookback = 10 if volatilidad_alta else base_lookback
 
-    # ====== Estructura previa ======
+    # Estructura previa
     prev_max = max(highs[-(lookback + 1):-1])
     prev_min = min(lows[-(lookback + 1):-1])
     close_actual = closes[-1]
@@ -77,24 +89,23 @@ def detectar_bos(data: List[Dict], base_lookback: int = 20) -> Dict:
     bos_up = close_actual > prev_max
     bos_dn = close_actual < prev_min
 
-    # ====== Barridas ======
-    sweep_up = high_actual > prev_max and not bos_up
-    sweep_dn = low_actual < prev_min and not bos_dn
+    # Barridas
+    sweep_up = (high_actual > prev_max) and not bos_up
+    sweep_dn = (low_actual < prev_min) and not bos_dn
 
-    # ====== Flujo direccional (momentum) ======
+    # Flujo direccional (momentum por cierres)
     sub = closes[-5:]
     tendencia_alcista = all(sub[i] < sub[i + 1] for i in range(4))
     tendencia_bajista = all(sub[i] > sub[i + 1] for i in range(4))
-    flujo = "alcista" if tendencia_alcista else "bajista" if tendencia_bajista else None
+    flujo = "alcista" if tendencia_alcista else ("bajista" if tendencia_bajista else None)
 
-    # ====== Swing progresivo ======
+    # Swing progresivo (highs/lows escalonados)
     swing_alcista = highs[-1] > highs[-2] > highs[-3] and lows[-1] > lows[-2] > lows[-3]
     swing_bajista = highs[-1] < highs[-2] < highs[-3] and lows[-1] < lows[-2] < lows[-3]
 
-    # ====== Resultado final ======
     return {
         "BOS": bool(bos_up or bos_dn),
-        "tipo_BOS": "alcista" if bos_up else "bajista" if bos_dn else None,
+        "tipo_BOS": "alcista" if bos_up else ("bajista" if bos_dn else None),
         "rango": not (bos_up or bos_dn or swing_alcista or swing_bajista),
         "flujo": flujo,
         "swing_alcista": swing_alcista,
@@ -105,12 +116,12 @@ def detectar_bos(data: List[Dict], base_lookback: int = 20) -> Dict:
         "prev_min": prev_min,
     }
 
+
 # =====================================================
 # LIQUIDEZ — PDH / PDL / ASIA RANGE
 # =====================================================
-
 def _pdh_pdl(velas_1h: List[Dict]):
-    """PDH/PDL del día anterior."""
+    """PDH/PDL del día anterior (COL)."""
     hoy = datetime.now(TZ_COL).date()
     ayer = hoy - timedelta(days=1)
     velas_ayer = [v for v in velas_1h if v["open_time"].date() == ayer]
@@ -130,33 +141,33 @@ def _asia_range(velas_15m: List[Dict]):
     bloque = [v for v in velas_15m if inicio <= v["open_time"] <= fin]
     if not bloque:
         return None, None
-    return max(v["high"] for v in bloque), min(v["low"] for v in bloque)
+    high_a = max(v["high"] for v in bloque)
+    low_a = min(v["low"] for v in bloque)
+    return high_a, low_a
+
 
 # =====================================================
-# SESIÓN NY
+# SESIÓN NY + HORA LOCAL
 # =====================================================
-
 def sesion_ny_activa() -> bool:
     """Verifica si la sesión NY está activa (07:00–13:30 COL)."""
     ahora = datetime.now(TZ_COL).time()
     return time(7, 0) <= ahora <= time(13, 30)
 
-# =====================================================
-# TEST LOCAL OPCIONAL
-# =====================================================
-
-if __name__ == "__main__":
-    print("⏳ Probando módulo price_utils...")
-    precio = obtener_precio()
-    print("Precio actual BTCUSDT:", precio)
-    velas = obtener_klines("1h", 50)
-    estructura = detectar_bos(velas)
-    print("Estructura H1:", estructura)
-    print("✅ Módulo cargado correctamente.")
-# =====================================================
-# HORA LOCAL COLOMBIA
-# =====================================================
 
 def ahora_col() -> datetime:
     """Devuelve la hora actual en zona Colombia (UTC-5)."""
     return datetime.now(TZ_COL)
+
+
+# =====================================================
+# TEST LOCAL OPCIONAL
+# =====================================================
+if __name__ == "__main__":
+    print("Probando price_utils...")
+    p = obtener_precio()
+    print("Precio BTCUSDT:", p)
+    v = obtener_klines("1h", 50)
+    e = detectar_bos(v)
+    print("Estructura H1:", e)
+    print("OK.")

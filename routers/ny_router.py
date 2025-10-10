@@ -1,13 +1,15 @@
 from fastapi import APIRouter
-from utils.price_utils import sesion_ny_activa, ahora_col
+from utils.price_utils import sesion_ny_activa, ahora_col, TZ_COL
 
 router = APIRouter()
 
-@router.get("/ny-session")
-def ny_session():
-    sesion = "✅ Activa (07:00–13:30 COL)" if sesion_ny_activa() else "❌ Fuera de sesión NY"
+@router.get("/ny-session", tags=["TESLABTC"])
+def ny_session_status():
+    ahora = ahora_col()
+    activa = sesion_ny_activa()
     return {
-        "timestamp": ahora_col().strftime("%Y-%m-%d %H:%M:%S"),
-        "sesion_NY": sesion,
-        "nota": "Operar TESLABTC A.P. preferiblemente dentro de sesión NY (07:00–13:30 COL)."
+        "timestamp": ahora.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": "America/Bogota (UTC-5)",
+        "sesion_NY_activa": bool(activa),
+        "ventana": "07:00–13:30 COL",
     }
