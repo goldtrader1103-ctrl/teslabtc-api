@@ -153,3 +153,10 @@ if __name__ == "__main__":
     estructura = detectar_bos(velas)
     print("Estructura H1:", estructura)
     print("✅ Módulo cargado correctamente.")
+# =====================================================
+# HORA LOCAL COLOMBIA
+# =====================================================
+
+def ahora_col() -> datetime:
+    """Devuelve la hora actual en zona Colombia (UTC-5)."""
+    return datetime.now(TZ_COL)
