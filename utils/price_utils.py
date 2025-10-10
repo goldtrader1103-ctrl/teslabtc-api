@@ -164,3 +164,6 @@ def detectar_estructura(velas: List[Dict], lookback: int = 20) -> Dict:
         "prev_max": prev_max,
         "prev_min": prev_min,
     }
+# Alias para compatibilidad con versiones previas
+detectar_bos = detectar_estructura
+
