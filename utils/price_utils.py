@@ -1,100 +1,71 @@
-import requests
-from datetime import datetime, timedelta, timezone, time
-from typing import List, Dict
+def detectar_bos(data: List[Dict], base_lookback: int = 20) -> Dict:
+    """
+    TESLABTC A.P. v2.1 — Detección avanzada de BOS y flujo direccional.
+    
+    Combina:
+      - BOS clásico (ruptura de extremos previos)
+      - Flujo direccional (pendiente de swing y momentum)
+      - Ajuste dinámico del lookback según volatilidad
+    """
 
-# Zona horaria Colombia
-TZ_COL = timezone(timedelta(hours=-5))
+    if len(data) < base_lookback + 5:
+        return {
+            "BOS": False,
+            "tipo_BOS": None,
+            "rango": True,
+            "flujo": None,
+            "barrida_alcista": False,
+            "barrida_bajista": False
+        }
 
-# =====================================================
-# PRECIO Y DATOS DE BINANCE
-# =====================================================
+    closes = [x["close"] for x in data]
+    highs = [x["high"] for x in data]
+    lows = [x["low"] for x in data]
 
-def obtener_precio():
-    """Precio actual BTCUSDT desde Binance."""
-    try:
-        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        return round(float(data["price"]), 2)
-    except Exception as e:
-        print("Error al obtener precio:", e)
-        return None
+    # ====== Volatilidad dinámica ======
+    avg_range = sum((h - l) for h, l in zip(highs[-base_lookback:], lows[-base_lookback:])) / base_lookback
+    volatilidad_alta = avg_range > (sum(highs[-base_lookback:]) / base_lookback) * 0.004  # 0.4 %
+    lookback = 10 if volatilidad_alta else base_lookback
 
+    # ====== Estructura previa ======
+    prev_max = max(highs[-(lookback + 1):-1])
+    prev_min = min(lows[-(lookback + 1):-1])
+    close_actual = closes[-1]
+    high_actual = highs[-1]
+    low_actual = lows[-1]
 
-def obtener_klines(intervalo="5m", limite=200):
-    """Velas históricas de Binance."""
-    url = f"https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval={intervalo}&limit={limite}"
-    r = requests.get(url, timeout=10)
-    data = r.json()
-    return [
-        {
-            "open_time": datetime.fromtimestamp(x[0] / 1000, tz=TZ_COL),
-            "open": float(x[1]),
-            "high": float(x[2]),
-            "low": float(x[3]),
-            "close": float(x[4])
-        } for x in data
-    ]
+    bos_up = close_actual > prev_max
+    bos_dn = close_actual < prev_min
 
+    # ====== Barridas ======
+    sweep_up = high_actual > prev_max and not bos_up
+    sweep_dn = low_actual < prev_min and not bos_dn
 
-# =====================================================
-# DETECCIÓN DE ESTRUCTURA TESLABTC A.P.
-# =====================================================
+    # ====== Flujo direccional (momentum) ======
+    sub = closes[-5:]
+    tendencia_alcista = all(sub[i] < sub[i + 1] for i in range(4))
+    tendencia_bajista = all(sub[i] > sub[i + 1] for i in range(4))
 
-def detectar_bos(data: List[Dict]):
-    """Detecta rupturas de estructura (BOS) básicas."""
-    ultima = data[-1]
-    max_prev = max(x["high"] for x in data[-6:-1])
-    min_prev = min(x["low"] for x in data[-6:-1])
-    if ultima["close"] > max_prev:
-        return "BOS Alcista"
-    elif ultima["close"] < min_prev:
-        return "BOS Bajista"
-    else:
-        return "Sin BOS"
+    flujo = None
+    if tendencia_alcista:
+        flujo = "alcista"
+    elif tendencia_bajista:
+        flujo = "bajista"
 
+    # ====== Swing progressivo ======
+    swing_alcista = highs[-1] > highs[-2] > highs[-3] and lows[-1] > lows[-2] > lows[-3]
+    swing_bajista = highs[-1] < highs[-2] < highs[-3] and lows[-1] < lows[-2] < lows[-3]
 
-def detectar_barrida(data: List[Dict]):
-    """Detecta si hubo barrida reciente de altos o bajos."""
-    high = [x["high"] for x in data[-10:]]
-    low = [x["low"] for x in data[-10:]]
-    if high[-1] > max(high[:-1]):
-        return "Barrida de Altos"
-    elif low[-1] < min(low[:-1]):
-        return "Barrida de Bajos"
-    return "Sin barrida"
-
-
-def _pdh_pdl(velas_1h: List[Dict]):
-    """PDH/PDL del día anterior."""
-    hoy = datetime.now(TZ_COL).date()
-    ayer = hoy - timedelta(days=1)
-    velas_ayer = [v for v in velas_1h if v["open_time"].date() == ayer]
-    if not velas_ayer:
-        return None, None
-    pdh = max(v["high"] for v in velas_ayer)
-    pdl = min(v["low"] for v in velas_ayer)
-    return pdh, pdl
-
-
-def _asia_range(velas_15m: List[Dict]):
-    """Rango Asia (19:00–03:00 COL)."""
-    hoy = datetime.now(TZ_COL).date()
-    ayer = hoy - timedelta(days=1)
-    inicio = datetime.combine(ayer, datetime.min.time(), tzinfo=TZ_COL).replace(hour=19)
-    fin = datetime.combine(hoy, datetime.min.time(), tzinfo=TZ_COL).replace(hour=3)
-    bloque = [v for v in velas_15m if inicio <= v["open_time"] <= fin]
-    if not bloque:
-        return None, None
-    return max(v["high"] for v in bloque), min(v["low"] for v in bloque)
-
-
-# =====================================================
-# SESIÓN NY
-# =====================================================
-
-def sesion_ny_activa() -> bool:
-    """Verifica si la sesión NY está activa (07:00–13:30 COL)."""
-    ahora = datetime.now(TZ_COL).time()
-    return time(7, 0) <= ahora <= time(13, 30)
-
+    # ====== Resultado final ======
+    return {
+        "BOS": bool(bos_up or bos_dn),
+        "tipo_BOS": "alcista" if bos_up else "bajista" if bos_dn else None,
+        "rango": not (bos_up or bos_dn or swing_alcista or swing_bajista),
+        "flujo": flujo,
+        "swing_alcista": swing_alcista,
+        "swing_bajista": swing_bajista,
+        "barrida_alcista": sweep_up,
+        "barrida_bajista": sweep_dn,
+        "prev_max": prev_max,
+        "prev_min": prev_min,
+    }
