@@ -1,43 +1,96 @@
 from fastapi import APIRouter
+from datetime import datetime
+from typing import Dict, Any
+
 from utils.price_utils import (
-    obtener_precio, obtener_klines_binance, detectar_bos,
-    detectar_fvg_m15, detectar_ob_h1_h4, sesion_ny_activa, ahora_col
+    obtener_klines_binance,
+    detectar_estructura,
+    _pdh_pdl,
+    _asia_range,
+    TZ_COL,
 )
 
 router = APIRouter()
 
-@router.get("/confirmaciones")
-def confirmaciones():
-    precio = obtener_precio()
-    h4 = obtener_klines_binance(interval="4h", limit=60)
-    h1 = obtener_klines_binance(interval="1h", limit=60)
-    m15 = obtener_klines_binance(interval="15m", limit=60)
 
-    bos_h4 = detectar_bos(h4, bullish=True) or detectar_bos(h4, bullish=False)
-    bos_h1 = detectar_bos(h1, bullish=True) or detectar_bos(h1, bullish=False)
-    bos_m15_up  = detectar_bos(m15, bullish=True)
-    bos_m15_dn  = detectar_bos(m15, bullish=False)
+@router.get("/confirmaciones", tags=["TESLABTC"])
+def confirmaciones_teslabtc() -> Dict[str, Any]:
+    """
+    Analiza las confirmaciones TESLABTC A.P. (PA puro):
+    - BOS por temporalidad (H1, M15, M5)
+    - Barridas de PDH/PDL o rango asiático
+    - Identifica Setup Base (BOS M15) o Setup A+ (BOS H1 + barrida + BOS M5)
+    """
+    ahora_col = datetime.now(TZ_COL)
 
-    obz = detectar_ob_h1_h4()
-    fvg = detectar_fvg_m15()
-    sesion_ok = sesion_ny_activa()
+    # 1️⃣ Velas recientes
+    velas_h1 = obtener_klines_binance("1h", 120)
+    velas_m15 = obtener_klines_binance("15m", 120)
+    velas_m5 = obtener_klines_binance("5m", 150)
 
-    conf = {
-        "BOS H4": "✅" if bos_h4 else "⚠️",
-        "BOS H1 (dirección del día)": "✅" if bos_h1 else "⚠️",
-        "BOS M15 (gatillo)": "✅" if (bos_m15_up or bos_m15_dn) else "❌",
-        "POI/OB/FVG identificados": "✅" if (obz["H1"] != (None,None) or obz["H4"] != (None,None) or fvg["bullish"] or fvg["bearish"]) else "⚠️",
-        "Sesión NY (07:00–13:30)": "✅" if sesion_ok else "❌"
+    if not velas_h1 or not velas_m15 or not velas_m5:
+        return {"error": "No se pudieron obtener velas reales desde Binance."}
+
+    # 2️⃣ Estructura
+    estr_h1 = detectar_estructura(velas_h1, lookback=20)
+    estr_m15 = detectar_estructura(velas_m15, lookback=20)
+    estr_m5 = detectar_estructura(velas_m5, lookback=20)
+
+    # 3️⃣ Liquidez
+    pdh, pdl = _pdh_pdl(velas_h1)
+    asia_high, asia_low = _asia_range(velas_m15)
+
+    # 4️⃣ Confirmaciones base
+    confirmaciones = {
+        "BOS H1": "✅" if estr_h1.get("BOS") else ("⏸️ Rango" if estr_h1.get("rango") else "❌"),
+        "BOS M15": "✅" if estr_m15.get("BOS") else "❌",
+        "BOS M5": "✅" if estr_m5.get("BOS") else "❌",
+        "Barrida PDH": "⚠️" if estr_h1.get("barrida_alcista") else "—",
+        "Barrida PDL": "⚠️" if estr_h1.get("barrida_bajista") else "—",
+        "Barrida Asia": "⚠️" if (estr_m15.get("barrida_alcista") or estr_m15.get("barrida_bajista")) else "—",
     }
 
-    veredicto = "Setup potencial — ejecutar en M5 (Level Entry) si M15 imprime BOS dentro de POI."
-    if conf["BOS M15 (gatillo)"] == "❌":
-        veredicto = "Esperar gatillo: BOS M15 dentro del POI."
+    # 5️⃣ Detección de setups
+    setup = "⏸️ Sin setup activo"
+    alta_prob = False
+
+    # Setup A+ → BOS H1 + barrida contraria + BOS M5 alineado
+    if estr_h1.get("tipo_BOS") == "alcista" and estr_m5.get("BOS") and estr_m5.get("tipo_BOS") == "alcista" and estr_m5.get("barrida_bajista"):
+        setup = "🔥 Setup A+ BUY — BOS H1 + barrida bajista + BOS M5 alcista"
+        alta_prob = True
+
+    elif estr_h1.get("tipo_BOS") == "bajista" and estr_m5.get("BOS") and estr_m5.get("tipo_BOS") == "bajista" and estr_m5.get("barrida_alcista"):
+        setup = "🔥 Setup A+ SELL — BOS H1 + barrida alcista + BOS M5 bajista"
+        alta_prob = True
+
+    # Setup Base → BOS M15 válido
+    elif estr_m15.get("BOS"):
+        if estr_m15.get("tipo_BOS") == "alcista":
+            setup = "✅ Setup BASE BUY — BOS M15 alcista"
+        elif estr_m15.get("tipo_BOS") == "bajista":
+            setup = "✅ Setup BASE SELL — BOS M15 bajista"
+
+    # 6️⃣ Observaciones
+    observacion = "Esperar confirmación adicional."
+    if alta_prob:
+        observacion = "Escenario de ALTA PROBABILIDAD activo."
+    elif estr_m15.get("BOS"):
+        observacion = "Gatillo M15 confirmado — buscar entrada M5 (Level Entry)."
+    elif estr_h1.get("rango"):
+        observacion = "Mercado en rango — esperar BOS o barrida de liquidez."
 
     return {
-        "timestamp": ahora_col().strftime("%Y-%m-%d %H:%M:%S"),
-        "precio_actual": precio,
-        "confirmaciones": conf,
-        "veredicto": veredicto,
-        "gestion": "BE 1:1, parcial 50% 1:2, dejar correr 1:3 o liquidez limpia. Sin volumen ni fibo."
+        "timestamp": ahora_col.strftime("%Y-%m-%d %H:%M:%S"),
+        "estructura": {
+            "H1": estr_h1,
+            "M15": estr_m15,
+            "M5": estr_m5,
+        },
+        "confirmaciones": confirmaciones,
+        "setup_actual": setup,
+        "alta_probabilidad": alta_prob,
+        "observacion": observacion,
+        "pdh_pdl": {"PDH": pdh, "PDL": pdl},
+        "rango_asia": {"High": asia_high, "Low": asia_low},
+        "estrategia": "TESLABTC A.P. — Acción del Precio pura: Estructura, Liquidez y Precisión (sin volumen, sin Fibo).",
     }
