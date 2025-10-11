@@ -6,27 +6,25 @@ BINANCE_URL = "https://api.binance.com/api/v3/ticker/price"
 def obtener_precio(simbolo: str) -> float:
     """
     Obtiene el precio actual del símbolo desde Binance (API pública).
-    Compatible con Render y FastAPI TESLABTC A.P.
+    Compatible con Render (usa headers y timeout).
     """
     try:
         headers = {
             "User-Agent": "TESLABTC-API/1.0",
             "Accept": "application/json"
         }
-        response = requests.get(
-            f"{BINANCE_URL}?symbol={simbolo.upper()}",
-            headers=headers,
-            timeout=15
-        )
+        url = f"{BINANCE_URL}?symbol={simbolo.upper()}"
+        response = requests.get(url, headers=headers, timeout=10)
 
-        # Si Binance responde correctamente
+        # Verifica respuesta válida
         if response.status_code == 200:
             data = response.json()
-            return float(data.get("price", 0.0))
-        else:
-            print(f"[ERROR Binance] Código: {response.status_code}")
-            return 0.0
+            if "price" in data:
+                return float(data["price"])
 
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR conexión Binance] {e}")
+        print(f"[WARN] Binance response: {response.status_code} - {response.text}")
+        return 0.0
+
+    except Exception as e:
+        print(f"[ERROR obtener_precio] {e}")
         return 0.0
