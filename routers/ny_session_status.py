@@ -20,3 +20,4 @@ def ny_session_status():
         "ventana": "07:00–13:30 COL",
         "mensaje": "✅ Activa" if activa else "❌ Fuera de sesión"
     }
+
