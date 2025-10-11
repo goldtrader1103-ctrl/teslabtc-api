@@ -12,5 +12,5 @@ app = FastAPI(
 def root():
     return {"mensaje": "✨ TESLABTC A.P. API activa y lista 🚀"}
 
-# ✅ Incluye tu router de alertas
+# 👇 Este prefijo hace que tu ruta sea /alertas/precio/{simbolo}
 app.include_router(alertas_router, prefix="/alertas", tags=["Alertas"])
