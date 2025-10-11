@@ -1,3 +1,7 @@
+# ============================================================
+# ✅ TESLABTC A.P. — Estado de la Sesión NY
+# ============================================================
+
 from fastapi import APIRouter
 from utils.price_utils import sesion_ny_activa, TZ_COL
 from datetime import datetime
