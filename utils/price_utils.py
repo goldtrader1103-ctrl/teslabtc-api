@@ -43,5 +43,36 @@ def sesion_ny_activa(ahora: datetime = None) -> bool:
 
     # Si está dentro del rango horario, sesión activa
     return inicio <= hora_actual <= fin
+# ============================================================
+# 📈 Obtener Klines (velas) de Binance
+# ============================================================
+
+def obtener_klines_binance(simbolo: str = "BTCUSDT", intervalo: str = "1m", limite: int = 50):
+    """
+    Obtiene datos de velas (klines) desde Binance.
+    intervalo: '1m', '3m', '5m', '15m', '1h', etc.
+    limite: número de velas (máx. 1000)
+    Retorna lista de velas: [timestamp, open, high, low, close, volume]
+    """
+    import requests
+    url = f"https://api.binance.com/api/v3/klines?symbol={simbolo.upper()}&interval={intervalo}&limit={limite}"
+    try:
+        r = requests.get(url, timeout=5)
+        r.raise_for_status()
+        data = r.json()
+        velas = []
+        for k in data:
+            velas.append({
+                "timestamp": k[0],
+                "open": float(k[1]),
+                "high": float(k[2]),
+                "low": float(k[3]),
+                "close": float(k[4]),
+                "volume": float(k[5])
+            })
+        return velas
+    except Exception as e:
+        print(f"[Error obtener_klines_binance] {e}")
+        return None
 
 
