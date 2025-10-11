@@ -1,7 +1,7 @@
 # main.py
 from fastapi import FastAPI
 from routers.alertas_router import router as alertas_router
-from routers.analizar_router import router as analizar_router  # 👈 nuevo import
+from routers.analizar_router import router as analizar_router  # 👈 Asegúrate de tener esta línea
 
 app = FastAPI(
     title="TESLABTC A.P. API",
@@ -13,6 +13,6 @@ app = FastAPI(
 def root():
     return {"mensaje": "✨ TESLABTC A.P. API activa y lista 🚀"}
 
-# Rutas principales
+# ✅ Rutas registradas
 app.include_router(alertas_router, prefix="/alertas", tags=["Alertas"])
-app.include_router(analizar_router, prefix="", tags=["TESLABTC"])
+app.include_router(analizar_router, prefix="", tags=["TESLABTC"])  # 👈 Asegúrate de esta línea
