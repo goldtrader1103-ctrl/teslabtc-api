@@ -5,43 +5,54 @@
 from fastapi import FastAPI
 from routers.alertas_router import router as alertas_router
 from routers.analizar_router import router as analizar_router
-from routers.confirmaciones_router import router as confirmaciones_router
 from routers.dashboard_router import router as dashboard_router
-from routers.ny_session_status import router as ny_session_router   # ✅ router NY corregido
+from routers.confirmaciones_router import router as confirmaciones_router
+from routers.ny_session_status import router as ny_session_router   # ✅ nombre correcto
 
 # ============================================================
-# APP PRINCIPAL
+# ⚙️ CONFIGURACIÓN DE LA APP
 # ============================================================
 
 app = FastAPI(
     title="TESLABTC A.P. API",
-    description="Price Action Puro — BTCUSDT NY Session",
+    description="📊 Price Action Puro — BTCUSDT | Sesión NY (07:00–13:30 COL)",
     version="3.0.0"
 )
 
 # ============================================================
-# INCLUSIÓN DE ROUTERS
+# 🔗 REGISTRO DE ROUTERS
 # ============================================================
 
-app.include_router(alertas_router, prefix="/alertas", tags=["Alertas"])
-app.include_router(analizar_router, prefix="/analizar", tags=["Análisis"])
-app.include_router(confirmaciones_router, prefix="/confirmaciones", tags=["Confirmaciones"])
-app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
-app.include_router(ny_session_router, prefix="/", tags=["TESLABTC"])  # ✅ activa /ny-session
+# 📡 Alertas automáticas (PDH/PDL, Asia Range, etc.)
+app.include_router(alertas_router, prefix="/alertas", tags=["Alertas TESLABTC"])
+
+# 📈 Análisis principal del mercado
+app.include_router(analizar_router, prefix="/analizar", tags=["Análisis TESLABTC"])
+
+# 📊 Dashboard general de rendimiento
+app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard TESLABTC"])
+
+# ✅ Confirmaciones PA Puro (BOS, POI, FVG)
+app.include_router(confirmaciones_router, prefix="/confirmaciones", tags=["Confirmaciones TESLABTC"])
+
+# 🕓 Estado de la sesión de Nueva York (07:00–13:30 COL)
+app.include_router(ny_session_router, prefix="/", tags=["Sesión NY TESLABTC"])
 
 # ============================================================
-# ENDPOINT RAÍZ
+# 🌐 ENDPOINT PRINCIPAL (HOME)
 # ============================================================
 
 @app.get("/")
 def root():
     return {
-        "mensaje": "Bienvenido a TESLABTC A.P. API — Price Action Puro",
-        "endpoints_disponibles": {
-            "alertas": "/alertas",
-            "analizar": "/analizar",
-            "confirmaciones": "/confirmaciones",
-            "dashboard": "/dashboard",
-            "sesion_NY": "/ny-session"
+        "sistema": "TESLABTC A.P. — Price Action Puro",
+        "version": "3.0.0",
+        "mensaje": "Bienvenido al motor TESLABTC A.P. (PA Puro + Gestión NY)",
+        "rutas_disponibles": {
+            "📡 Alertas": "/alertas",
+            "📈 Análisis": "/analizar",
+            "🧠 Confirmaciones": "/confirmaciones",
+            "📊 Dashboard": "/dashboard",
+            "🕓 Sesión NY": "/ny-session"
         }
     }
