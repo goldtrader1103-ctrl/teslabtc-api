@@ -1,4 +1,3 @@
-# routers/alertas_router.py
 from fastapi import APIRouter
 from utils.price_utils import obtener_precio
 
