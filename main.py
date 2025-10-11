@@ -1,12 +1,16 @@
-# main.py
-from fastapi import FastAPI
-from routers.alertas_router import router as alertas_router
+# routers/alertas_router.py
+from fastapi import APIRouter
+from utils.price_utils import obtener_precio
 
-app = FastAPI(title="TESLABTC A.P. API")
+router = APIRouter()
 
-# Prefijo "/alertas" para agrupar tus endpoints
-app.include_router(alertas_router, prefix="/alertas", tags=["Alertas"])
-
-@app.get("/")
-def root():
-    return {"mensaje": "✨ TESLABTC A.P. API funcionando correctamente 🚀"}
+@router.get("/precio/{simbolo}", tags=["TESLABTC"])
+def get_precio(simbolo: str):
+    """
+    📊 Devuelve el precio actual en tiempo real desde Binance.
+    Ejemplo: /precio/BTCUSDT
+    """
+    precio = obtener_precio(simbolo)
+    if precio == 0.0:
+        return {"simbolo": simbolo.upper(), "precio": "⚙️ No disponible (sin lectura en vivo)"}
+    return {"simbolo": simbolo.upper(), "precio": precio}

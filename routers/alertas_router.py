@@ -4,13 +4,13 @@ from utils.price_utils import obtener_precio
 
 router = APIRouter()
 
-@router.get("/precio/{simbolo}", tags=["Alertas"])
+@router.get("/precio/{simbolo}", tags=["TESLABTC"])
 def get_precio(simbolo: str):
     """
-    Endpoint que devuelve el precio actual de un símbolo desde Binance.
-    Ejemplo: /alertas/precio/BTCUSDT
+    📊 Devuelve el precio actual en tiempo real desde Binance.
+    Ejemplo: /precio/BTCUSDT
     """
     precio = obtener_precio(simbolo)
     if precio == 0.0:
-        return {"simbolo": simbolo.upper(), "precio": "⚙️ No disponible"}
+        return {"simbolo": simbolo.upper(), "precio": "⚙️ No disponible (sin lectura en vivo)"}
     return {"simbolo": simbolo.upper(), "precio": precio}
