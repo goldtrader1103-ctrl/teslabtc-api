@@ -90,3 +90,60 @@ def _pdh_pdl(simbolo: str = "BTCUSDT", intervalo: str = "1h", limite: int = 24):
     except Exception as e:
         print(f"[Error _pdh_pdl] {e}")
         return {"PDH": None, "PDL": None}
+# ============================================================
+# 🧭 DETECTAR ESTRUCTURA (BOS / TENDENCIA)
+# ============================================================
+
+def detectar_estructura(simbolo: str = "BTCUSDT", intervalo: str = "15m", limite: int = 50):
+    """
+    Detecta la estructura general del mercado con base en los últimos cierres.
+    Retorna:
+        - dirección: 'alcista', 'bajista' o 'rango'
+        - BOS: True si hay ruptura estructural reciente
+        - último_alto y último_bajo (niveles clave)
+    """
+    import requests
+
+    url = f"https://api.binance.com/api/v3/klines?symbol={simbolo.upper()}&interval={intervalo}&limit={limite}"
+    try:
+        r = requests.get(url, timeout=5)
+        r.raise_for_status()
+        data = r.json()
+
+        cierres = [float(k[4]) for k in data]
+        altos = [float(k[2]) for k in data]
+        bajos = [float(k[3]) for k in data]
+
+        max_actual = max(altos[-5:])
+        min_actual = min(bajos[-5:])
+        cierre_actual = cierres[-1]
+
+        if cierre_actual > max(altos[-10:]):
+            direccion = "alcista"
+            BOS = True
+        elif cierre_actual < min(bajos[-10:]):
+            direccion = "bajista"
+            BOS = True
+        else:
+            direccion = "rango"
+            BOS = False
+
+        return {
+            "simbolo": simbolo,
+            "intervalo": intervalo,
+            "direccion": direccion,
+            "BOS": BOS,
+            "ultimo_alto": round(max_actual, 2),
+            "ultimo_bajo": round(min_actual, 2),
+        }
+
+    except Exception as e:
+        print(f"[Error detectar_estructura] {e}")
+        return {
+            "simbolo": simbolo,
+            "intervalo": intervalo,
+            "direccion": "error",
+            "BOS": False,
+            "ultimo_alto": None,
+            "ultimo_bajo": None,
+        }
