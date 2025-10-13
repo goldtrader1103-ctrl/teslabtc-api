@@ -16,8 +16,8 @@ from routers.ny_session_status import router as ny_session_router
 app = FastAPI(
     title="TESLABTC.KG",
     description=(
-        "API de análisis operativo para el sistema TESLABTC.KG – "
-        "Basado en Price Action puro, liquidez, BOS, POI, y sesión de Nueva York."
+        "API de análisis operativo para el sistema TESLABTC.KG — "
+        "Basado en Price Action Puro, liquidez, BOS, POI y sesión de Nueva York."
     ),
     version="3.0.0"
 )
@@ -26,8 +26,9 @@ app = FastAPI(
 # 🔗 REGISTRO DE ROUTERS
 # ============================================================
 
+# ⚠️ Nota: No uses prefix="/analizar" porque el router ya tiene /analizar en su ruta
+app.include_router(analizar_router, tags=["TESLABTC"])
 app.include_router(alertas_router, prefix="/alertas", tags=["Alertas"])
-app.include_router(analizar_router, prefix="/analizar", tags=["TESLABTC"])
 app.include_router(confirmaciones_router, prefix="/confirmaciones", tags=["TESLABTC"])
 app.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard TESLABTC"])
 app.include_router(ny_session_router, prefix="/ny-session", tags=["TESLABTC"])
