@@ -1,5 +1,5 @@
 # ============================================================
-# ✅ TESLABTC A.P. — Estado de la Sesión NY
+# ✅ TESLABTC.KG — Estado de la Sesión NY
 # ============================================================
 
 from fastapi import APIRouter
@@ -8,11 +8,11 @@ from datetime import datetime
 
 router = APIRouter()
 
-@router.get("/ny-session", tags=["TESLABTC"])
+@router.get("/", tags=["TESLABTC"])  # ← ruta raíz, el prefix se pone en main.py
 def ny_session_status():
-    """Estado actual de la sesión de Nueva York (TESLABTC A.P.)"""
+    """Estado actual de la sesión de Nueva York (TESLABTC.KG)"""
     ahora = datetime.now(TZ_COL)
-    activa = sesion_ny_activa(ahora)
+    activa = sesion_ny_activa()
     return {
         "timestamp": ahora.strftime("%Y-%m-%d %H:%M:%S"),
         "timezone": "America/Bogota (UTC-5)",
@@ -20,4 +20,3 @@ def ny_session_status():
         "ventana": "07:00–13:30 COL",
         "mensaje": "✅ Activa" if activa else "❌ Fuera de sesión"
     }
-
