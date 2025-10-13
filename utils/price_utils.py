@@ -1,5 +1,5 @@
 # ============================================================
-# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG
+# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (versión robusta)
 # ============================================================
 
 import time
@@ -8,11 +8,10 @@ from datetime import datetime, timedelta, timezone
 
 # Zona horaria Colombia (UTC-5)
 TZ_COL = timezone(timedelta(hours=-5))
-
-UA = {"User-Agent": "teslabtc-kg/1.0"}
+UA = {"User-Agent": "teslabtc-kg/3.0"}
 
 # ============================================================
-# 💰 OBTENER PRECIO ACTUAL (multifuente)
+# 💰 OBTENER PRECIO ACTUAL (multifuente con fallback)
 # ============================================================
 
 def _get_binance(symbol="BTCUSDT"):
@@ -21,53 +20,74 @@ def _get_binance(symbol="BTCUSDT"):
         timeout=5, headers=UA
     )
     r.raise_for_status()
-    return float(r.json()["price"])
+    return float(r.json()["price"]), "Binance"
 
 def _get_coinbase(symbol="BTCUSDT"):
-    # Coinbase usa pares con guión
-    pair = symbol.replace("USDT", "-USDT").replace("USD", "-USD").replace("USDC", "-USDC")
+    # Coinbase usa pares con guión (BTC-USD)
+    pair = symbol.replace("USDT", "-USD").replace("USDC", "-USD")
     r = requests.get(
-        f"https://api.exchange.coinbase.com/products/{pair}/ticker",
-        timeout=5, headers=UA
-    )
-    r.raise_for_status()
-    return float(r.json()["price"])
-
-def _get_bybit(symbol="BTCUSDT"):
-    r = requests.get(
-        f"https://api.bytick.com/spot/v3/public/quote/ticker/price?symbol={symbol}",
+        f"https://api.coinbase.com/v2/prices/{pair}/spot",
         timeout=5, headers=UA
     )
     r.raise_for_status()
     data = r.json()
-    return float(data["result"]["price"])
+    return float(data["data"]["amount"]), "Coinbase"
 
-def obtener_precio(simbolo: str = "BTCUSDT") -> float | None:
+def _get_coingecko(symbol="BTCUSDT"):
+    r = requests.get(
+        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+        timeout=5, headers=UA
+    )
+    r.raise_for_status()
+    data = r.json()
+    return float(data["bitcoin"]["usd"]), "CoinGecko"
+
+def _get_bybit(symbol="BTCUSDT"):
+    r = requests.get(
+        f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}",
+        timeout=5, headers=UA
+    )
+    r.raise_for_status()
+    data = r.json()
+    return float(data["result"]["list"][0]["lastPrice"]), "Bybit"
+
+
+def obtener_precio(simbolo: str = "BTCUSDT") -> dict:
     """
-    Intenta obtener el precio desde varias fuentes (Binance → Coinbase → Bybit)
-    con pequeños reintentos (backoff). Retorna None si todas fallan.
+    Intenta obtener el precio desde varias fuentes:
+    Binance → Coinbase → CoinGecko → Bybit
+    Devuelve dict con {'precio': float | None, 'fuente': str}
     """
-    fuentes = (_get_binance, _get_coinbase, _get_bybit)
-    for intento in range(2):              # 2 rondas
+    fuentes = (_get_binance, _get_coinbase, _get_coingecko, _get_bybit)
+    for intento in range(2):  # 2 rondas
         for fuente in fuentes:
             try:
-                return fuente(simbolo)
+                precio, origen = fuente(simbolo)
+                return {"precio": precio, "fuente": origen}
             except Exception as e:
-                print(f"[obtener_precio] {fuente.__name__} fallo: {e}")
-        time.sleep(0.8)                    # pequeño backoff
-    return None
+                print(f"[obtener_precio] {fuente.__name__} falló: {e}")
+        time.sleep(0.5)  # pequeño backoff
+    return {"precio": None, "fuente": "Ninguna"}
 
 # ============================================================
-# 🕐 SESIÓN NEW YORK ACTIVA (07:00–13:30 COL)
+# 🕐 SESIÓN NEW YORK ACTIVA (Lunes–Viernes, 07:00–13:30 COL)
 # ============================================================
 
 def sesion_ny_activa() -> bool:
+    """
+    Verifica si la sesión de New York está activa
+    considerando hora Colombia (UTC-5) y días hábiles.
+    Activa: Lunes a Viernes entre 07:00 y 13:30.
+    """
     now = datetime.now(TZ_COL)
     h = now.hour + now.minute / 60
+    weekday = now.weekday()  # 0 = Lunes ... 6 = Domingo
+    if weekday >= 5:  # Sábado o Domingo
+        return False
     return 7 <= h < 13.5
 
 # ============================================================
-# 📊 OBTENER KLINES DE BINANCE (simple)
+# 📊 OBTENER KLINES DE BINANCE
 # ============================================================
 
 def obtener_klines_binance(simbolo: str = "BTCUSDT", intervalo: str = "5m", limite: int = 200):
@@ -87,7 +107,7 @@ def obtener_klines_binance(simbolo: str = "BTCUSDT", intervalo: str = "5m", limi
         return None
 
 # ============================================================
-# 📈 DETECTAR ESTRUCTURA (muy simplificado)
+# 📈 DETECTAR ESTRUCTURA (simplificado)
 # ============================================================
 
 def detectar_estructura(velas: list[dict]) -> dict:
