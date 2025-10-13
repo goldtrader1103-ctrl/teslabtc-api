@@ -6,29 +6,21 @@ from utils.price_utils import (
 
 router = APIRouter()
 
-@router.get("/confirmaciones", tags=["TESLABTC"])
+@router.get("/", tags=["TESLABTC"])  # ← ruta raíz
 def confirmaciones_teslabtc():
-    """Validaciones PA pura TESLABTC A.P."""
+    """Validaciones PA pura TESLABTC.KG"""
     ahora_col = datetime.now(TZ_COL)
-    precio = obtener_precio()
+    precio = obtener_precio("BTCUSDT")
+    velas_h1 = obtener_klines_binance("BTCUSDT", "1h", 120)
+    velas_m15 = obtener_klines_binance("BTCUSDT", "15m", 120)
 
-    velas_h1 = obtener_klines_binance("1h", 120)
-    velas_m15 = obtener_klines_binance("15m", 120)
-
-    estr_h1 = detectar_estructura(velas_h1)
-    estr_m15 = detectar_estructura(velas_m15)
-    en_ny = sesion_ny_activa(ahora_col)
+    estructura = detectar_estructura(velas_h1 or [])
+    sesion = "✅ Activa" if sesion_ny_activa() else "❌ Fuera de sesión"
 
     return {
-        "timestamp": ahora_col.strftime("%Y-%m-%d %H:%M:%S"),
+        "fecha": ahora_col.strftime("%Y-%m-%d %H:%M:%S"),
         "precio": precio,
-        "confirmaciones": {
-            "BOS H1": estr_h1["BOS"],
-            "Tipo BOS H1": estr_h1["tipo_BOS"],
-            "Tendencia H1": estr_h1["tendencia"],
-            "BOS M15": estr_m15["BOS"],
-            "Tipo BOS M15": estr_m15["tipo_BOS"],
-            "Tendencia M15": estr_m15["tendencia"],
-            "Sesión NY": "Activa ✅" if en_ny else "Fuera ❌"
-        }
+        "sesion": sesion,
+        "estructura": estructura,
+        "nota": "Confirmaciones simplificadas"
     }
