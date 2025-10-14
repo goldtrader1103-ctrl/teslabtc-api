@@ -1,179 +1,148 @@
 # ============================================================
-# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (conexión real Binance)
+# 📊 ESTRUCTURA DE MERCADO – TESLABTC.KG (versión avanzada)
 # ============================================================
 
-import os
-import time
-import requests
-from datetime import datetime, timedelta, timezone
-from binance import Client
+from datetime import datetime, timezone, timedelta
 
 # Zona horaria Colombia (UTC-5)
 TZ_COL = timezone(timedelta(hours=-5))
-UA = {"User-Agent": "teslabtc-kg/3.0"}
 
 # ============================================================
-# 🔐 CREDENCIALES BINANCE (seguras por variables de entorno)
+# 🧠 EVALUAR ESTRUCTURA MACRO / INTRADÍA / MICRO
 # ============================================================
 
-API_KEY = os.getenv("BINANCE_API_KEY")
-API_SECRET = os.getenv("BINANCE_API_SECRET")
-
-try:
-    client = Client(API_KEY, API_SECRET)
-    print("✅ [TESLABTC.KG] Cliente Binance inicializado correctamente.")
-except Exception as e:
-    print(f"⚠️ [TESLABTC.KG] Error iniciando cliente Binance: {e}")
-    client = None
-
-# ============================================================
-# 💰 OBTENER PRECIO ACTUAL (API Key o fuentes públicas)
-# ============================================================
-
-def _get_binance_real(symbol="BTCUSDT"):
-    """Obtiene precio real desde cuenta de Binance con API Key."""
-    if not client:
-        raise ValueError("Cliente Binance no disponible.")
-    ticker = client.get_symbol_ticker(symbol=symbol)
-    return float(ticker["price"]), "Binance (API)"
-
-def _get_binance_public(symbol="BTCUSDT"):
-    """Fuente pública si falla la autenticada."""
-    r = requests.get(
-        f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}",
-        timeout=5, headers=UA
-    )
-    r.raise_for_status()
-    return float(r.json()["price"]), "Binance (pública)"
-
-def _get_coinbase(symbol="BTCUSDT"):
-    pair = symbol.replace("USDT", "-USD").replace("USDC", "-USD")
-    r = requests.get(
-        f"https://api.coinbase.com/v2/prices/{pair}/spot",
-        timeout=5, headers=UA
-    )
-    r.raise_for_status()
-    data = r.json()
-    return float(data["data"]["amount"]), "Coinbase"
-
-def _get_coingecko(symbol="BTCUSDT"):
-    r = requests.get(
-        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-        timeout=5, headers=UA
-    )
-    r.raise_for_status()
-    data = r.json()
-    return float(data["bitcoin"]["usd"]), "CoinGecko"
-
-def _get_bybit(symbol="BTCUSDT"):
-    r = requests.get(
-        f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}",
-        timeout=5, headers=UA
-    )
-    r.raise_for_status()
-    data = r.json()
-    return float(data["result"]["list"][0]["lastPrice"]), "Bybit"
-
-def obtener_precio(simbolo: str = "BTCUSDT") -> dict:
+def evaluar_estructura(velas_h4, velas_h1, velas_m15):
     """
-    Intenta obtener el precio desde varias fuentes:
-    1️⃣ Binance API Key (autenticado)
-    2️⃣ Binance pública
-    3️⃣ Coinbase
-    4️⃣ CoinGecko
-    5️⃣ Bybit
+    Evalúa la estructura del mercado con base en velas de distintas temporalidades.
+    Devuelve estados y zonas de reacción (High-Low) por timeframe.
     """
-    fuentes = (_get_binance_real, _get_binance_public, _get_coinbase, _get_coingecko, _get_bybit)
-    for intento in range(2):
-        for fuente in fuentes:
-            try:
-                precio, origen = fuente(simbolo)
-                return {"precio": precio, "fuente": origen}
-            except Exception as e:
-                print(f"[obtener_precio] {fuente.__name__} falló: {e}")
-                continue
-        time.sleep(0.5)
-    return {"precio": None, "fuente": "Ninguna"}
+
+    def detectar_estado(velas):
+        if not velas or len(velas) < 5:
+            return "sin_datos", None, None
+
+        ultimos = velas[-40:]
+        highs = [v["high"] for v in ultimos]
+        lows = [v["low"] for v in ultimos]
+        closes = [v["close"] for v in ultimos]
+
+        tendencia = "alcista" if closes[-1] > closes[0] else "bajista"
+        zona_high = max(highs)
+        zona_low = min(lows)
+        return tendencia, zona_high, zona_low
+
+    h4_estado, h4_high, h4_low = detectar_estado(velas_h4)
+    h1_estado, h1_high, h1_low = detectar_estado(velas_h1)
+    m15_estado, m15_high, m15_low = detectar_estado(velas_m15)
+
+    # ============================================================
+    # 🧩 CONTEXTO ESTRUCTURAL
+    # ============================================================
+    if h4_estado == "alcista" and h1_estado == "alcista":
+        contexto = "flujo alcista dominante — continuación probable"
+    elif h4_estado == "bajista" and h1_estado == "bajista":
+        contexto = "flujo bajista dominante — continuación probable"
+    elif h4_estado != h1_estado:
+        contexto = "fase de transición — posible retroceso o mitigación"
+    else:
+        contexto = "rango o compresión — sin dirección clara"
+
+    estructura = {
+        "H4 (macro)": h4_estado,
+        "H1 (intradía)": h1_estado,
+        "M15 (reacción)": m15_estado,
+    }
+
+    zonas = {
+        "ZONA H4 (macro)": {"High": h4_high, "Low": h4_low},
+        "ZONA H1 (intradía)": {"High": h1_high, "Low": h1_low},
+        "ZONA M15 (reacción)": {"High": m15_high, "Low": m15_low},
+    }
+
+    return {
+        "estructura": estructura,
+        "zonas": zonas,
+        "contexto": contexto,
+    }
 
 # ============================================================
-# 🕐 SESIÓN NEW YORK ACTIVA (Lunes–Viernes, 07:00–13:30 COL)
+# 🔍 DETECTAR BOS / CHoCH SIMPLE (Price Action Puro)
 # ============================================================
 
-def sesion_ny_activa() -> bool:
-    now = datetime.now(TZ_COL)
-    h = now.hour + now.minute / 60
-    weekday = now.weekday()  # 0 = Lunes ... 6 = Domingo
-    if weekday >= 5:
-        return False
-    return 7 <= h < 13.5
-
-# ============================================================
-# 📊 OBTENER KLINES (preferencia Binance API Key)
-# ============================================================
-
-def obtener_klines_binance(simbolo: str = "BTCUSDT", intervalo: str = "15m", limite: int = 200):
-    try:
-        if client:
-            klines = client.get_klines(symbol=simbolo, interval=intervalo, limit=limite)
-            velas = [{
-                "open_time": datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL),
-                "open": float(k[1]), "high": float(k[2]),
-                "low": float(k[3]), "close": float(k[4]), "volume": float(k[5]),
-            } for k in klines]
-            return velas
-        else:
-            raise Exception("Cliente Binance no disponible.")
-    except Exception as e:
-        print(f"[obtener_klines_binance] Error con API: {e}")
-        try:
-            url = f"https://api.binance.com/api/v3/klines?symbol={simbolo}&interval={intervalo}&limit={limite}"
-            r = requests.get(url, timeout=10, headers=UA)
-            r.raise_for_status()
-            data = r.json()
-            velas = [{
-                "open_time": datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL),
-                "open": float(k[1]), "high": float(k[2]),
-                "low": float(k[3]), "close": float(k[4]), "volume": float(k[5]),
-            } for k in data]
-            return velas
-        except Exception as e2:
-            print(f"[obtener_klines_binance] Error total: {e2}")
-            return None
-
-# ============================================================
-# 📈 DETECTAR ESTRUCTURA
-# ============================================================
-
-def detectar_estructura(velas: list[dict]) -> dict:
+def detectar_bos(velas, tipo="alcista"):
+    """
+    Detecta ruptura de estructura (Break of Structure) o CHoCH simple.
+    Retorna True si se confirma ruptura válida.
+    """
     if not velas or len(velas) < 10:
-        return {"estado": "sin_datos"}
-    closes = [v["close"] for v in velas[-30:]]
-    up = closes[-1] > closes[0]
-    return {"estado": "alcista" if up else "bajista"}
+        return False
+
+    ultimos = velas[-15:]
+    highs = [v["high"] for v in ultimos]
+    lows = [v["low"] for v in ultimos]
+    close = velas[-1]["close"]
+
+    if tipo == "alcista" and close > max(highs[:-3]):
+        return True
+    if tipo == "bajista" and close < min(lows[:-3]):
+        return True
+    return False
 
 # ============================================================
-# 🟣 PDH/PDL ÚLTIMAS 24H
+# 🧭 GENERAR ESCENARIOS ESTRUCTURALES
 # ============================================================
 
-def _pdh_pdl(simbolo: str = "BTCUSDT") -> dict:
-    try:
-        velas = obtener_klines_binance(simbolo, "15m", 96)
-        if not velas:
-            return {"PDH": None, "PDL": None}
-        highs = [v["high"] for v in velas]
-        lows = [v["low"] for v in velas]
-        return {"PDH": max(highs), "PDL": min(lows)}
-    except Exception as e:
-        print(f"[pdh_pdl] Error: {e}")
-        return {"PDH": None, "PDL": None}
+def definir_escenarios(estructura, zonas, sesion_activa):
+    """
+    Devuelve el escenario operativo (conservador, reentrada o scalping).
+    """
 
-# ============================================================
-# 🧪 TEST LOCAL
-# ============================================================
+    h4 = estructura.get("H4 (macro)")
+    h1 = estructura.get("H1 (intradía)")
+    m15 = estructura.get("M15 (reacción)")
 
-if __name__ == "__main__":
-    print("🔍 Test obtener_precio:", obtener_precio())
-    print("🔍 NY activa:", sesion_ny_activa())
-    velas = obtener_klines_binance()
-    print("🔍 Estructura:", detectar_estructura(velas))
-    print("🔍 PDH/PDL:", _pdh_pdl())
+    escenarios = []
+
+    # Escenario principal — Conservador 1
+    if h4 == h1 and h4 in ["alcista", "bajista"]:
+        escenarios.append({
+            "escenario": "CONSERVADOR 1",
+            "nivel": "Institucional (direccional principal)",
+            "zona_principal": zonas["ZONA H1 (intradía)"],
+            "razon": f"H4 y H1 alineados ({h4}). Continuación esperada.",
+            "accion": f"Operar {h4.upper()} con confirmación BOS M5 dentro del POI M15.\n"
+                      "Objetivo: 1:3 o más.\n💡 Gestión de riesgo estricta.",
+            "tipo": "principal"
+        })
+
+    # Reentrada si existe extensión estructural (ej. más liquidez por mitigar)
+    if h4 == h1 and h1 == "bajista" and m15 == "bajista":
+        escenarios.append({
+            "escenario": "CONSERVADOR 2 (reentrada)",
+            "nivel": "Institucional extendido",
+            "zona_principal": zonas["ZONA M15 (reacción)"],
+            "razon": "Reentrada en continuación estructural bajista (H4–H1–M15).",
+            "accion": "Esperar nuevo impulso bajista con confirmación BOS M3.\n"
+                      "Posible cobertura SL ampliada.\n🎯 Reentrada controlada.",
+            "tipo": "reentrada"
+        })
+
+    # Escenario scalping — Contra tendencia
+    if h1 != m15:
+        escenarios.append({
+            "escenario": "SCALPING (contra-tendencia)",
+            "nivel": "Agresivo / bajo confirmación rápida",
+            "zona_principal": zonas["ZONA M15 (reacción)"],
+            "razon": f"Retroceso M15 contra tendencia intradía ({h1}).",
+            "accion": "Buscar oportunidad rápida en retroceso M15.\n"
+                      "Confirmar BOS micro M5–M3 antes de ejecutar.\n"
+                      "RRR máximo 1:1 o 1:2.\n⚠️ Solo apto para traders avanzados.",
+            "tipo": "scalping"
+        })
+
+    # Si sesión cerrada
+    if not sesion_activa:
+        for e in escenarios:
+            e["nota"] = "Sesión NY cerrada — solo modo observación / backtesting."
+
+    return escenarios
