@@ -1,159 +1,133 @@
 # ============================================================
-# 🚀 TESLABTC.KG — Análisis Operativo Principal
+# 🧠 TESLABTC.KG – LÓGICA PRINCIPAL (estructura y escenarios)
 # ============================================================
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, timedelta, timezone
-import sys, os
-
-# --- RUTAS Y MÓDULOS ---
-sys.path.append(os.path.join(os.path.dirname(__file__), "utils"))
-
-# Intento de importación segura (evita crash si falla en Render)
-try:
-    from utils.price_utils import (
-        obtener_precio,
-        sesion_ny_activa,
-        obtener_klines_binance,
-        detectar_estructura,
-        _pdh_pdl
-    )
-except ImportError as e:
-    print(f"[TESLABTC.KG] ⚠️ Error al importar utils: {e}")
-
-    # fallback básico
-    def obtener_precio(simbolo="BTCUSDT"):
-        return {"precio": None, "fuente": "Sin conexión"}
-    def sesion_ny_activa(): return False
-    def detectar_estructura(velas): return {"estado": "sin_datos"}
-    def _pdh_pdl(simbolo="BTCUSDT"): return {"PDH": None, "PDL": None}
-    def obtener_klines_binance(*args, **kwargs): return None
-
-# ============================================================
-# ⚙️ CONFIGURACIÓN APP FASTAPI
-# ============================================================
-
-app = FastAPI(
-    title="TESLABTC.KG API",
-    description="Sistema operativo de análisis BTCUSDT basado en estructura (H4–M15), liquidez y Price Action puro.",
-    version="3.0.1"
+from datetime import datetime, timezone, timedelta
+from utils.price_utils import (
+    obtener_precio,
+    obtener_klines_binance,
+    detectar_estructura,
+    sesion_ny_activa,
+    _pdh_pdl,
 )
+from typing import Dict
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="TESLABTC.KG", version="3.2")
 
 TZ_COL = timezone(timedelta(hours=-5))
 
 # ============================================================
-# 🧩 ENDPOINT PRINCIPAL: /analizar
+# 🔍 FUNCIÓN PRINCIPAL DE ANÁLISIS
 # ============================================================
 
-@app.get("/analizar", tags=["TESLABTC"])
-def analizar_mercado():
-    """Devuelve análisis operativo completo de TESLABTC.KG"""
-    ahora = datetime.now(TZ_COL)
+@app.get("/")
+def analizar_mercado() -> Dict:
+    try:
+        # === 1️⃣ Datos base ===
+        ahora = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
+        sesion = "✅ Activa (Sesión New York)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
+        precio_data = obtener_precio("BTCUSDT")
+        precio = precio_data["precio"]
+        fuente = precio_data["fuente"]
 
-    # --- Precio actual ---
-    precio_info = obtener_precio("BTCUSDT")
-    precio_btc = precio_info.get("precio")
-    fuente_precio = precio_info.get("fuente")
+        # === 2️⃣ Estructuras multitemporales ===
+        klines_h4 = obtener_klines_binance("BTCUSDT", "4h", 100)
+        klines_h1 = obtener_klines_binance("BTCUSDT", "1h", 150)
+        klines_m15 = obtener_klines_binance("BTCUSDT", "15m", 200)
 
-    # --- Velas por temporalidad ---
-    velas_H4 = obtener_klines_binance("BTCUSDT", "4h", 200)
-    velas_H1 = obtener_klines_binance("BTCUSDT", "1h", 200)
-    velas_M15 = obtener_klines_binance("BTCUSDT", "15m", 200)
+        estructura_h4 = detectar_estructura(klines_h4)["estado"]
+        estructura_h1 = detectar_estructura(klines_h1)["estado"]
+        estructura_m15 = detectar_estructura(klines_m15)["estado"]
 
-    # --- Estructuras detectadas ---
-    estructura_H4 = detectar_estructura(velas_H4)
-    estructura_H1 = detectar_estructura(velas_H1)
-    estructura_M15 = detectar_estructura(velas_M15)
-
-    # --- Zonas de reacción ---
-    pdh_pdl = _pdh_pdl("BTCUSDT")
-
-    # --- Determinar escenario operativo ---
-    macro = estructura_H4.get("estado", "sin_datos")
-    intra = estructura_H1.get("estado", "sin_datos")
-    micro = estructura_M15.get("estado", "sin_datos")
-
-    if macro == intra and macro != "sin_datos":
-        escenario = {
-            "escenario": "CONSERVADOR 1",
-            "nivel": "Institucional (direccional principal)",
-            "razon": f"H4 y H1 alineados en estructura {macro.upper()}.",
-            "accion": f"Operar {macro.upper()} A+ con confirmación BOS M5 dentro del POI M15.\n"
-                      "Objetivo: 1:3 o más, priorizando estructuras limpias.\n"
-                      "💡 La gestión del riesgo es la clave de un trader profesional.",
-            "tipo": "principal"
+        # === 3️⃣ Zonas y contexto ===
+        zonas = _pdh_pdl("BTCUSDT")
+        zonas_h4 = {
+            "High": max([v["high"] for v in klines_h4[-5:]]) if klines_h4 else None,
+            "Low": min([v["low"] for v in klines_h4[-5:]]) if klines_h4 else None,
         }
-    elif macro != intra and intra != "sin_datos":
-        escenario = {
-            "escenario": "CONSERVADOR 2 (Reentrada)",
-            "nivel": "Mitigación secundaria o continuación",
-            "razon": f"H4 ({macro}) y H1 ({intra}) no alineados completamente.",
-            "accion": "Esperar confirmación M15 o microestructura en favor de H1 antes de ejecutar.\n"
-                      "Si el precio deja ineficiencia, considerar reentrada al siguiente POI.",
-            "tipo": "reentrada"
+        zonas_h1 = {
+            "High": max([v["high"] for v in klines_h1[-5:]]) if klines_h1 else None,
+            "Low": min([v["low"] for v in klines_h1[-5:]]) if klines_h1 else None,
         }
-    else:
-        escenario = {
-            "escenario": "SCALPING (contra-tendencia)",
-            "nivel": "Agresivo / bajo confirmación rápida",
-            "razon": "Estructura H1 aún sin BOS o mitigando zona opuesta.",
-            "accion": "Buscar oportunidad rápida en retroceso M15 con confirmación BOS M5–M3.\n"
-                      "RRR máximo 1:1 o 1:2.\n"
-                      "💡 Recomendado solo para traders avanzados con control de riesgo.",
-            "tipo": "scalping"
+        zonas_m15 = {
+            "High": max([v["high"] for v in klines_m15[-5:]]) if klines_m15 else None,
+            "Low": min([v["low"] for v in klines_m15[-5:]]) if klines_m15 else None,
         }
 
-    # --- Estado sesión NY ---
-    sesion = "✅ Activa (Sesión New York)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
+        # === 4️⃣ Lógica de escenarios ===
+        if estructura_h4 == "alcista" and estructura_h1 == "alcista":
+            escenario = "CONSERVADOR 1"
+            razon = "H4 y H1 alineados al alza — flujo limpio y confirmaciones activas."
+            accion = (
+                "Esperar BOS M5 en zona M15 para ejecutar compra con objetivo 1:3 o más.\n"
+                "💡 La gestión del riesgo es la clave de un trader profesional."
+            )
+        elif estructura_h4 == "bajista" and estructura_h1 == "bajista":
+            escenario = "CONSERVADOR 1"
+            razon = "H4 y H1 alineados a la baja — continuación institucional bajista."
+            accion = (
+                "Esperar BOS M5 en retroceso hacia zona M15 para venta con objetivo 1:3.\n"
+                "💡 Mantener gestión de riesgo estricta."
+            )
+        elif estructura_h1 != estructura_h4:
+            escenario = "CONSERVADOR 2"
+            razon = "H4 y H1 desalineados — posible reentrada o cambio de fase."
+            accion = (
+                "Esperar confirmación M15–M5 antes de ejecutar. Posible reentrada si hay nueva liquidez pendiente."
+            )
+        else:
+            escenario = "SCALPING CONTRA-TENDENCIA"
+            razon = "M15 en retroceso dentro de zona opuesta, flujo intradía limitado."
+            accion = (
+                "Operación rápida (1:1–1:2 máx) dentro de POI M15 con confirmación M3–M5.\n"
+                "💡 Riesgo reducido y cierre parcial recomendado."
+            )
 
-    return {
-        "🧠 TESLABTC.KG": {
-            "fecha": ahora.strftime("%d/%m/%Y %H:%M:%S"),
-            "sesion": sesion,
-            "precio_actual": f"{precio_btc:,.2f} USD" if precio_btc else "⚙️ No disponible",
-            "fuente_precio": fuente_precio,
-            "estructura_detectada": {
-                "H4 (macro)": macro,
-                "H1 (intradía)": intra,
-                "M15 (reacción)": micro
-            },
-            "zonas": {
-                "PDH (alto 24h)": pdh_pdl.get("PDH"),
-                "PDL (bajo 24h)": pdh_pdl.get("PDL")
-            },
-            "escenario": escenario,
-            "mensaje": "✨ Análisis completado correctamente",
-            "error": "Ninguno"
+        # === 5️⃣ Formato final ===
+        resultado = {
+            "🧠 TESLABTC.KG": {
+                "fecha": ahora,
+                "sesión": sesion,
+                "precio_actual": f"{precio:,.2f} USD" if precio else "⚙️ No disponible",
+                "fuente_precio": fuente,
+                "estructura_detectada": {
+                    "H4 (macro)": estructura_h4,
+                    "H1 (intradía)": estructura_h1,
+                    "M15 (reacción)": estructura_m15,
+                },
+                "zonas": {
+                    "PDH (alto 24h)": zonas.get("PDH"),
+                    "PDL (bajo 24h)": zonas.get("PDL"),
+                    "ZONA H4 (macro)": zonas_h4,
+                    "ZONA H1 (intradía)": zonas_h1,
+                    "ZONA M15 (reacción)": zonas_m15,
+                },
+                "escenario": {
+                    "escenario": escenario,
+                    "nivel": "Institucional (direccional principal)" if "CONSERVADOR" in escenario else "Scalping intradía",
+                    "razón": razon,
+                    "acción": accion,
+                    "tipo": "principal" if "CONSERVADOR" in escenario else "scalp",
+                },
+                "mensaje": "✨ Análisis completado correctamente",
+                "error": "Ninguno",
+            }
         }
-    }
+        return resultado
+
+    except Exception as e:
+        return {
+            "🧠 TESLABTC.KG": {
+                "mensaje": "⚠️ Error durante el análisis",
+                "error": str(e),
+            }
+        }
 
 # ============================================================
-# 🧭 ENDPOINT ESTADO GENERAL
+# 🚀 EJECUCIÓN LOCAL (solo si se corre fuera de Render)
 # ============================================================
 
-@app.get("/", tags=["Estado"])
-def estado_general():
-    ahora = datetime.now(TZ_COL)
-    return {
-        "status": "✅ TESLABTC.KG operativo",
-        "version": "3.0.1",
-        "hora": ahora.strftime("%d/%m/%Y %H:%M:%S"),
-        "mensaje": "Servidor activo y funcional en Render."
-    }
-
-# ============================================================
-# 🕐 ENDPOINT SESIÓN NY
-# ============================================================
-
-@app.get("/ny-session", tags=["TESLABTC"])
-def estado_sesion_ny():
-    return {"NY_session_activa": sesion_ny_activa()}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=10000)
