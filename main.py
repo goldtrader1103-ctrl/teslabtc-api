@@ -1,23 +1,52 @@
 # ============================================================
-# 🚀 TESLABTC.KG — FastAPI principal
+# 🚀 TESLABTC.KG — Análisis Operativo Principal
 # ============================================================
 
-from fastapi import FastAPI
-from routers.analizar_router import router as analizar_router
+from fastapi import APIRouter
+from datetime import datetime, timedelta, timezone
+from utils.price_utils import obtener_precio
+from utils.estructura_utils import evaluar_estructura
 
-app = FastAPI(
-    title="TESLABTC.KG Dashboard",
-    description="PA pura — estructura, liquidez y POI (OB/FVG) para BTCUSDT. Sesión NY 07:00–13:30 COL.",
-    version="3.0.2"
-)
+router = APIRouter()
+TZ_COL = timezone(timedelta(hours=-5))
 
-# Incluye routers
-app.include_router(analizar_router, prefix="/analizar", tags=["TESLABTC"])
+@router.get("/analizar", tags=["TESLABTC"])
+def analizar(tipo_operacion: str = "institucional"):
+    """
+    Devuelve análisis operativo actual del mercado BTCUSDT,
+    identificando escenarios conservadores, reentrada y scalping.
+    """
+    try:
+        precio_data = obtener_precio("BTCUSDT")
+        precio_btc = precio_data["precio"]
+        fuente = precio_data["fuente"]
+        error_msg = None
+    except Exception as e:
+        precio_btc = None
+        fuente = "Ninguna"
+        error_msg = str(e)
 
-@app.get("/", tags=["Root"])
-def root():
+    ahora = datetime.now(TZ_COL)
+    hora = ahora.hour + ahora.minute / 60
+    sesion = "✅ Activa (Sesión New York)" if 7 <= hora < 13.5 else "❌ Cerrada (Fuera de NY)"
+
+    # ===============================
+    # Simulación de lectura estructural real (por ahora mock)
+    # ===============================
+    H4_dir = "bajista"
+    H1_dir = "bajista"
+    M15_dir = "alcista"  # microimpulso de retroceso
+
+    estructura = evaluar_estructura(H4_dir, H1_dir, M15_dir, tipo_operacion)
+
     return {
-        "TESLABTC.KG": "API operativa ✅",
-        "version": "3.0.2",
-        "autor": "Katherinne Galvis"
+        "🧠 TESLABTC.KG": {
+            "fecha": ahora.strftime("%d/%m/%Y %H:%M:%S"),
+            "sesion": sesion,
+            "precio_actual": f"{precio_btc:,.2f} USD" if precio_btc else "⚙️ No disponible",
+            "fuente": fuente,
+            "estructura": estructura,
+            "mensaje": "✨ Análisis completado correctamente" if not error_msg else "⚠️ Error parcial",
+            "error": error_msg or "Ninguno"
+        }
     }
