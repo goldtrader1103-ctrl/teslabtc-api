@@ -3,11 +3,9 @@
 # ============================================================
 
 import os
-import time
 import requests
 from datetime import datetime, timedelta, timezone
 from binance.client import Client
-from binance.exceptions import BinanceAPIException
 
 # Zona horaria Colombia (UTC-5)
 TZ_COL = timezone(timedelta(hours=-5))
@@ -36,6 +34,9 @@ except Exception as e:
 # ============================================================
 
 def obtener_precio(simbolo: str = "BTCUSDT") -> dict:
+    """
+    Precio actual desde Binance. Si falla, fallback a CoinGecko.
+    """
     global BINANCE_STATUS
     try:
         if client:
@@ -44,7 +45,7 @@ def obtener_precio(simbolo: str = "BTCUSDT") -> dict:
         raise Exception("Cliente Binance no disponible")
     except Exception as e:
         BINANCE_STATUS = f"⚠️ Error Binance: {e}"
-        # fallback rápido
+        # Fallback: CoinGecko
         try:
             r = requests.get(
                 "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
@@ -60,6 +61,9 @@ def obtener_precio(simbolo: str = "BTCUSDT") -> dict:
 # ============================================================
 
 def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=100):
+    """
+    Velas limpias (open/high/low/close) desde Binance.
+    """
     try:
         if client:
             kl = client.get_klines(symbol=simbolo, interval=intervalo, limit=limite)
@@ -83,16 +87,18 @@ def sesion_ny_activa() -> bool:
     return now.weekday() < 5 and 7 <= h < 13.5
 
 # ============================================================
-# 🟣 PDH / PDL
+# 🟣 PDH / PDL (últimas 24h)
 # ============================================================
 
 def _pdh_pdl(simbolo="BTCUSDT"):
     try:
+        if not client:
+            raise Exception("Cliente Binance no disponible")
         kl = client.get_klines(symbol=simbolo, interval="15m", limit=96)
         cutoff = datetime.now(TZ_COL) - timedelta(hours=24)
         f = [k for k in kl if datetime.fromtimestamp(k[0]/1000, tz=TZ_COL) > cutoff]
         highs = [float(k[2]) for k in f]; lows = [float(k[3]) for k in f]
-        return {"PDH": max(highs), "PDL": min(lows)} if highs and lows else {"PDH": None, "PDL": None}
+        return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
     except Exception as e:
         print(f"[pdh_pdl] Error: {e}")
         return {"PDH": None, "PDL": None}
