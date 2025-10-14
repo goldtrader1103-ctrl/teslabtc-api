@@ -5,7 +5,7 @@
 import time
 import requests
 from datetime import datetime, timedelta, timezone
-from binance.error import ClientError
+from binance.exceptions import BinanceAPIException, BinanceOrderException
 
 # ============================================================
 # ⚙️ CONFIGURACIÓN GENERAL
