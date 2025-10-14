@@ -1,17 +1,14 @@
 # ============================================================
-# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (versión con API Binance autenticada)
+# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (versión final)
 # ============================================================
 
 import time
 import requests
 import os
 from datetime import datetime, timedelta, timezone
+from utils.estructura_utils import analizar_estructura_multinivel, determinar_escenario
 
-# ============================================================
-# 🕐 CONFIGURACIÓN GENERAL
-# ============================================================
-
-TZ_COL = timezone(timedelta(hours=-5))  # zona horaria Colombia
+TZ_COL = timezone(timedelta(hours=-5))
 UA = {"User-Agent": "teslabtc-kg/3.0"}
 
 # ============================================================
@@ -21,7 +18,6 @@ UA = {"User-Agent": "teslabtc-kg/3.0"}
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_API_SECRET = None
 
-# Render guarda los secretos en /etc/secrets/<NOMBRE>
 try:
     with open("/etc/secrets/BINANCE_API_SECRET", "r") as f:
         BINANCE_API_SECRET = f.read().strip()
@@ -29,140 +25,84 @@ except Exception:
     BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 
 # ============================================================
-# 💰 OBTENER PRECIO ACTUAL (multifuente con fallback)
+# 💰 FUNCIONES BASE DE CONEXIÓN
 # ============================================================
 
 def _get_binance(symbol="BTCUSDT"):
-    """Obtiene el precio actual desde Binance (público o autenticado si es posible)."""
     headers = {"User-Agent": "teslabtc-kg/3.0"}
     if BINANCE_API_KEY:
         headers["X-MBX-APIKEY"] = BINANCE_API_KEY
-    r = requests.get(
-        f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}",
-        timeout=5, headers=headers
-    )
+    r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}", timeout=5, headers=headers)
     r.raise_for_status()
     return float(r.json()["price"]), "Binance"
 
-def _get_coinbase(symbol="BTCUSDT"):
-    pair = symbol.replace("USDT", "-USD").replace("USDC", "-USD")
-    r = requests.get(
-        f"https://api.coinbase.com/v2/prices/{pair}/spot",
-        timeout=5, headers=UA
-    )
+def obtener_klines(symbol="BTCUSDT", interval="5m", limit=200):
+    headers = {"User-Agent": "teslabtc-kg/3.0"}
+    if BINANCE_API_KEY:
+        headers["X-MBX-APIKEY"] = BINANCE_API_KEY
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    r = requests.get(url, timeout=10, headers=headers)
     r.raise_for_status()
     data = r.json()
-    return float(data["data"]["amount"]), "Coinbase"
-
-def _get_coingecko(symbol="BTCUSDT"):
-    r = requests.get(
-        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-        timeout=5, headers=UA
-    )
-    r.raise_for_status()
-    data = r.json()
-    return float(data["bitcoin"]["usd"]), "CoinGecko"
-
-def _get_bybit(symbol="BTCUSDT"):
-    r = requests.get(
-        f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}",
-        timeout=5, headers=UA
-    )
-    r.raise_for_status()
-    data = r.json()
-    return float(data["result"]["list"][0]["lastPrice"]), "Bybit"
-
-
-def obtener_precio(simbolo: str = "BTCUSDT") -> dict:
-    """
-    Intenta obtener el precio desde varias fuentes:
-    Binance → Coinbase → CoinGecko → Bybit
-    Devuelve dict con {'precio': float | None, 'fuente': str}
-    """
-    fuentes = (_get_binance, _get_coinbase, _get_coingecko, _get_bybit)
-    for intento in range(2):  # 2 rondas de prueba
-        for fuente in fuentes:
-            try:
-                precio, origen = fuente(simbolo)
-                return {"precio": precio, "fuente": origen}
-            except Exception as e:
-                print(f"[obtener_precio] {fuente.__name__} falló: {e}")
-        time.sleep(0.5)
-    return {"precio": None, "fuente": "Ninguna"}
-
-# ============================================================
-# 🕐 SESIÓN NEW YORK ACTIVA (Lunes–Viernes, 07:00–13:30 COL)
-# ============================================================
-
-def sesion_ny_activa() -> bool:
-    """
-    Verifica si la sesión de New York está activa.
-    Activa: Lunes a Viernes entre 07:00 y 13:30 COL.
-    """
-    now = datetime.now(TZ_COL)
-    h = now.hour + now.minute / 60
-    weekday = now.weekday()  # 0 = Lunes ... 6 = Domingo
-    if weekday >= 5:
-        return False
-    return 7 <= h < 13.5
-
-# ============================================================
-# 📊 OBTENER KLINES DE BINANCE
-# ============================================================
-
-def obtener_klines_binance(simbolo: str = "BTCUSDT", intervalo: str = "5m", limite: int = 200):
-    url = f"https://api.binance.com/api/v3/klines?symbol={simbolo}&interval={intervalo}&limit={limite}"
-    try:
-        headers = {"User-Agent": "teslabtc-kg/3.0"}
-        if BINANCE_API_KEY:
-            headers["X-MBX-APIKEY"] = BINANCE_API_KEY
-        r = requests.get(url, timeout=10, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-        velas = [{
+    return [
+        {
             "open_time": datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL),
             "open": float(k[1]), "high": float(k[2]),
             "low": float(k[3]), "close": float(k[4]),
             "volume": float(k[5]),
-        } for k in data]
-        return velas
-    except Exception as e:
-        print(f"[obtener_klines_binance] Error: {e}")
-        return None
+        }
+        for k in data
+    ]
 
 # ============================================================
-# 📈 DETECTAR ESTRUCTURA SIMPLE
+# 📊 ANÁLISIS COMPLETO DEL MERCADO TESLABTC
 # ============================================================
 
-def detectar_estructura(velas: list[dict]) -> dict:
-    """Analiza los últimos 30 cierres para determinar estructura básica."""
-    if not velas:
-        return {"estado": "sin_datos"}
-    closes = [v["close"] for v in velas[-30:]]
-    if len(closes) < 5:
-        return {"estado": "insuficiente"}
-    up = closes[-1] > closes[0]
-    return {"estado": "alcista" if up else "bajista"}
+def analizar_mercado(symbol="BTCUSDT"):
+    precio, fuente = _get_binance(symbol)
+    velas_h4 = obtener_klines(symbol, "4h", 300)
+    velas_h1 = obtener_klines(symbol, "1h", 300)
+    velas_m15 = obtener_klines(symbol, "15m", 200)
+
+    estructura = analizar_estructura_multinivel(velas_h4, velas_h1, velas_m15)
+    escenario = determinar_escenario(estructura)
+
+    # PDH/PDL
+    highs = [v["high"] for v in velas_h1[-96:]]
+    lows = [v["low"] for v in velas_h1[-96:]]
+    pdh = max(highs)
+    pdl = min(lows)
+
+    return {
+        "🧠 TESLABTC.KG": {
+            "fecha": datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S"),
+            "sesion": "✅ Activa (Sesión New York)" if sesion_ny_activa() else "🕐 Cerrada (Fuera de NY)",
+            "precio_actual": f"{precio:,.2f} USD",
+            "fuente_precio": fuente,
+            "estructura_detectada": {
+                "H4 (macro)": estructura["H4"],
+                "H1 (intradía)": estructura["H1"],
+                "M15 (reacción)": estructura["M15"]
+            },
+            "zonas": {
+                "PDH (alto 24h)": pdh,
+                "PDL (bajo 24h)": pdl,
+                "ZONA H4": estructura["zonas"]["H4"],
+                "ZONA H1": estructura["zonas"]["H1"],
+                "ZONA M15": estructura["zonas"]["M15"]
+            },
+            "escenario": escenario,
+            "mensaje": "✨ Análisis completado correctamente",
+            "error": "Ninguno"
+        }
+    }
 
 # ============================================================
-# 🟣 PDH / PDL ÚLTIMAS 24H
+# 🕐 SESIÓN NEW YORK ACTIVA
 # ============================================================
 
-def _pdh_pdl(simbolo: str = "BTCUSDT") -> dict:
-    """Obtiene los puntos altos y bajos de las últimas 24h desde Binance."""
-    try:
-        url = f"https://api.binance.com/api/v3/klines?symbol={simbolo}&interval=15m&limit=96"
-        headers = {"User-Agent": "teslabtc-kg/3.0"}
-        if BINANCE_API_KEY:
-            headers["X-MBX-APIKEY"] = BINANCE_API_KEY
-        r = requests.get(url, timeout=10, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-        cutoff = datetime.now(TZ_COL) - timedelta(hours=24)
-        data_filtrada = [k for k in data if datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL) > cutoff]
-        highs = [float(k[2]) for k in data_filtrada]
-        lows = [float(k[3]) for k in data_filtrada]
-        return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
-    except Exception as e:
-        print(f"[pdh_pdl] Error: {e}")
-        return {"PDH": None, "PDL": None}
+def sesion_ny_activa() -> bool:
+    now = datetime.now(TZ_COL)
+    h = now.hour + now.minute / 60
+    weekday = now.weekday()
+    return weekday < 5 and 7 <= h < 13.5
