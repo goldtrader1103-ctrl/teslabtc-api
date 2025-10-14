@@ -87,24 +87,38 @@ def sesion_ny_activa() -> bool:
     return 7 <= h < 13.5
 
 # ============================================================
-# 📊 OBTENER KLINES DE BINANCE
+# 📊 OBTENER KLINES DE BINANCE (con fallback)
 # ============================================================
 
 def obtener_klines_binance(simbolo: str = "BTCUSDT", intervalo: str = "5m", limite: int = 200):
+    """
+    Intenta obtener las velas desde Binance.
+    Si la respuesta es inválida o vacía, reintenta automáticamente.
+    """
     url = f"https://api.binance.com/api/v3/klines?symbol={simbolo}&interval={intervalo}&limit={limite}"
-    try:
-        r = requests.get(url, timeout=10, headers=UA)
-        r.raise_for_status()
-        data = r.json()
-        velas = [{
-            "open_time": datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL),
-            "open": float(k[1]), "high": float(k[2]),
-            "low": float(k[3]), "close": float(k[4]), "volume": float(k[5]),
-        } for k in data]
-        return velas
-    except Exception as e:
-        print(f"[obtener_klines_binance] Error: {e}")
-        return None
+    for intento in range(2):
+        try:
+            r = requests.get(url, timeout=10, headers=UA)
+            r.raise_for_status()
+            data = r.json()
+            if not data or not isinstance(data, list):
+                print(f"[obtener_klines_binance] Respuesta vacía en intento {intento+1}")
+                time.sleep(1)
+                continue
+
+            velas = [{
+                "open_time": datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL),
+                "open": float(k[1]), "high": float(k[2]),
+                "low": float(k[3]), "close": float(k[4]), "volume": float(k[5]),
+            } for k in data]
+            return velas
+
+        except Exception as e:
+            print(f"[obtener_klines_binance] Error en intento {intento+1}: {e}")
+            time.sleep(1)
+
+    print("[obtener_klines_binance] Fallback: sin datos válidos")
+    return None
 
 # ============================================================
 # 📈 DETECTAR ESTRUCTURA (simplificado)
