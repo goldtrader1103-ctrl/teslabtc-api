@@ -1,97 +1,137 @@
 # ============================================================
-# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (con API Binance real)
+# 🚀 TESLABTC.KG — API Principal de Análisis Operativo
 # ============================================================
 
-import os
-import time
+import asyncio
+from fastapi import FastAPI
 from datetime import datetime, timedelta, timezone
-from binance.client import Client
-from binance.exceptions import BinanceAPIException
+
+from utils.price_utils import (
+    obtener_precio,
+    obtener_klines_binance,
+    sesion_ny_activa,
+    _pdh_pdl,
+    BINANCE_STATUS,
+)
+from utils.estructura_utils import evaluar_estructura, definir_escenarios
+from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
 
 # ============================================================
-# 🕐 CONFIGURACIÓN BASE
+# ⚙️ CONFIGURACIÓN GENERAL
 # ============================================================
+
+app = FastAPI(
+    title="TESLABTC.KG",
+    description="Análisis operativo BTCUSDT basado en Price Action puro (TESLABTC A.P.)",
+    version="3.4.0",
+)
 
 TZ_COL = timezone(timedelta(hours=-5))
 
-# Carga las credenciales desde Render
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
-
-# Cliente autenticado
-try:
-    client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
-    test_ping = client.ping()
-    BINANCE_STATUS = "✅ API Binance conectada correctamente"
-except Exception as e:
-    client = None
-    BINANCE_STATUS = f"⚠️ Error conexión Binance: {e}"
-
 # ============================================================
-# 💰 OBTENER PRECIO ACTUAL
+# 🔁 ARRANQUE DEL MONITOR EN BACKGROUND
 # ============================================================
 
-def obtener_precio(symbol="BTCUSDT"):
-    """
-    Obtiene el precio actual desde Binance con credenciales.
-    Si falla, retorna None.
-    """
+_monitor_task = None
+
+@app.on_event("startup")
+async def _start_monitor():
+    global _monitor_task
+    # Inicia el loop de alertas cada 5 minutos (ajustable)
+    _monitor_task = asyncio.create_task(live_monitor_loop(interval_min=5))
+
+@app.on_event("shutdown")
+async def _stop_monitor():
+    stop_monitor()
+    if _monitor_task:
+        try:
+            _monitor_task.cancel()
+        except Exception:
+            pass
+
+# ============================================================
+# 🔍 ENDPOINT PRINCIPAL: /analizar
+# ============================================================
+
+@app.get("/analizar", tags=["TESLABTC"])
+def analizar():
+    ahora = datetime.now(TZ_COL)
+    sesion = "✅ Activa (Sesión New York)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
+
+    # 💰 Precio actual
+    data_precio = obtener_precio("BTCUSDT")
+    precio = data_precio.get("precio")
+    fuente = data_precio.get("fuente")
+
+    # 📊 Estructura multitemporal
     try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        return {"precio": float(ticker["price"]), "fuente": "Binance (API)"}
+        velas_h4 = obtener_klines_binance("BTCUSDT", "4h", 120)
+        velas_h1 = obtener_klines_binance("BTCUSDT", "1h", 120)
+        velas_m15 = obtener_klines_binance("BTCUSDT", "15m", 120)
+
+        resultado = evaluar_estructura(velas_h4, velas_h1, velas_m15)
+        estructura = resultado["estructura"]
+        zonas = resultado["zonas"]
+        contexto = resultado["contexto"]
+
+        escenarios = definir_escenarios(estructura, zonas, sesion_ny_activa())
+        escenario = escenarios[0] if escenarios else {"escenario": "SIN CONFIRMACIÓN"}
     except Exception as e:
-        print(f"[obtener_precio] Error: {e}")
-        return {"precio": None, "fuente": "Binance Error"}
+        estructura = {
+            "H4 (macro)": "sin_datos",
+            "H1 (intradía)": "sin_datos",
+            "M15 (reacción)": "sin_datos",
+        }
+        zonas = {}
+        contexto = "sin_datos"
+        escenario = {"escenario": "sin_confirmacion"}
+        print(f"[estructura] Error: {e}")
 
-# ============================================================
-# 📊 OBTENER KLINES
-# ============================================================
-
-def obtener_klines_binance(simbolo="BTCUSDT", intervalo="15m", limite=200):
-    """
-    Obtiene velas reales desde Binance API autenticada.
-    Formato: open_time, open, high, low, close, volume
-    """
+    # 🟣 PDH/PDL
     try:
-        data = client.get_klines(symbol=simbolo, interval=intervalo, limit=limite)
-        velas = [{
-            "open_time": datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL),
-            "open": float(k[1]),
-            "high": float(k[2]),
-            "low": float(k[3]),
-            "close": float(k[4]),
-            "volume": float(k[5])
-        } for k in data]
-        return velas
-    except BinanceAPIException as e:
-        print(f"[obtener_klines_binance] Error API Binance: {e.message}")
-        return None
+        zonas.update(_pdh_pdl("BTCUSDT"))
     except Exception as e:
-        print(f"[obtener_klines_binance] Error general: {e}")
-        return None
-
-# ============================================================
-# 🕒 SESIÓN NEW YORK (07:00–13:30 COL)
-# ============================================================
-
-def sesion_ny_activa():
-    now = datetime.now(TZ_COL)
-    h = now.hour + now.minute / 60
-    weekday = now.weekday()
-    return weekday < 5 and 7 <= h < 13.5
-
-# ============================================================
-# 🟣 PDH/PDL ÚLTIMAS 24H
-# ============================================================
-
-def _pdh_pdl(simbolo="BTCUSDT"):
-    try:
-        data = client.get_klines(symbol=simbolo, interval="15m", limit=96)
-        cutoff = datetime.now(TZ_COL) - timedelta(hours=24)
-        data_filtrada = [k for k in data if datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL) > cutoff]
-        highs = [float(k[2]) for k in data_filtrada]
-        lows = [float(k[3]) for k in data_filtrada]
-        return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
-    except Exception as e:
+        zonas["PDH"] = None
+        zonas["PDL"] = None
         print(f"[pdh_pdl] Error: {e}")
-        return {"PDH": None, "PDL": None}
+
+    return {
+        "🧠 TESLABTC.KG": {
+            "fecha": ahora.strftime("%d/%m/%Y %H:%M:%S"),
+            "sesion": sesion,
+            "precio_actual": f"{precio:,.2f} USD" if precio else "⚙️ No disponible",
+            "fuente_precio": fuente,
+            "estructura_detectada": estructura,
+            "contexto_estructural": contexto,
+            "zonas": zonas,
+            "escenario": escenario,
+            "conexion_binance": BINANCE_STATUS,
+            "mensaje": "✨ Análisis completado correctamente",
+        }
+    }
+
+# ============================================================
+# 🔔 ENDPOINT: /alertas (estado y últimas señales del monitor)
+# ============================================================
+
+@app.get("/alertas", tags=["TESLABTC"])
+def alertas():
+    """
+    Devuelve:
+      - Estado del monitor (corriendo, último tick, intervalo)
+      - Últimas alertas detectadas (A+, SCALPING, CHOCH_H1, INFO_M15, etc.)
+    """
+    return get_alerts()
+
+# ============================================================
+# 🌐 ENDPOINT BASE
+# ============================================================
+
+@app.get("/", tags=["Estado"])
+def home():
+    return {
+        "status": "✅ Servicio operativo",
+        "descripcion": "API TESLABTC.KG conectada correctamente a Binance. Monitor en background activo.",
+        "version": "3.4.0",
+        "autor": "GoldTraderBTC",
+    }
