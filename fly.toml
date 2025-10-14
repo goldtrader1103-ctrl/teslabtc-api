@@ -2,7 +2,7 @@ app = "teslabtc-api"
 primary_region = "bog"
 
 [build]
-  image = "python:3.12-slim"
+  dockerfile = "Dockerfile"
 
 [env]
   PORT = "8080"
