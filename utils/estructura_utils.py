@@ -1,40 +1,76 @@
-import requests
-from datetime import datetime, timezone, timedelta
+# ============================================================
+# 🚀 TESLABTC.KG — Análisis Operativo Principal (macro/micro/zonas)
+# ============================================================
 
-BINANCE_URL = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=200"
+from fastapi import APIRouter
+from datetime import datetime, timedelta, timezone
+from utils.price_utils import obtener_precio, obtener_klines_binance
+from utils.estructura_utils import estructura_y_zonas
 
-def obtener_klines(intervalo="5m", limite=200):
-    url = f"https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval={intervalo}&limit={limite}"
-    r = requests.get(url, timeout=10)
-    data = r.json()
-    return [
-        {
-            "open_time": datetime.fromtimestamp(x[0] / 1000, tz=timezone(timedelta(hours=-5))),
-            "open": float(x[1]),
-            "high": float(x[2]),
-            "low": float(x[3]),
-            "close": float(x[4])
-        } for x in data
-    ]
+router = APIRouter()
+TZ_COL = timezone(timedelta(hours=-5))
 
-def detectar_bos(data):
-    """Detecta rupturas de estructura (BOS) básicas."""
-    ultima = data[-1]
-    max_prev = max(x["high"] for x in data[-6:-1])
-    min_prev = min(x["low"] for x in data[-6:-1])
-    if ultima["close"] > max_prev:
-        return "BOS Alcista"
-    elif ultima["close"] < min_prev:
-        return "BOS Bajista"
+@router.get("/", tags=["TESLABTC"])
+def analizar():
+    """Devuelve análisis operativo con estructura macro/micro y zonas de reacción (precios)."""
+    ahora = datetime.now(TZ_COL)
+    sesion = "✅ Activa (Sesión New York)" if 7 <= (ahora.hour + ahora.minute/60) < 13.5 else "❌ Cerrada (Fuera de NY)"
+
+    # Precio (multifuente ya lo tienes en utils/price_utils)
+    p = obtener_precio("BTCUSDT")
+    precio, fuente = p.get("precio"), p.get("fuente")
+    precio_str = f"{precio:,.2f} USD" if isinstance(precio, (int, float, float)) else "⚙️ No disponible"
+
+    # Velas por marco
+    h4 = obtener_klines_binance("BTCUSDT", "4h", 240) or []
+    h1 = obtener_klines_binance("BTCUSDT", "1h", 300) or []
+    m15 = obtener_klines_binance("BTCUSDT", "15m", 300) or []
+
+    # Estructura/zona (H4=macro, H1=intradía, M15=reacción)
+    ez = estructura_y_zonas(h4, h1, m15)
+    macro_estado = ez["macro"]["estado"]
+    intradia_estado = ez["intradia"]["estado"]
+
+    # Tendencia textual principal
+    if macro_estado == "alcista":
+        tendencia = "📈 Alcista estructural (H4)"
+    elif macro_estado == "bajista":
+        tendencia = "📉 Bajista estructural (H4)"
     else:
-        return "Sin BOS"
+        tendencia = "⚙️ Rango (H4)"
 
-def detectar_barrida(data):
-    """Detecta si hubo barrida reciente de altos o bajos."""
-    high = [x["high"] for x in data[-10:]]
-    low = [x["low"] for x in data[-10:]]
-    if high[-1] > max(high[:-1]):
-        return "Barrida de Altos"
-    elif low[-1] < min(low[:-1]):
-        return "Barrida de Bajos"
-    return "Sin barrida"
+    body = {
+        "🧠 TESLABTC.KG": {
+            "fecha": ahora.strftime("%d/%m/%Y %H:%M:%S"),
+            "sesion": sesion,
+            "fuente": fuente,
+            "precio_actual": precio_str,
+            "tendencia": tendencia,
+            "estructura": {
+                "macro": {"estado": macro_estado, "zonas": ez["macro"].get("zonas", {}), "nota": ez["macro"].get("nota")},
+                "intradía": {"estado": intradia_estado, "zonas": ez["intradia"].get("zonas", {}), "nota": ez["intradia"].get("nota")},
+                "reaccion": ez.get("reaccion", {})
+            },
+            "mensaje": "✨ Análisis completado correctamente" if isinstance(precio, (int, float)) else "⚠️ Precio no disponible",
+            "error": "Ninguno" if isinstance(precio, (int, float)) else "Fuente temporalmente inactiva"
+        }
+    }
+
+    # Sugerencia operativa (texto simple, sin volumen/fibo)
+    z_h1 = ez["intradia"].get("zonas", {})
+    z_m15 = ez.get("reaccion", {}).get("zona_1")
+    if z_h1:
+        z1 = z_h1.get("zona_1")
+        if z1:
+            body["🧠 TESLABTC.KG"]["sugerencia"] = (
+                f"Reacción intradía H1 en {z1['inferior']:,.2f} – {z1['superior']:,.2f}. "
+                f"{'Refinar en M15: ' + f'{z_m15["inferior"]:,.2f} – {z_m15["superior"]:,.2f}' if z_m15 else ''}"
+            )
+        z2 = z_h1.get("zona_2")
+        if z2:
+            body["🧠 TESLABTC.KG"]["sugerencia_secundaria"] = (
+                f"Zona H1 de reentrada: {z2['inferior']:,.2f} – {z2['superior']:,.2f}. "
+                "Si la zona 1 no reacciona, considerar ampliar SL para cubrir ambas."
+            )
+
+    return body
