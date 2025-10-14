@@ -2,8 +2,7 @@
 # 🧠 DETECTOR ESTRUCTURAL TESLABTC.KG (versión estable 3.1)
 # ============================================================
 
-from datetime import datetime
-from utils.price_utils import obtener_klines_binance, detectar_estructura
+import utils.price_utils as price_utils
 
 # ============================================================
 # 🔍 Evaluar estructura macro, intradía y de reacción
@@ -16,15 +15,15 @@ def evaluar_estructura(simbolo: str = "BTCUSDT") -> dict:
     """
     try:
         data = {
-            "H4": obtener_klines_binance(simbolo, "4h", 120),
-            "H1": obtener_klines_binance(simbolo, "1h", 120),
-            "M15": obtener_klines_binance(simbolo, "15m", 120),
+            "H4": price_utils.obtener_klines_binance(simbolo, "4h", 120),
+            "H1": price_utils.obtener_klines_binance(simbolo, "1h", 120),
+            "M15": price_utils.obtener_klines_binance(simbolo, "15m", 120),
         }
 
         estructura = {}
         zonas = {}
         for tf, velas in data.items():
-            info = detectar_estructura(velas)
+            info = price_utils.detectar_estructura(velas)
             estructura[tf] = info["estado"]
             zonas[tf] = {
                 "High": info.get("zona_high"),
