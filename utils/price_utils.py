@@ -1,148 +1,97 @@
 # ============================================================
-# 📊 ESTRUCTURA DE MERCADO – TESLABTC.KG (versión avanzada)
+# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (con API Binance real)
 # ============================================================
 
-from datetime import datetime, timezone, timedelta
+import os
+import time
+from datetime import datetime, timedelta, timezone
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
 
-# Zona horaria Colombia (UTC-5)
+# ============================================================
+# 🕐 CONFIGURACIÓN BASE
+# ============================================================
+
 TZ_COL = timezone(timedelta(hours=-5))
 
-# ============================================================
-# 🧠 EVALUAR ESTRUCTURA MACRO / INTRADÍA / MICRO
-# ============================================================
+# Carga las credenciales desde Render
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 
-def evaluar_estructura(velas_h4, velas_h1, velas_m15):
-    """
-    Evalúa la estructura del mercado con base en velas de distintas temporalidades.
-    Devuelve estados y zonas de reacción (High-Low) por timeframe.
-    """
-
-    def detectar_estado(velas):
-        if not velas or len(velas) < 5:
-            return "sin_datos", None, None
-
-        ultimos = velas[-40:]
-        highs = [v["high"] for v in ultimos]
-        lows = [v["low"] for v in ultimos]
-        closes = [v["close"] for v in ultimos]
-
-        tendencia = "alcista" if closes[-1] > closes[0] else "bajista"
-        zona_high = max(highs)
-        zona_low = min(lows)
-        return tendencia, zona_high, zona_low
-
-    h4_estado, h4_high, h4_low = detectar_estado(velas_h4)
-    h1_estado, h1_high, h1_low = detectar_estado(velas_h1)
-    m15_estado, m15_high, m15_low = detectar_estado(velas_m15)
-
-    # ============================================================
-    # 🧩 CONTEXTO ESTRUCTURAL
-    # ============================================================
-    if h4_estado == "alcista" and h1_estado == "alcista":
-        contexto = "flujo alcista dominante — continuación probable"
-    elif h4_estado == "bajista" and h1_estado == "bajista":
-        contexto = "flujo bajista dominante — continuación probable"
-    elif h4_estado != h1_estado:
-        contexto = "fase de transición — posible retroceso o mitigación"
-    else:
-        contexto = "rango o compresión — sin dirección clara"
-
-    estructura = {
-        "H4 (macro)": h4_estado,
-        "H1 (intradía)": h1_estado,
-        "M15 (reacción)": m15_estado,
-    }
-
-    zonas = {
-        "ZONA H4 (macro)": {"High": h4_high, "Low": h4_low},
-        "ZONA H1 (intradía)": {"High": h1_high, "Low": h1_low},
-        "ZONA M15 (reacción)": {"High": m15_high, "Low": m15_low},
-    }
-
-    return {
-        "estructura": estructura,
-        "zonas": zonas,
-        "contexto": contexto,
-    }
+# Cliente autenticado
+try:
+    client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
+    test_ping = client.ping()
+    BINANCE_STATUS = "✅ API Binance conectada correctamente"
+except Exception as e:
+    client = None
+    BINANCE_STATUS = f"⚠️ Error conexión Binance: {e}"
 
 # ============================================================
-# 🔍 DETECTAR BOS / CHoCH SIMPLE (Price Action Puro)
+# 💰 OBTENER PRECIO ACTUAL
 # ============================================================
 
-def detectar_bos(velas, tipo="alcista"):
+def obtener_precio(symbol="BTCUSDT"):
     """
-    Detecta ruptura de estructura (Break of Structure) o CHoCH simple.
-    Retorna True si se confirma ruptura válida.
+    Obtiene el precio actual desde Binance con credenciales.
+    Si falla, retorna None.
     """
-    if not velas or len(velas) < 10:
-        return False
-
-    ultimos = velas[-15:]
-    highs = [v["high"] for v in ultimos]
-    lows = [v["low"] for v in ultimos]
-    close = velas[-1]["close"]
-
-    if tipo == "alcista" and close > max(highs[:-3]):
-        return True
-    if tipo == "bajista" and close < min(lows[:-3]):
-        return True
-    return False
+    try:
+        ticker = client.get_symbol_ticker(symbol=symbol)
+        return {"precio": float(ticker["price"]), "fuente": "Binance (API)"}
+    except Exception as e:
+        print(f"[obtener_precio] Error: {e}")
+        return {"precio": None, "fuente": "Binance Error"}
 
 # ============================================================
-# 🧭 GENERAR ESCENARIOS ESTRUCTURALES
+# 📊 OBTENER KLINES
 # ============================================================
 
-def definir_escenarios(estructura, zonas, sesion_activa):
+def obtener_klines_binance(simbolo="BTCUSDT", intervalo="15m", limite=200):
     """
-    Devuelve el escenario operativo (conservador, reentrada o scalping).
+    Obtiene velas reales desde Binance API autenticada.
+    Formato: open_time, open, high, low, close, volume
     """
+    try:
+        data = client.get_klines(symbol=simbolo, interval=intervalo, limit=limite)
+        velas = [{
+            "open_time": datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL),
+            "open": float(k[1]),
+            "high": float(k[2]),
+            "low": float(k[3]),
+            "close": float(k[4]),
+            "volume": float(k[5])
+        } for k in data]
+        return velas
+    except BinanceAPIException as e:
+        print(f"[obtener_klines_binance] Error API Binance: {e.message}")
+        return None
+    except Exception as e:
+        print(f"[obtener_klines_binance] Error general: {e}")
+        return None
 
-    h4 = estructura.get("H4 (macro)")
-    h1 = estructura.get("H1 (intradía)")
-    m15 = estructura.get("M15 (reacción)")
+# ============================================================
+# 🕒 SESIÓN NEW YORK (07:00–13:30 COL)
+# ============================================================
 
-    escenarios = []
+def sesion_ny_activa():
+    now = datetime.now(TZ_COL)
+    h = now.hour + now.minute / 60
+    weekday = now.weekday()
+    return weekday < 5 and 7 <= h < 13.5
 
-    # Escenario principal — Conservador 1
-    if h4 == h1 and h4 in ["alcista", "bajista"]:
-        escenarios.append({
-            "escenario": "CONSERVADOR 1",
-            "nivel": "Institucional (direccional principal)",
-            "zona_principal": zonas["ZONA H1 (intradía)"],
-            "razon": f"H4 y H1 alineados ({h4}). Continuación esperada.",
-            "accion": f"Operar {h4.upper()} con confirmación BOS M5 dentro del POI M15.\n"
-                      "Objetivo: 1:3 o más.\n💡 Gestión de riesgo estricta.",
-            "tipo": "principal"
-        })
+# ============================================================
+# 🟣 PDH/PDL ÚLTIMAS 24H
+# ============================================================
 
-    # Reentrada si existe extensión estructural (ej. más liquidez por mitigar)
-    if h4 == h1 and h1 == "bajista" and m15 == "bajista":
-        escenarios.append({
-            "escenario": "CONSERVADOR 2 (reentrada)",
-            "nivel": "Institucional extendido",
-            "zona_principal": zonas["ZONA M15 (reacción)"],
-            "razon": "Reentrada en continuación estructural bajista (H4–H1–M15).",
-            "accion": "Esperar nuevo impulso bajista con confirmación BOS M3.\n"
-                      "Posible cobertura SL ampliada.\n🎯 Reentrada controlada.",
-            "tipo": "reentrada"
-        })
-
-    # Escenario scalping — Contra tendencia
-    if h1 != m15:
-        escenarios.append({
-            "escenario": "SCALPING (contra-tendencia)",
-            "nivel": "Agresivo / bajo confirmación rápida",
-            "zona_principal": zonas["ZONA M15 (reacción)"],
-            "razon": f"Retroceso M15 contra tendencia intradía ({h1}).",
-            "accion": "Buscar oportunidad rápida en retroceso M15.\n"
-                      "Confirmar BOS micro M5–M3 antes de ejecutar.\n"
-                      "RRR máximo 1:1 o 1:2.\n⚠️ Solo apto para traders avanzados.",
-            "tipo": "scalping"
-        })
-
-    # Si sesión cerrada
-    if not sesion_activa:
-        for e in escenarios:
-            e["nota"] = "Sesión NY cerrada — solo modo observación / backtesting."
-
-    return escenarios
+def _pdh_pdl(simbolo="BTCUSDT"):
+    try:
+        data = client.get_klines(symbol=simbolo, interval="15m", limit=96)
+        cutoff = datetime.now(TZ_COL) - timedelta(hours=24)
+        data_filtrada = [k for k in data if datetime.fromtimestamp(k[0] / 1000, tz=TZ_COL) > cutoff]
+        highs = [float(k[2]) for k in data_filtrada]
+        lows = [float(k[3]) for k in data_filtrada]
+        return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
+    except Exception as e:
+        print(f"[pdh_pdl] Error: {e}")
+        return {"PDH": None, "PDL": None}
