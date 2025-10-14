@@ -1,115 +1,96 @@
 # ============================================================
-# 🧠 TESLABTC.KG — Estructura y Zonas (H4/H1/M15)
-# Acción del Precio Pura (sin volumen / sin fibo)
+# 🧭 TESLABTC.KG — Evaluación estructural macro/micro
 # ============================================================
 
-from typing import List, Dict, Optional
+from datetime import datetime, timedelta, timezone
 
-def _is_swing_high(velas: List[Dict], i: int, lb: int = 2) -> bool:
-    if i - lb < 0 or i + lb >= len(velas): 
-        return False
-    h = velas[i]["high"]
-    return all(h > velas[i - k]["high"] and h > velas[i + k]["high"] for k in range(1, lb + 1))
+TZ_COL = timezone(timedelta(hours=-5))
 
-def _is_swing_low(velas: List[Dict], i: int, lb: int = 2) -> bool:
-    if i - lb < 0 or i + lb >= len(velas): 
-        return False
-    l = velas[i]["low"]
-    return all(l < velas[i - k]["low"] and l < velas[i + k]["low"] for k in range(1, lb + 1))
+def evaluar_estructura(H4_dir, H1_dir, M15_dir, tipo_operacion="institucional"):
+    """
+    Analiza coherencia estructural y define escenarios:
+    1️⃣ Conservador (principal)
+    2️⃣ Conservador 2 (reentrada)
+    3️⃣ Scalping (contra tendencia)
+    """
 
-def _collect_swings(velas: List[Dict], lb: int = 2, take_last: int = 80):
-    highs, lows = [], []
-    start = max(0, len(velas) - take_last)
-    for i in range(start, len(velas)):
-        if _is_swing_high(velas, i, lb): highs.append(i)
-        if _is_swing_low(velas, i, lb):  lows.append(i)
-    return highs, lows
+    # ============================================================
+    # 🔸 ESCENARIO SCALPING — Contra tendencia H1
+    # ============================================================
+    if tipo_operacion == "scalping":
+        if H1_dir == "bajista" and M15_dir == "alcista":
+            return {
+                "escenario": "SCALPING BUY",
+                "nivel": "Riesgo alto (contra tendencia intradía)",
+                "razon": "H1 bajista pero M15 desarrolla retroceso alcista (pullback activo).",
+                "accion": (
+                    "Ejecutar SCALPING BUY solo si hay BOS micro M5–M3 "
+                    "dentro del POI M15 o retroceso profundo del impulso previo.\n"
+                    "Objetivo: RRR 1:1 a 1:2 máximo.\n"
+                    "La gestión del riesgo es la clave de un trader profesional."
+                ),
+                "tipo": "scalping"
+            }
+        elif H1_dir == "alcista" and M15_dir == "bajista":
+            return {
+                "escenario": "SCALPING SELL",
+                "nivel": "Riesgo alto (contra tendencia intradía)",
+                "razon": "H1 alcista pero M15 desarrolla retroceso bajista.",
+                "accion": (
+                    "Ejecutar SCALPING SELL solo con BOS micro M5–M3 en el POI M15.\n"
+                    "Objetivo: 1:1 o 1:2 máximo.\n"
+                    "La gestión del riesgo es la clave de un trader profesional."
+                ),
+                "tipo": "scalping"
+            }
 
-def _last_bos(velas: List[Dict]) -> Dict:
-    highs, lows = _collect_swings(velas, lb=2, take_last=120)
-    if len(highs) < 2 and len(lows) < 2:
-        return {"dir": "range", "idx_break": None, "idx_ref": None}
+    # ============================================================
+    # 🔹 ESCENARIO CONSERVADOR (principal direccional)
+    # ============================================================
+    if H1_dir == H4_dir:
+        return {
+            "escenario": "CONSERVADOR 1",
+            "nivel": "Institucional (direccional principal)",
+            "razon": f"H4 y H1 alineados en estructura {H1_dir.upper()}.",
+            "accion": (
+                f"Operar {H1_dir.upper()} A+ con confirmación BOS M5 "
+                f"dentro del POI M15 en dirección principal.\n"
+                "Objetivo: 1:3 o más, priorizando estructuras limpias.\n"
+                "La gestión del riesgo es la clave de un trader profesional."
+            ),
+            "tipo": "principal"
+        }
 
-    if len(highs) >= 2:
-        prev_high = velas[highs[-2]]["high"]
-        for j in range(highs[-2]+1, len(velas)):
-            if velas[j]["high"] > prev_high:
-                return {"dir": "up", "idx_break": j, "idx_ref": highs[-2]}
+    # ============================================================
+    # 🔹 ESCENARIO CONSERVADOR 2 (REENTRADA)
+    # ============================================================
+    if H4_dir == H1_dir and M15_dir == H1_dir:
+        return {
+            "escenario": "CONSERVADOR 2",
+            "nivel": "Reentrada institucional (mitigación adicional)",
+            "razon": (
+                f"Estructura {H4_dir.upper()} dominante con nueva mitigación "
+                "de liquidez o POI secundario en desarrollo."
+            ),
+            "accion": (
+                "Esperar segunda oportunidad en el siguiente rango institucional "
+                "o zona de liquidez no mitigada.\n"
+                "Ampliar SL cubriendo ambas zonas o dividir entrada en dos tramos.\n"
+                "La gestión del riesgo es la clave de un trader profesional."
+            ),
+            "tipo": "reentrada"
+        }
 
-    if len(lows) >= 2:
-        prev_low = velas[lows[-2]]["low"]
-        for j in range(lows[-2]+1, len(velas)):
-            if velas[j]["low"] < prev_low:
-                return {"dir": "down", "idx_break": j, "idx_ref": lows[-2]}
-
-    return {"dir": "range", "idx_break": None, "idx_ref": None}
-
-def _ob_zone_from_candle(c: Dict, kind: str) -> Dict:
-    if kind == "demand":
-        return {"inferior": round(c["low"], 2), "superior": round(c["open"], 2)}
-    else:
-        return {"inferior": round(c["open"], 2), "superior": round(c["high"], 2)}
-
-def _find_last_ob(velas: List[Dict], dir_bos: str, idx_break: int) -> Optional[Dict]:
-    if idx_break is None or idx_break <= 0:
-        return None
-
-    j = idx_break
-    ob_list = []
-    floor = max(0, idx_break - 60)
-
-    if dir_bos == "up":
-        while j > floor:
-            j -= 1
-            if velas[j]["close"] < velas[j]["open"]:
-                ob_list.append(_ob_zone_from_candle(velas[j], "demand"))
-                if len(ob_list) == 2:
-                    break
-    elif dir_bos == "down":
-        while j > floor:
-            j -= 1
-            if velas[j]["close"] > velas[j]["open"]:
-                ob_list.append(_ob_zone_from_candle(velas[j], "supply"))
-                if len(ob_list) == 2:
-                    break
-
-    if not ob_list:
-        return None
-
-    zonas = {"zona_1": ob_list[0]}
-    if len(ob_list) > 1:
-        zonas["zona_2"] = ob_list[1]
-    return zonas
-
-def estructura_y_zonas(velas_h4: List[Dict], velas_h1: List[Dict], velas_m15: List[Dict]) -> Dict:
-    bos_h4 = _last_bos(velas_h4)
-    estado_h4 = "alcista" if bos_h4["dir"] == "up" else ("bajista" if bos_h4["dir"] == "down" else "rango")
-    zonas_h4 = _find_last_ob(velas_h4, bos_h4["dir"], bos_h4["idx_break"])
-    macro = {"estado": estado_h4, "zonas": zonas_h4 or {}}
-    if zonas_h4 and "zona_2" in zonas_h4:
-        macro["nota"] = "Si la zona 1 no reacciona, considerar zona 2 como reentrada o SL extendido."
-
-    bos_h1 = _last_bos(velas_h1)
-    estado_h1 = "alcista" if bos_h1["dir"] == "up" else ("bajista" if bos_h1["dir"] == "down" else "rango")
-    zonas_h1 = _find_last_ob(velas_h1, bos_h1["dir"], bos_h1["idx_break"])
-    intradia = {"estado": estado_h1, "zonas": zonas_h1 or {}}
-    if zonas_h1 and "zona_2" in zonas_h1:
-        intradia["nota"] = "Zona 2 como reentrada si la principal falla."
-
-    reaccion = {}
-    if zonas_h1 and "zona_1" in zonas_h1:
-        z1 = zonas_h1["zona_1"]
-        z_inf, z_sup = z1["inferior"], z1["superior"]
-        cand = None
-        for c in reversed(velas_m15[-120:]):
-            if z_inf <= c["low"] <= z_sup or z_inf <= c["high"] <= z_sup or (c["low"] < z_inf and c["high"] > z_sup):
-                if estado_h1 == "alcista" and c["close"] < c["open"]:
-                    cand = _ob_zone_from_candle(c, "demand")
-                    break
-                if estado_h1 == "bajista" and c["close"] > c["open"]:
-                    cand = _ob_zone_from_candle(c, "supply")
-                    break
-        if cand:
-            reaccion["zona_1"] = cand
-
-    return {"macro": macro, "intradía": intradia, "reaccion": reaccion}
+    # ============================================================
+    # 🔸 ESCENARIO NEUTRO (sin alineación clara)
+    # ============================================================
+    return {
+        "escenario": "RANGO / NEUTRO",
+        "nivel": "Sin dirección dominante",
+        "razon": "H4 y H1 presentan direcciones opuestas o indecisión.",
+        "accion": (
+            "Esperar confirmación estructural (CHoCH o BOS fuerte) "
+            "antes de ejecutar cualquier entrada."
+        ),
+        "tipo": "espera"
+    }
