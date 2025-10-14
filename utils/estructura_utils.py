@@ -1,83 +1,94 @@
 # ============================================================
-# 🧭 TESLABTC.KG — Evaluación estructural macro/micro
+# 🧠 DETECTOR ESTRUCTURAL TESLABTC.KG
 # ============================================================
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
+from statistics import mean
+
 TZ_COL = timezone(timedelta(hours=-5))
 
-def evaluar_estructura(H4_dir, H1_dir, M15_dir, tipo_operacion="institucional"):
+# ------------------------------------------------------------
+# 🔍 FUNCIÓN BASE PARA LEER ESTRUCTURA SIMPLE
+# ------------------------------------------------------------
+def _estructura_basica(velas):
+    if not velas or len(velas) < 20:
+        return {"estructura": "sin_datos", "zona": None}
+    closes = [v["close"] for v in velas[-40:]]
+    highs = [v["high"] for v in velas[-40:]]
+    lows = [v["low"] for v in velas[-40:]]
+
+    # Tendencia por máximos y mínimos
+    if highs[-1] > max(highs[:-5]) and lows[-1] > mean(lows[:-5]):
+        estructura = "alcista"
+    elif lows[-1] < min(lows[:-5]) and highs[-1] < mean(highs[:-5]):
+        estructura = "bajista"
+    else:
+        estructura = "rango"
+
+    zona = {
+        "High": round(max(highs[-10:]), 2),
+        "Low": round(min(lows[-10:]), 2)
+    }
+    return {"estructura": estructura, "zona": zona}
+
+
+# ------------------------------------------------------------
+# 🧩 ANALIZAR ESTRUCTURA MULTINIVEL
+# ------------------------------------------------------------
+def analizar_estructura_multinivel(velas_h4, velas_h1, velas_m15):
     """
-    Analiza coherencia estructural y define escenarios:
-    1️⃣ Conservador (principal)
-    2️⃣ Conservador 2 (reentrada)
-    3️⃣ Scalping (contra tendencia)
+    Devuelve estructura macro (H4), intradía (H1) y reacción (M15)
+    con sus zonas reales (rangos de precios)
     """
-
-    if tipo_operacion == "scalping":
-        if H1_dir == "bajista" and M15_dir == "alcista":
-            return {
-                "escenario": "SCALPING BUY",
-                "nivel": "Riesgo alto (contra tendencia intradía)",
-                "razon": "H1 bajista pero M15 desarrolla retroceso alcista (pullback activo).",
-                "accion": (
-                    "Ejecutar SCALPING BUY solo si hay BOS micro M5–M3 "
-                    "dentro del POI M15 o retroceso profundo del impulso previo.\n"
-                    "Objetivo: RRR 1:1 a 1:2 máximo.\n"
-                    "💡 La gestión del riesgo es la clave de un trader profesional."
-                ),
-                "tipo": "scalping"
-            }
-        elif H1_dir == "alcista" and M15_dir == "bajista":
-            return {
-                "escenario": "SCALPING SELL",
-                "nivel": "Riesgo alto (contra tendencia intradía)",
-                "razon": "H1 alcista pero M15 desarrolla retroceso bajista.",
-                "accion": (
-                    "Ejecutar SCALPING SELL solo con BOS micro M5–M3 en el POI M15.\n"
-                    "Objetivo: 1:1 o 1:2 máximo.\n"
-                    "💡 La gestión del riesgo es la clave de un trader profesional."
-                ),
-                "tipo": "scalping"
-            }
-
-    if H1_dir == H4_dir:
-        return {
-            "escenario": "CONSERVADOR 1",
-            "nivel": "Institucional (direccional principal)",
-            "razon": f"H4 y H1 alineados en estructura {H1_dir.upper()}.",
-            "accion": (
-                f"Operar {H1_dir.upper()} A+ con confirmación BOS M5 "
-                f"dentro del POI M15 en dirección principal.\n"
-                "Objetivo: 1:3 o más, priorizando estructuras limpias.\n"
-                "💡 La gestión del riesgo es la clave de un trader profesional."
-            ),
-            "tipo": "principal"
-        }
-
-    if H4_dir == H1_dir and M15_dir == H1_dir:
-        return {
-            "escenario": "CONSERVADOR 2",
-            "nivel": "Reentrada institucional (mitigación adicional)",
-            "razon": (
-                f"Estructura {H4_dir.upper()} dominante con nueva mitigación "
-                "de liquidez o POI secundario en desarrollo."
-            ),
-            "accion": (
-                "Esperar segunda oportunidad en el siguiente rango institucional "
-                "o zona de liquidez no mitigada.\n"
-                "Ampliar SL cubriendo ambas zonas o dividir entrada en dos tramos.\n"
-                "💡 La gestión del riesgo es la clave de un trader profesional."
-            ),
-            "tipo": "reentrada"
-        }
+    h4 = _estructura_basica(velas_h4)
+    h1 = _estructura_basica(velas_h1)
+    m15 = _estructura_basica(velas_m15)
 
     return {
-        "escenario": "RANGO / NEUTRO",
-        "nivel": "Sin dirección dominante",
-        "razon": "H4 y H1 presentan direcciones opuestas o indecisión.",
-        "accion": (
-            "Esperar confirmación estructural (CHoCH o BOS fuerte) "
-            "antes de ejecutar cualquier entrada."
-        ),
-        "tipo": "espera"
+        "H4": h4["estructura"],
+        "H1": h1["estructura"],
+        "M15": m15["estructura"],
+        "zonas": {
+            "H4": h4["zona"],
+            "H1": h1["zona"],
+            "M15": m15["zona"]
+        }
+    }
+
+
+# ------------------------------------------------------------
+# 🎯 DETERMINAR ESCENARIO DE OPERACIÓN
+# ------------------------------------------------------------
+def determinar_escenario(estructura):
+    h4 = estructura["H4"]
+    h1 = estructura["H1"]
+    m15 = estructura["M15"]
+
+    # Escenario conservador 1 – alineación total
+    if h4 == h1 == m15 and h1 in ["alcista", "bajista"]:
+        tipo = "CONSERVADOR 1"
+        nivel = "Institucional (direccional principal)"
+        razon = f"H4, H1 y M15 alineados {h1.upper()}."
+        accion = f"Operar BOS M5 en dirección {h1.upper()} dentro del POI M15."
+        objetivo = "Objetivo: 1:3 o más, priorizando estructuras limpias."
+    # Escenario conservador 2 – reentrada o continuación
+    elif h4 == h1 and m15 != h1:
+        tipo = "CONSERVADOR 2"
+        nivel = "Reentrada / Mitigación"
+        razon = f"H4 y H1 alineados {h1.upper()}, pero M15 en retroceso."
+        accion = f"Esperar confirmación BOS M5 a favor de H1 para reentrada."
+        objetivo = "Objetivo: 1:2 o 1:3, dependiendo de liquidez pendiente."
+    # Escenario scalping – contra tendencia
+    else:
+        tipo = "SCALPING"
+        nivel = "Contratendencia (riesgo alto)"
+        razon = f"H1 y H4 opuestos ({h4.upper()} vs {h1.upper()})."
+        accion = "Buscar BOS M5-M3 dentro del POI M15 con gestión estricta."
+        objetivo = "Objetivo: 1:1 o 1:2 máximo, controlando exposición."
+
+    return {
+        "escenario": tipo,
+        "nivel": nivel,
+        "razon": razon,
+        "accion": f"{accion}\n💡 {objetivo}\n⚖️ La gestión del riesgo es la clave de un trader profesional."
     }
