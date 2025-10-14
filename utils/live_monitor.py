@@ -1,110 +1,78 @@
 # ============================================================
-# 🔔 MONITOR EN VIVO — TESLABTC.KG v3.5.0
+# 🔔 MONITOR EN VIVO — TESLABTC.KG (v3.6.0)
 # ============================================================
 
+import os
 import asyncio
 from datetime import datetime, timedelta, timezone
-from utils.price_utils import obtener_precio, obtener_klines_binance, sesion_ny_activa
+from utils.price_utils import obtener_precio, obtener_klines_binance
 from utils.estructura_utils import evaluar_estructura, definir_escenarios
 
-# ============================================================
-# ⚙️ CONFIGURACIÓN GENERAL
-# ============================================================
-
 TZ_COL = timezone(timedelta(hours=-5))
-MONITOR_INTERVAL = 300  # segundos = 5 minutos
-MONITOR_RUNNING = False
-ALERT_LOG = []  # almacena últimas alertas
 
-# ============================================================
-# 🔁 LOOP PRINCIPAL DEL MONITOR
-# ============================================================
+# Intervalo configurable por ENV, por defecto 15 min
+MONITOR_INTERVAL_SEC = int(os.getenv("MONITOR_INTERVAL_SEC", "900"))
+
+_MONITOR_RUNNING = False
+_ALERTS = []  # últimas N alertas
+_MAX_ALERTS = 20
 
 async def live_monitor_loop():
-    """Ejecuta el análisis completo cada 5 minutos y guarda las alertas recientes."""
-    global MONITOR_RUNNING
-    if MONITOR_RUNNING:
-        return  # ya está corriendo
+    """Ejecuta el análisis cada MONITOR_INTERVAL_SEC y guarda alertas."""
+    global _MONITOR_RUNNING
+    if _MONITOR_RUNNING:
+        return
+    _MONITOR_RUNNING = True
+    print(f"[TESLABTC MONITOR] Iniciado. Intervalo: {MONITOR_INTERVAL_SEC}s")
 
-    MONITOR_RUNNING = True
-    print("[🔄 MONITOR TESLABTC.KG] Iniciado correctamente.")
-
-    while MONITOR_RUNNING:
+    while _MONITOR_RUNNING:
         try:
             now = datetime.now(TZ_COL)
-            hora_actual = now.strftime("%H:%M:%S")
-
-            # Obtener precio actual
-            precio_data = obtener_precio()
+            precio_data = obtener_precio("BTCUSDT")
             precio = precio_data.get("precio")
-            fuente = precio_data.get("fuente")
 
-            # Verificar sesión NY
-            sesion = sesion_ny_activa()
+            h4 = obtener_klines_binance("BTCUSDT", "4h", 100)
+            h1 = obtener_klines_binance("BTCUSDT", "1h", 100)
+            m15 = obtener_klines_binance("BTCUSDT", "15m", 100)
 
-            # Obtener velas y estructuras
-            velas_h4 = obtener_klines_binance(intervalo="4h", limite=200)
-            velas_h1 = obtener_klines_binance(intervalo="1h", limite=200)
-            velas_m15 = obtener_klines_binance(intervalo="15m", limite=200)
-
-            estructura = {
-                "H4 (macro)": evaluar_estructura(velas_h4, "H4"),
-                "H1 (intradía)": evaluar_estructura(velas_h1, "H1"),
-                "M15 (reacción)": evaluar_estructura(velas_m15, "M15"),
+            e_h4 = evaluar_estructura(h4); e_h1 = evaluar_estructura(h1); e_m15 = evaluar_estructura(m15)
+            estados = {
+                "H4 (macro)": e_h4["estado"],
+                "H1 (intradía)": e_h1["estado"],
+                "M15 (reacción)": e_m15["estado"]
             }
+            escenario = definir_escenarios(estados)
 
-            escenario = definir_escenarios(estructura, sesion)
-
-            # Crear resumen corto
-            resumen = (
-                f"[{hora_actual}] {escenario['escenario']} | "
-                f"Precio: {precio:,.2f} USD | "
-                f"H4: {estructura['H4 (macro)']} / H1: {estructura['H1 (intradía)']} / M15: {estructura['M15 (reacción)']}"
-            )
-
-            # Guardar alerta
-            ALERT_LOG.append({
+            resumen = {
                 "timestamp": now.strftime("%d/%m/%Y %H:%M:%S"),
-                "escenario": escenario["escenario"],
                 "precio": round(precio, 2) if precio else None,
-                "estructura": estructura,
-                "resumen": resumen,
-                "fuente_precio": fuente,
-            })
+                "estados": estados,
+                "escenario": escenario["escenario"],
+                "mensaje": escenario["mensaje"]
+            }
+            _ALERTS.append(resumen)
+            if len(_ALERTS) > _MAX_ALERTS:
+                _ALERTS.pop(0)
 
-            # Limitar tamaño del log a las últimas 15 alertas
-            if len(ALERT_LOG) > 15:
-                ALERT_LOG.pop(0)
-
-            print(f"[📈 TESLABTC MONITOR] {resumen}")
+            print(f"[TESLABTC ALERT] {resumen}")
 
         except Exception as e:
-            print(f"[❌ MONITOR ERROR] {e}")
+            print(f"[MONITOR ERROR] {e}")
 
-        await asyncio.sleep(MONITOR_INTERVAL)  # espera 5 minutos antes del siguiente análisis
-
-# ============================================================
-# ⛔ DETENER EL MONITOR
-# ============================================================
+        await asyncio.sleep(MONITOR_INTERVAL_SEC)
 
 def stop_monitor():
-    """Detiene el monitor."""
-    global MONITOR_RUNNING
-    MONITOR_RUNNING = False
-    print("[🛑 MONITOR TESLABTC.KG] Detenido.")
+    global _MONITOR_RUNNING
+    _MONITOR_RUNNING = False
+    print("[TESLABTC MONITOR] Detenido.")
 
-# ============================================================
-# 📋 CONSULTAR ALERTAS RECIENTES
-# ============================================================
-
-def get_alerts() -> dict:
-    """Devuelve las últimas alertas registradas."""
-    if not ALERT_LOG:
+def get_alerts():
+    if not _ALERTS:
         return {"estado": "sin_alertas", "mensaje": "Aún no hay alertas generadas."}
-
     return {
-        "estado": "🟢 activo" if MONITOR_RUNNING else "🔴 detenido",
-        "ultima_alerta": ALERT_LOG[-1],
-        "alertas_recientes": ALERT_LOG[-5:],  # últimas 5
-        "total_registradas": len(ALERT_LOG),
+        "estado": "🟢 activo" if _MONITOR_RUNNING else "🔴 detenido",
+        "ultima_alerta": _ALERTS[-1],
+        "alertas_recientes": _ALERTS[-5:],
+        "total": len(_ALERTS),
+        "intervalo_seg": MONITOR_INTERVAL_SEC
     }
