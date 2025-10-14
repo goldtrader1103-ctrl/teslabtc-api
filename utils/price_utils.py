@@ -1,5 +1,5 @@
 # ============================================================
-# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (con API Binance real)
+# ⚙️ UTILIDADES DE PRECIO – TESLABTC.KG (Conexión Binance Real)
 # ============================================================
 
 import os
@@ -13,45 +13,35 @@ from binance.exceptions import BinanceAPIException
 # ============================================================
 
 TZ_COL = timezone(timedelta(hours=-5))
-
-# Carga las credenciales desde Render
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
 
 # Cliente autenticado
 try:
     client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
-    test_ping = client.ping()
+    client.ping()
     BINANCE_STATUS = "✅ API Binance conectada correctamente"
 except Exception as e:
     client = None
     BINANCE_STATUS = f"⚠️ Error conexión Binance: {e}"
 
 # ============================================================
-# 💰 OBTENER PRECIO ACTUAL
+# 💰 PRECIO ACTUAL
 # ============================================================
 
 def obtener_precio(symbol="BTCUSDT"):
-    """
-    Obtiene el precio actual desde Binance con credenciales.
-    Si falla, retorna None.
-    """
     try:
         ticker = client.get_symbol_ticker(symbol=symbol)
         return {"precio": float(ticker["price"]), "fuente": "Binance (API)"}
     except Exception as e:
         print(f"[obtener_precio] Error: {e}")
-        return {"precio": None, "fuente": "Binance Error"}
+        return {"precio": None, "fuente": "Error Binance"}
 
 # ============================================================
-# 📊 OBTENER KLINES
+# 📊 VELAS
 # ============================================================
 
 def obtener_klines_binance(simbolo="BTCUSDT", intervalo="15m", limite=200):
-    """
-    Obtiene velas reales desde Binance API autenticada.
-    Formato: open_time, open, high, low, close, volume
-    """
     try:
         data = client.get_klines(symbol=simbolo, interval=intervalo, limit=limite)
         velas = [{
@@ -60,7 +50,7 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="15m", limite=200):
             "high": float(k[2]),
             "low": float(k[3]),
             "close": float(k[4]),
-            "volume": float(k[5])
+            "volume": float(k[5]),
         } for k in data]
         return velas
     except BinanceAPIException as e:
@@ -71,7 +61,7 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="15m", limite=200):
         return None
 
 # ============================================================
-# 🕒 SESIÓN NEW YORK (07:00–13:30 COL)
+# 🕒 SESIÓN NY
 # ============================================================
 
 def sesion_ny_activa():
@@ -81,7 +71,7 @@ def sesion_ny_activa():
     return weekday < 5 and 7 <= h < 13.5
 
 # ============================================================
-# 🟣 PDH/PDL ÚLTIMAS 24H
+# 🟣 PDH / PDL
 # ============================================================
 
 def _pdh_pdl(simbolo="BTCUSDT"):
