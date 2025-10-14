@@ -106,3 +106,14 @@ def sesion_ny_activa() -> bool:
     h = now.hour + now.minute / 60
     weekday = now.weekday()
     return weekday < 5 and 7 <= h < 13.5
+
+# ============================================================
+# 🧠 VERIFICACIÓN DE CARGA DE FUNCIONES (DEBUG TESLABTC)
+# ============================================================
+
+if __name__ == "__main__":
+    try:
+        resultado = obtener_precio()
+        print(f"[TESLABTC.KG] 🔍 Prueba de obtener_precio OK → {resultado}")
+    except Exception as e:
+        print(f"[TESLABTC.KG] ❌ Error al probar obtener_precio: {e}")
