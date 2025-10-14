@@ -1,3 +1,7 @@
+# ============================================================
+# 🧠 TESLABTC.KG - Configuración de despliegue para Fly.io
+# ============================================================
+
 app = "teslabtc-api"
 primary_region = "bog"
 
@@ -6,6 +10,10 @@ primary_region = "bog"
 
 [env]
   PORT = "8080"
+  PYTHONUNBUFFERED = "1"
+
+[deploy]
+  release_command = "echo 'Despliegue iniciado correctamente 🚀'"
 
 [[services]]
   internal_port = 8080
@@ -18,3 +26,9 @@ primary_region = "bog"
   [[services.ports]]
     handlers = ["tls", "http"]
     port = 443
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    restart_limit = 0
