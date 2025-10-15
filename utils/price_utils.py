@@ -1,19 +1,101 @@
+# ==============================================
+# 📦 TESLABTC.KG — utils/price_utils.py (v3.6.0)
+# ==============================================
+# 1) Precio actual (Binance Vision REST -> CoinGecko fallback)
+# 2) Klines multi-timeframe usando data mirror oficial
+# 3) Sesión NY
+# 4) PDH/PDL últimas 24h
+# ==============================================
+
+import requests
+from datetime import datetime, timezone, timedelta
+
+BINANCE_STATUS = "⚙️ No conectado"
+TZ_COL = timezone(timedelta(hours=-5))
+
+UA = {"User-Agent": "teslabtc-kg/3.6"}
+
+# Endpoints (data mirror público de Binance)
+BINANCE_VISION_BASE = "https://data-api.binance.vision"
+BINANCE_REST_BASE = "https://api.binance.com"
+
+# ===============================
+# 🔹 FUNCIÓN PRINCIPAL DE PRECIO
+# ===============================
+
+def obtener_precio(simbolo="BTCUSDT"):
+    """
+    Intenta precio desde Binance (REST público) y cae a CoinGecko.
+    No requiere API Keys.
+    """
+    global BINANCE_STATUS
+
+    # Intento 1: Binance REST público
+    try:
+        r = requests.get(
+            f"{BINANCE_REST_BASE}/api/v3/ticker/price",
+            params={"symbol": simbolo},
+            headers=UA, timeout=6
+        )
+        r.raise_for_status()
+        price = float(r.json()["price"])
+        BINANCE_STATUS = "✅ Conectado a Binance REST"
+        return {"precio": price, "fuente": "Binance (REST)"}
+    except Exception as e:
+        BINANCE_STATUS = f"⚠️ Binance REST: {e}"
+
+    # Intento 2: CoinGecko fallback
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": "bitcoin", "vs_currencies": "usd"},
+            headers=UA, timeout=6
+        )
+        r.raise_for_status()
+        data = r.json()
+        if "bitcoin" in data and "usd" in data["bitcoin"]:
+            price = float(data["bitcoin"]["usd"])
+            BINANCE_STATUS = "🦎 CoinGecko (fallback)"
+            return {"precio": price, "fuente": "CoinGecko"}
+    except Exception as e:
+        BINANCE_STATUS = f"⚠️ CoinGecko: {e}"
+
+    BINANCE_STATUS = "⛔ Sin conexión de precio"
+    return {"precio": None, "fuente": "⚙️ No conectado"}
+
+# ===================================
+# 🔹 FUNCIÓN DE SESIÓN NEW YORK
+# ===================================
+
+def sesion_ny_activa():
+    """
+    NY: 07:00–13:30 COL (horario operativo PA Puro)
+    *Si deseas extender a 16:00 COL, cambia el fin a 16:00.
+    """
+    now = datetime.now(TZ_COL)
+    h = now.hour + now.minute / 60
+    return 7 <= h < 13.5  # 13:30
+
+# ===================================
+# 🔹 FUNCIÓN DE VELAS (klines)
+# ===================================
+
 def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
     """
-    Modo híbrido:
-      1️⃣ Intenta Binance Vision
-      2️⃣ Luego Binance REST
-      3️⃣ Si ambos fallan → usa CoinGecko (simula klines con histórico de precios)
+    🔁 Sistema híbrido de klines:
+      1️⃣ Binance Vision
+      2️⃣ Binance REST
+      3️⃣ CoinGecko (fallback)
+    Devuelve lista de klines válidos y actualiza BINANCE_STATUS.
     """
     global BINANCE_STATUS
     urls = [
-        f"{BINANCE_VISION_BASE}/api/v3/klines",
-        f"{BINANCE_REST_BASE}/api/v3/klines",
+        ("Vision", f"{BINANCE_VISION_BASE}/api/v3/klines"),
+        ("REST", f"{BINANCE_REST_BASE}/api/v3/klines"),
     ]
     last_err = None
 
-    # Binance Vision / REST
-    for url in urls:
+    for src, url in urls:
         try:
             r = requests.get(
                 url,
@@ -23,29 +105,28 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
             if r.status_code == 200:
                 data = r.json()
                 if isinstance(data, list) and data:
-                    src = "Vision" if "vision" in url else "REST"
                     BINANCE_STATUS = f"✅ Klines desde Binance {src}"
                     return data
-            last_err = f"HTTP {r.status_code}"
+            last_err = f"HTTP {r.status_code} desde {src}"
         except Exception as e:
-            last_err = str(e)
+            last_err = f"{src}: {type(e).__name__} {e}"
 
-    # Fallback CoinGecko (simula klines)
+    # 🦎 Fallback CoinGecko si Binance falla
     try:
-        cg_interval = "daily" if "h" in intervalo else "hourly"
+        cg_interval = "hourly" if "m" in intervalo or "h" in intervalo else "daily"
         r = requests.get(
-            f"https://api.coingecko.com/api/v3/coins/bitcoin/market_chart",
+            "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart",
             params={"vs_currency": "usd", "days": 7, "interval": cg_interval},
             headers=UA, timeout=10,
         )
         r.raise_for_status()
-        data = r.json().get("prices", [])
-        if data:
-            BINANCE_STATUS = "🦎 Fallback CoinGecko (modo estimado)"
+        prices = r.json().get("prices", [])
+        if prices:
+            BINANCE_STATUS = "🦎 Fallback CoinGecko (simulación de velas)"
             klines = []
-            for ts, price in data[-limite:]:
-                open_ = close_ = high_ = low_ = price
-                k = [ts, open_, high_, low_, close_, 0, ts, 0, 0, 0, 0, 0]
+            for ts, price in prices[-limite:]:
+                o = h = l = c = price
+                k = [ts, o, h, l, c, 0, ts, 0, 0, 0, 0, 0]
                 klines.append(k)
             return klines
     except Exception as e:
@@ -53,3 +134,20 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
 
     BINANCE_STATUS = f"⛔ Sin datos válidos ({last_err})"
     return []
+
+
+# ===================================
+# 🔹 FUNCIÓN PDH / PDL 24h
+# ===================================
+
+def _pdh_pdl(simbolo="BTCUSDT"):
+    """
+    Máximo y mínimo de últimas 24h usando klines 1h x 24.
+    """
+    try:
+        klines = obtener_klines_binance(simbolo, "1h", 24)
+        highs = [float(k[2]) for k in klines] if klines else []
+        lows  = [float(k[3]) for k in klines] if klines else []
+        return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
+    except Exception:
+        return {"PDH": None, "PDL": None}
