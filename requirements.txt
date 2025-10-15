@@ -1,52 +1,40 @@
-# ================================
-# TESLABTC.KG — Requisitos base
-# ================================
+fastapi==0.119.0
+uvicorn==0.37.0
+starlette==0.48.0
 
-# Servidor FastAPI
-fastapi==0.115.0
-uvicorn==0.30.6
-starlette==0.37.2
-
-# Cliente HTTP y asincronía
-httpx==0.27.0
 requests==2.32.3
-aiohttp==3.9.5
-asyncio==3.4.3
-aiosignal==1.3.1
+aiohttp==3.13.0
+ujson==5.11.0
 
-# Binance Vision (cliente oficial seguro)
-python-binance==1.0.19
+pydantic==2.12.2
+pydantic-core==2.41.4
+typing-extensions==4.15.0
+typing-inspection==0.4.2
 
-# Respaldo de datos y precios (CoinGecko)
-pycoingecko==3.2.0
+anyio==4.11.0
+sniffio==1.3.1
+click==8.3.0
 
-# Parsing de fechas y zonas horarias
+python-dateutil==2.9.0.post0
 pytz==2025.2
 dateparser==1.2.2
-python-dateutil==2.9.0.post0
-tzlocal==5.3
+regex==2025.9.18
+tzlocal==5.3.1
 
-# Compresión y rendimiento
-ujson==5.10.0
-propcache==0.4.1
-aiohappyeyeballs==2.6.1
-
-# Criptografía (para Binance API)
+python-binance==1.0.19
 pycryptodome==3.23.0
 
-# Tipado y validación
-pydantic==2.9.2
-pydantic-core==2.23.4
-typing-extensions==4.12.2
+websockets==15.0.1
+aiohappyeyeballs==2.6.1
+aiosignal==1.4.0
+frozenlist==1.8.0
+attrs==25.4.0
+multidict==6.7.0
+propcache==0.4.1
+yarl==1.22.0
 
-# Regex, compatibilidad y utilidades
-regex==2025.9.18
-six==1.17.0
-attrs==25.1.0
 certifi==2025.10.5
-charset_normalizer==3.4.0
-idna==3.10
-urllib3==2.3.0
-
-# Compresión GZIP en FastAPI
-brotli==1.1.0
+charset_normalizer==3.4.4
+idna==3.11
+urllib3==2.5.0
+six==1.17.0
