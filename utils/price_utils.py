@@ -112,9 +112,20 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
                 )
                 if r.status_code == 200:
                     data = r.json()
-                    if isinstance(data, list) and data:
-                        BINANCE_STATUS = f"✅ Klines desde {src}"
-                        return data
+                   if isinstance(data, list) and data:
+    BINANCE_STATUS = f"✅ Klines desde {src}"
+    klines = []
+    for k in data:
+        klines.append({
+            "open_time": k[0],
+            "open": float(k[1]),
+            "high": float(k[2]),
+            "low": float(k[3]),
+            "close": float(k[4]),
+            "volume": float(k[5])
+        })
+    return klines
+
                 elif r.status_code in (403, 429, 451):
                     time.sleep(2)
                     continue
