@@ -1,7 +1,8 @@
 # ============================================================
-# 🧭 TESLABTC.KG — utils/estructura_utils.py (v3.6.0)
+# 🧭 TESLABTC.KG — utils/estructura_utils.py (v3.6.1)
 # ============================================================
-# Lee velas Binance (lista klines) y devuelve:
+# Compatible con klines en formato dict o lista.
+# Lee velas Binance / CoinGecko y devuelve:
 #  - estado: alcista / bajista / rango / sin_datos
 #  - high / low de zona operativa (swing recent)
 #  - Mensajes de escenario (conservador / scalping / rango)
@@ -10,7 +11,14 @@
 from statistics import mean
 
 def _closes(klines):
+    """
+    Extrae cierres de cualquier formato (lista o dict).
+    """
     try:
+        if not klines:
+            return []
+        if isinstance(klines[0], dict):
+            return [float(k["close"]) for k in klines]
         return [float(k[4]) for k in klines]
     except Exception:
         return []
@@ -18,19 +26,31 @@ def _closes(klines):
 def _swing_zone(klines, lookback=30):
     """
     Calcula zona operativa simple: max/min de los últimos 'lookback' candles.
+    Acepta klines dict o lista.
     """
     if not klines:
         return None, None
+
     data = klines[-lookback:] if len(klines) >= lookback else klines
-    highs = [float(k[2]) for k in data]
-    lows  = [float(k[3]) for k in data]
+
+    try:
+        if isinstance(data[0], dict):
+            highs = [float(k["high"]) for k in data]
+            lows = [float(k["low"]) for k in data]
+        else:
+            highs = [float(k[2]) for k in data]
+            lows = [float(k[3]) for k in data]
+    except Exception:
+        return None, None
+
     return (max(highs) if highs else None, min(lows) if lows else None)
+
 
 def evaluar_estructura(klines):
     """
-    Heurística robusta:
+    Heurística robusta y compatible con formato dict o lista.
       - si no hay 25+ velas → sin_datos
-      - calcula MA(10) vs MA(30) y cierre relativo para decidir alcista/bajista
+      - calcula MA(10) vs MA(30) y cierre relativo
       - si el rango es estrecho → rango
     """
     if not klines or len(klines) < 25:
@@ -42,8 +62,8 @@ def evaluar_estructura(klines):
 
     ma_fast = mean(closes[-10:])
     ma_slow = mean(closes[-30:]) if len(closes) >= 30 else mean(closes[:-5] or closes)
-
     last = closes[-1]
+
     hi, lo = _swing_zone(klines, 40)
 
     # Rango si el ancho relativo es muy pequeño
@@ -62,6 +82,7 @@ def evaluar_estructura(klines):
         estado = "sin_datos"
 
     return {"estado": estado, "high": hi, "low": lo}
+
 
 def definir_escenarios(estados):
     """
