@@ -18,33 +18,41 @@ from utils.price_utils import (
 from utils.estructura_utils import evaluar_estructura, definir_escenarios
 from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
 
+# ============================================================
+# ⚙️ CONFIGURACIÓN GENERAL
+# ============================================================
+
 app = FastAPI(
     title="TESLABTC.KG",
-    description="Análisis operativo BTCUSDT (Price Action Puro)",
+    description="Análisis operativo BTCUSDT (Price Action Puro) — estructura, flujo y escenarios.",
     version="3.6.0",
 )
 
-# Comprime respuestas para evitar cortes por tamaño en Render
+# Comprime respuestas grandes para evitar errores en Render
 app.add_middleware(GZipMiddleware, minimum_size=600)
 
 TZ_COL = timezone(timedelta(hours=-5))
 
-# ============================
-# ENDPOINT PRINCIPAL: /analyze
-# ============================
+# ============================================================
+# 🔍 ENDPOINT PRINCIPAL — /analyze
+# ============================================================
 
 @app.get("/analyze", tags=["Análisis"])
 async def analizar(simbolo: str = "BTCUSDT"):
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
 
-    # 1) Precio
+    # 1️⃣ PRECIO ACTUAL
     precio_data = obtener_precio(simbolo)
-    precio = precio_data.get("precio"); fuente = precio_data.get("fuente")
+    precio = precio_data.get("precio")
+    fuente = precio_data.get("fuente")
 
-    # 2) Sesión
+    # Fallback visual si no hay precio válido
+    precio_str = f"{precio:,.2f} USD" if precio not in [None, 0] else "⚙️ No disponible"
+
+    # 2️⃣ SESIÓN DE NUEVA YORK
     sesion = "✅ Activa (Sesión New York)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
-    # 3) Estructura (H4/H1/M15)
+    # 3️⃣ ESTRUCTURA (H4 / H1 / M15)
     h4 = obtener_klines_binance(simbolo, "4h", 100)
     h1 = obtener_klines_binance(simbolo, "1h", 100)
     m15 = obtener_klines_binance(simbolo, "15m", 100)
@@ -59,51 +67,55 @@ async def analizar(simbolo: str = "BTCUSDT"):
         "M15 (reacción)": e_m15
     }
     estructura_estados = {
-        "H4 (macro)": e_h4["estado"],
-        "H1 (intradía)": e_h1["estado"],
-        "M15 (reacción)": e_m15["estado"]
+        "H4 (macro)": e_h4.get("estado", "sin_datos"),
+        "H1 (intradía)": e_h1.get("estado", "sin_datos"),
+        "M15 (reacción)": e_m15.get("estado", "sin_datos")
     }
 
-    # 4) Zonas PDH/PDL (24h)
+    # 4️⃣ ZONAS PDH/PDL
     zonas = _pdh_pdl(simbolo)
 
-    # 5) Escenario
+    # 5️⃣ ESCENARIO OPERATIVO
     escenario = definir_escenarios(estructura_estados)
 
+    # ==========================
+    # 🔹 RESPUESTA PRINCIPAL
+    # ==========================
     payload = {
         "🧠 TESLABTC.KG": {
             "fecha": fecha,
             "sesión": sesion,
-            "precio_actual": f"{precio:,.2f} USD" if precio else "⚙️ No disponible",
+            "precio_actual": precio_str,
             "fuente_precio": fuente,
-            "estructura_detectada": estructura_detallada,   # incluye estado + high/low
-            "zonas": zonas,                                  # PDH/PDL
+            "estructura_detectada": estructura_detallada,
+            "zonas": zonas,
             "escenario": escenario,
             "conexion_binance": BINANCE_STATUS,
             "mensaje": "✨ Análisis completado correctamente"
         }
     }
 
-    # Resumen compacto si el JSON fuera grande (backup al GZIP)
+    # Compactar si el JSON es muy grande
     encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    if len(encoded) > 1_000_000:
+    if len(encoded) > 900_000:
         payload = {
             "🧠 TESLABTC.KG (resumen)": {
                 "fecha": fecha,
                 "sesión": sesion,
-                "precio_actual": f"{precio:,.2f} USD" if precio else "⚙️ No disponible",
+                "precio_actual": precio_str,
                 "estructura": estructura_estados,
                 "zonas": zonas,
                 "escenario": escenario,
                 "conexion_binance": BINANCE_STATUS,
-                "nota": "Respuesta reducida automáticamente."
+                "nota": "Respuesta resumida automáticamente (GZIP activo)."
             }
         }
+
     return payload
 
-# ============================
-# MONITOR EN VIVO
-# ============================
+# ============================================================
+# 📡 MONITOR EN VIVO
+# ============================================================
 
 @app.on_event("startup")
 async def startup_event():
@@ -122,15 +134,15 @@ async def monitor_stop():
     stop_monitor()
     return {"estado": "🔴 Monitor detenido"}
 
-# ============================
-# HOME
-# ============================
+# ============================================================
+# 🏠 HOME — Estado general
+# ============================================================
 
 @app.get("/", tags=["Estado"])
 async def home():
     return {
         "status": "✅ Servicio operativo",
-        "descripcion": "TESLABTC.KG conectado a Binance. GZIP activo. Monitor en background.",
+        "descripcion": "TESLABTC.KG conectado a Binance o CoinGecko. Monitor activo en background.",
         "version": "3.6.0",
         "autor": "GoldTraderBTC"
     }
