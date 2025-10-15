@@ -1,103 +1,111 @@
 # ============================================================
-# 🧠 ESTRUCTURA Y ESCENARIOS – TESLABTC.KG (v3.6.0)
+# 🧭 TESLABTC.KG — utils/estructura_utils.py (v3.6.0)
+# ============================================================
+# Lee velas Binance (lista klines) y devuelve:
+#  - estado: alcista / bajista / rango / sin_datos
+#  - high / low de zona operativa (swing recent)
+#  - Mensajes de escenario (conservador / scalping / rango)
 # ============================================================
 
-def evaluar_estructura(velas: list[dict]) -> dict:
+from statistics import mean
+
+def _closes(klines):
+    try:
+        return [float(k[4]) for k in klines]
+    except Exception:
+        return []
+
+def _swing_zone(klines, lookback=30):
     """
-    Devuelve:
-      {
-        "estado": "alcista" | "bajista" | "rango" | "sin_datos",
-        "high": float | None,
-        "low": float | None
-      }
-    Regla simple y robusta basada en HH/LL recientes (20 velas).
+    Calcula zona operativa simple: max/min de los últimos 'lookback' candles.
     """
-    if not velas or len(velas) < 10:
+    if not klines:
+        return None, None
+    data = klines[-lookback:] if len(klines) >= lookback else klines
+    highs = [float(k[2]) for k in data]
+    lows  = [float(k[3]) for k in data]
+    return (max(highs) if highs else None, min(lows) if lows else None)
+
+def evaluar_estructura(klines):
+    """
+    Heurística robusta:
+      - si no hay 25+ velas → sin_datos
+      - calcula MA(10) vs MA(30) y cierre relativo para decidir alcista/bajista
+      - si el rango es estrecho → rango
+    """
+    if not klines or len(klines) < 25:
         return {"estado": "sin_datos", "high": None, "low": None}
 
-    highs = [v["high"] for v in velas[-20:]]
-    lows =  [v["low"]  for v in velas[-20:]]
-    last_close = velas[-1]["close"]
+    closes = _closes(klines)
+    if len(closes) < 25:
+        return {"estado": "sin_datos", "high": None, "low": None}
 
-    maximo = max(highs) if highs else None
-    minimo = min(lows) if lows else None
+    ma_fast = mean(closes[-10:])
+    ma_slow = mean(closes[-30:]) if len(closes) >= 30 else mean(closes[:-5] or closes)
 
-    # Ruptura de rango reciente como proxy de BOS
-    up_break = last_close > highs[-1]
-    dn_break = last_close < lows[-1]
+    last = closes[-1]
+    hi, lo = _swing_zone(klines, 40)
 
-    if up_break:
-        estado = "alcista"
-    elif dn_break:
-        estado = "bajista"
+    # Rango si el ancho relativo es muy pequeño
+    if hi and lo and hi > lo:
+        width_pct = (hi - lo) / ((hi + lo) / 2)
+        if width_pct < 0.005:  # <0.5%
+            estado = "rango"
+        else:
+            if ma_fast > ma_slow and last > ma_slow:
+                estado = "alcista"
+            elif ma_fast < ma_slow and last < ma_slow:
+                estado = "bajista"
+            else:
+                estado = "rango"
     else:
-        estado = "rango"
+        estado = "sin_datos"
 
-    return {
-        "estado": estado,
-        "high": round(maximo, 2) if maximo is not None else None,
-        "low": round(minimo, 2) if minimo is not None else None
-    }
+    return {"estado": estado, "high": hi, "low": lo}
 
-# ============================================================
-# 📈 DEFINIR ESCENARIOS TESLABTC A.P.
-# ============================================================
-
-def definir_escenarios(estructura_estados: dict) -> dict:
+def definir_escenarios(estados):
     """
-    estructura_estados = {
-      "H4 (macro)": "alcista|bajista|rango|sin_datos",
-      "H1 (intradía)": "...",
-      "M15 (reacción)": "..."
-    }
+    estados = {"H4": "alcista|bajista|rango|sin_datos", "H1": ..., "M15": ...}
+    Devuelve bloque de escenario textual coherente con PA Puro.
     """
-    h4 = estructura_estados.get("H4 (macro)", "sin_datos")
-    h1 = estructura_estados.get("H1 (intradía)", "sin_datos")
-    m15 = estructura_estados.get("M15 (reacción)", "sin_datos")
+    h4 = estados.get("H4", "sin_datos")
+    h1 = estados.get("H1", "sin_datos")
+    m15 = estados.get("M15", "sin_datos")
 
-    # CONSERVADOR 1 — alineación macro + intradía
+    # Conservador (dirección institucional)
     if h4 == "alcista" and h1 == "alcista":
         return {
-            "escenario": "CONSERVADOR 1",
-            "nivel": "Institucional (direccional principal)",
-            "acción": "Buscar long: BOS M5 dentro de POI M15 a favor de H1.",
-            "gestión": "Objetivo ≥ 1:3 | BE 1:1 | 50% en 1:2.",
-            "mensaje": "📈 Flujo alcista alineado."
+            "escenario": "CONSERVADOR (BUY A+)",
+            "nivel": "Direccional principal",
+            "acción": "Esperar retroceso a zona H1/M15 y gatillo BOS M5 para ejecución.",
+            "gestión": "SL en invalidación; TP piscinas de liquidez (RRR ≥ 1:3).",
+            "mensaje": "Estructura macro e intradía alineadas al alza."
         }
     if h4 == "bajista" and h1 == "bajista":
         return {
-            "escenario": "CONSERVADOR 1",
-            "nivel": "Institucional (direccional principal)",
-            "acción": "Buscar short: BOS M5 dentro de POI M15 a favor de H1.",
-            "gestión": "Objetivo ≥ 1:3 | BE 1:1 | 50% en 1:2.",
-            "mensaje": "📉 Flujo bajista alineado."
+            "escenario": "CONSERVADOR (SELL A+)",
+            "nivel": "Direccional principal",
+            "acción": "Esperar retroceso a zona H1/M15 y gatillo BOS M5 para ejecución.",
+            "gestión": "SL en invalidación; TP piscinas de liquidez (RRR ≥ 1:3).",
+            "mensaje": "Estructura macro e intradía alineadas a la baja."
         }
 
-    # SCALPING — contra H1 pero con M15
-    if (h1 == "alcista" and m15 == "bajista") or (h1 == "bajista" and m15 == "alcista"):
+    # Scalping contra tendencia
+    if (h1 in ("alcista", "bajista")) and h4 != h1:
+        sentido = "BUY (contra macro)" if h1 == "alcista" else "SELL (contra macro)"
         return {
-            "escenario": "SCALPING (contra-tendencia)",
-            "nivel": "Agresivo",
-            "acción": "Operar retroceso M15 con confirmación BOS M5–M3.",
-            "gestión": "Objetivo 1:1 o 1:2. Riesgo reducido.",
-            "mensaje": "⚡ Solo si dominas la gestión de riesgo."
+            "escenario": f"SCALPING {sentido}",
+            "nivel": "Agresivo / riesgo controlado",
+            "acción": "Solo si hay reacción clara M15 y micro-BOS M5 dentro de la zona.",
+            "gestión": "Objetivo corto (1:1 – 1:2). Reducir tamaño y confirmar.",
+            "mensaje": "Operación contra la macro; prioridad siempre a la dirección H4."
         }
 
-    # CONSERVADOR 2 — reentrada (H1 en rango con H4 direccional)
-    if (h4 in ("alcista", "bajista")) and (h1 == "rango"):
-        return {
-            "escenario": "CONSERVADOR 2 (reentrada)",
-            "nivel": "Institucional",
-            "acción": "Esperar CHOCH/BOS M15 a favor de H4. Reentrar tras mitigación.",
-            "gestión": "SL cubriendo ambas zonas si hay liquidez extendida.",
-            "mensaje": "🟡 Posible continuación tras consolidar."
-        }
-
-    # Sin confirmación clara
+    # Rango / sin confirmación
     return {
         "escenario": "SIN CONFIRMACIÓN",
-        "nivel": "Neutro / observación",
-        "acción": "Esperar ruptura limpia en H1/M15 antes de ejecutar.",
+        "nivel": "Neutro / Observación",
+        "acción": "Esperar ruptura limpia (BOS/CHOCH) en H1/M15 antes de ejecutar.",
         "gestión": "Evitar operar sin gatillo validado.",
-        "mensaje": "⏸️ Estructuras no alineadas o datos insuficientes."
+        "mensaje": "Estructuras no alineadas o datos insuficientes."
     }
