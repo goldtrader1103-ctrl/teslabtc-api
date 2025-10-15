@@ -27,7 +27,7 @@ app = FastAPI(
     version="3.6.0",
 )
 
-# Compresión GZIP para evitar errores de respuesta grande
+# Compresión GZIP para evitar errores por respuestas grandes
 app.add_middleware(GZipMiddleware, minimum_size=600)
 
 TZ_COL = timezone(timedelta(hours=-5))
@@ -40,16 +40,21 @@ TZ_COL = timezone(timedelta(hours=-5))
 async def analizar(simbolo: str = "BTCUSDT"):
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
 
+    # Precio actual
     precio_data = obtener_precio(simbolo)
     precio = precio_data.get("precio")
     fuente = precio_data.get("fuente")
+    precio_str = f"{precio:,.2f} USD" if precio not in [None, 0] else "⚙️ No disponible"
 
+    # Sesión
     sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
+    # Velas
     h4 = obtener_klines_binance(simbolo, "4h", 120)
     h1 = obtener_klines_binance(simbolo, "1h", 120)
     m15 = obtener_klines_binance(simbolo, "15m", 120)
 
+    # Estructura (estado + zonas high/low)
     e_h4 = evaluar_estructura(h4)
     e_h1 = evaluar_estructura(h1)
     e_m15 = evaluar_estructura(m15)
@@ -60,18 +65,21 @@ async def analizar(simbolo: str = "BTCUSDT"):
         "M15 (reacción)": e_m15
     }
 
+    # Zonas PDH/PDL (24h)
     zonas = _pdh_pdl(simbolo)
+
+    # Escenario operativo (conservador / scalping / rango)
     escenario = definir_escenarios({
-        "H4": e_h4.get("estado"),
-        "H1": e_h1.get("estado"),
-        "M15": e_m15.get("estado")
+        "H4": e_h4.get("estado", "sin_datos"),
+        "H1": e_h1.get("estado", "sin_datos"),
+        "M15": e_m15.get("estado", "sin_datos"),
     })
 
     return {
         "🧠 TESLABTC.KG": {
             "fecha": fecha,
             "sesión": sesion,
-            "precio_actual": f"{precio:,.2f} USD" if precio else "⚙️ No disponible",
+            "precio_actual": precio_str,
             "fuente_precio": fuente,
             "estructura_detectada": estructura,
             "zonas": zonas,
@@ -110,7 +118,7 @@ async def monitor_stop():
 async def home():
     return {
         "status": "✅ Servicio operativo",
-        "descripcion": "TESLABTC.KG conectado a Binance Vision y CoinGecko (fallback).",
+        "descripcion": "TESLABTC.KG conectado a Binance (data mirror) y CoinGecko (fallback).",
         "version": "3.6.0",
         "autor": "GoldTraderBTC"
     }
