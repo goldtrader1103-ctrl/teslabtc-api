@@ -1,33 +1,58 @@
-# utils/estructura_multi_tf.py
-from utils.price_utils import get_klines
+# ============================================================
+# 🧠 TESLABTC.KG — utils/estructura_multi_tf.py (v3.6.0)
+# ============================================================
+# 1) Lee velas reales desde price_utils (Binance / CoinGecko)
+# 2) Calcula estructura por timeframe (H4, H1, M15)
+# 3) Devuelve precios high/low/close recientes
+# ============================================================
 
-def estructura_desde_klines(data):
+from utils.price_utils import obtener_klines_binance
+
+# ============================================================
+# 🔹 PROCESADOR DE ESTRUCTURA SIMPLE
+# ============================================================
+
+def _procesar_estructura(data: list):
     """
-    Procesa las velas y devuelve los precios relevantes (High, Low, Close actuales).
+    Procesa lista de velas [{open, high, low, close}] y devuelve
+    los niveles principales de la estructura reciente.
     """
-    if not data:
+    if not data or len(data) < 5:
         return {"estado": "sin_datos", "high": None, "low": None, "close": None}
 
-    last = data[-1]
-    high = max(v["high"] for v in data[-20:])  # últimos 20
-    low = min(v["low"] for v in data[-20:])
-    return {
-        "estado": "ok",
-        "high": round(high, 2),
-        "low": round(low, 2),
-        "close": round(last["close"], 2)
+    try:
+        highs = [float(k["high"]) for k in data[-20:]]
+        lows = [float(k["low"]) for k in data[-20:]]
+        last_close = float(data[-1]["close"])
+
+        return {
+            "estado": "ok",
+            "high": round(max(highs), 2),
+            "low": round(min(lows), 2),
+            "close": round(last_close, 2)
+        }
+    except Exception as e:
+        return {"estado": f"error: {e}", "high": None, "low": None, "close": None}
+
+
+# ============================================================
+# 🔹 ANÁLISIS MULTITEMPORAL
+# ============================================================
+
+def analizar_estructura_multi_tf(simbolo="BTCUSDT"):
+    """
+    Analiza la estructura multitemporal del símbolo dado:
+    H4 (macro), H1 (intradía), M15 (reacción).
+    """
+    # Obtener velas desde Binance o fallback
+    h4 = obtener_klines_binance(simbolo, "4h", 120)
+    h1 = obtener_klines_binance(simbolo, "1h", 120)
+    m15 = obtener_klines_binance(simbolo, "15m", 120)
+
+    estructura = {
+        "H4 (macro)": _procesar_estructura(h4),
+        "H1 (intradía)": _procesar_estructura(h1),
+        "M15 (reacción)": _procesar_estructura(m15)
     }
 
-def analizar_estructura(symbol="BTCUSDT"):
-    """
-    Analiza estructura multitemporal (H4, H1, M15)
-    """
-    data_h4 = get_klines(symbol, "4h", 200)
-    data_h1 = get_klines(symbol, "1h", 200)
-    data_m15 = get_klines(symbol, "15m", 200)
-
-    return {
-        "H4 (macro)": estructura_desde_klines(data_h4),
-        "H1 (intradía)": estructura_desde_klines(data_h1),
-        "M15 (reacción)": estructura_desde_klines(data_m15)
-    }
+    return estructura
