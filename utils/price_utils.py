@@ -1,27 +1,27 @@
 # ==============================================
-# 📦 TESLABTC.KG — utils/price_utils.py (v3.6.0)
+# 📦 TESLABTC.KG — utils/price_utils.py (v3.6.2)
 # ==============================================
-# 1) Precio actual (Binance Vision REST -> CoinGecko fallback)
-# 2) Klines multi-timeframe usando data mirror oficial
+# 1) Precio actual (Binance REST -> CoinGecko fallback)
+# 2) Klines multi-timeframe (Binance Global -> Binance Vision -> CoinGecko)
 # 3) Sesión NY
 # 4) PDH/PDL últimas 24h
 # ==============================================
 
 import requests
+import time
 from datetime import datetime, timezone, timedelta
 
 BINANCE_STATUS = "⚙️ No conectado"
 TZ_COL = timezone(timedelta(hours=-5))
-
 UA = {"User-Agent": "teslabtc-kg/3.6"}
 
-# Endpoints (data mirror público de Binance)
-BINANCE_VISION_BASE = "https://data-api.binance.vision"
+# Endpoints base
 BINANCE_REST_BASE = "https://api.binance.com"
+BINANCE_VISION_BASE = "https://data-api.binance.vision"
 
-# ===============================
+# ==============================================
 # 🔹 FUNCIÓN PRINCIPAL DE PRECIO
-# ===============================
+# ==============================================
 
 def obtener_precio(simbolo="BTCUSDT"):
     """
@@ -63,9 +63,9 @@ def obtener_precio(simbolo="BTCUSDT"):
     BINANCE_STATUS = "⛔ Sin conexión de precio"
     return {"precio": None, "fuente": "⚙️ No conectado"}
 
-# ===================================
-# 🔹 FUNCIÓN DE SESIÓN NEW YORK
-# ===================================
+# ==============================================
+# 🔹 SESIÓN NEW YORK
+# ==============================================
 
 def sesion_ny_activa():
     """
@@ -76,19 +76,20 @@ def sesion_ny_activa():
     h = now.hour + now.minute / 60
     return 7 <= h < 13.5  # 13:30
 
-# ===================================
-# 🔹 FUNCIÓN DE VELAS (klines)
-# ===================================
+# ==============================================
+# 🔹 FUNCIÓN DE VELAS (KLINES)
+# ==============================================
 
 def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
     """
-    🔁 Sistema híbrido de klines:
-      1️⃣ Binance Global (api.binance.com)
-      2️⃣ Binance Vision (data-api.binance.vision)
+    🔁 Sistema híbrido:
+      1️⃣ Binance Global
+      2️⃣ Binance Vision (si Global bloquea)
       3️⃣ CoinGecko (fallback)
-    Devuelve lista de klines válidos y actualiza BINANCE_STATUS.
+    Devuelve lista de velas en formato dict y actualiza BINANCE_STATUS.
     """
     global BINANCE_STATUS
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
@@ -96,9 +97,10 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
     }
 
     urls = [
-        ("Binance Global", f"https://api.binance.com/api/v3/klines"),
-        ("Binance Vision", f"https://data-api.binance.vision/api/v3/klines"),
+        ("Binance Global", f"{BINANCE_REST_BASE}/api/v3/klines"),
+        ("Binance Vision", f"{BINANCE_VISION_BASE}/api/v3/klines"),
     ]
+
     last_err = None
 
     for src, url in urls:
@@ -110,32 +112,43 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
                     headers=headers,
                     timeout=10,
                 )
+
                 if r.status_code == 200:
                     data = r.json()
-                   if isinstance(data, list) and data:
-    BINANCE_STATUS = f"✅ Klines desde {src}"
-    klines = []
-    for k in data:
-        klines.append({
-            "open_time": k[0],
-            "open": float(k[1]),
-            "high": float(k[2]),
-            "low": float(k[3]),
-            "close": float(k[4]),
-            "volume": float(k[5])
-        })
-    return klines
+                    if isinstance(data, list) and data:
+                        BINANCE_STATUS = f"✅ Klines desde {src}"
+                        klines = []
+                        for k in data:
+                            klines.append({
+                                "open_time": k[0],
+                                "open": float(k[1]),
+                                "high": float(k[2]),
+                                "low": float(k[3]),
+                                "close": float(k[4]),
+                                "volume": float(k[5])
+                            })
+                        return klines
 
-                elif r.status_code in (403, 429, 451):
+                elif r.status_code == 451:
+                    print(f"⚠️ {src} bloqueado ({r.status_code}), probando mirror Vision...")
+                    # salta al siguiente URL del ciclo
+                    break
+
+                elif r.status_code in (403, 429):
+                    print(f"⚠️ Límite o bloqueo temporal ({r.status_code}) desde {src}, reintentando...")
                     time.sleep(2)
                     continue
+
                 else:
                     last_err = f"HTTP {r.status_code} desde {src}"
                     break
+
         except Exception as e:
             last_err = f"{src}: {type(e).__name__} {e}"
 
+    # ==========================================
     # 🦎 Fallback CoinGecko si Binance falla
+    # ==========================================
     try:
         cg_interval = "hourly" if "m" in intervalo or "h" in intervalo else "daily"
         r = requests.get(
@@ -150,28 +163,36 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
             BINANCE_STATUS = "🦎 Fallback CoinGecko (simulación de velas)"
             klines = []
             for ts, price in prices[-limite:]:
-                o = h = l = c = price
-                k = [ts, o, h, l, c, 0, ts, 0, 0, 0, 0, 0]
+                k = {
+                    "open_time": ts,
+                    "open": float(price),
+                    "high": float(price),
+                    "low": float(price),
+                    "close": float(price),
+                    "volume": 0.0
+                }
                 klines.append(k)
             return klines
     except Exception as e:
         last_err = f"CoinGecko: {e}"
 
     BINANCE_STATUS = f"⛔ Sin datos válidos ({last_err})"
+    print(BINANCE_STATUS)
     return []
 
-# ===================================
-# 🔹 FUNCIÓN PDH / PDL 24h
-# ===================================
+# ==============================================
+# 🔹 FUNCIÓN PDH / PDL (ÚLTIMAS 24H)
+# ==============================================
 
 def _pdh_pdl(simbolo="BTCUSDT"):
     """
-    Máximo y mínimo de últimas 24h usando klines 1h x 24.
+    Máximo y mínimo de las últimas 24h usando velas 1h.
     """
     try:
         klines = obtener_klines_binance(simbolo, "1h", 24)
-        highs = [float(k[2]) for k in klines] if klines else []
-        lows  = [float(k[3]) for k in klines] if klines else []
+        highs = [float(k["high"]) for k in klines] if klines else []
+        lows  = [float(k["low"]) for k in klines] if klines else []
         return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Error PDH/PDL: {e}")
         return {"PDH": None, "PDL": None}
