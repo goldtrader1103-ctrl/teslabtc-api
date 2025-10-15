@@ -1,11 +1,22 @@
+# ============================================================
+# 🚀 TESLABTC.KG — Fly.io Config v3.6.3
+# Author: Katherinne Galvis
+# Despliegue: Fly.io (Región GRU - São Paulo)
+# ============================================================
+
 app = "teslabtc-api"
-primary_region = "bog"
+primary_region = "gru"
+
+kill_signal = "SIGINT"
+kill_timeout = 5
+processes = []
 
 [build]
   dockerfile = "Dockerfile"
 
 [env]
   PORT = "8080"
+  TZ = "America/Bogota"
   PYTHONUNBUFFERED = "1"
 
 [[services]]
@@ -19,3 +30,14 @@ primary_region = "bog"
   [[services.ports]]
     handlers = ["tls", "http"]
     port = 443
+
+  [services.concurrency]
+    type = "requests"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    restart_limit = 3
