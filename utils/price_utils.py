@@ -83,31 +83,44 @@ def sesion_ny_activa():
 def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
     """
     🔁 Sistema híbrido de klines:
-      1️⃣ Binance Vision
-      2️⃣ Binance REST
+      1️⃣ Binance Global (api.binance.com)
+      2️⃣ Binance Vision (data-api.binance.vision)
       3️⃣ CoinGecko (fallback)
     Devuelve lista de klines válidos y actualiza BINANCE_STATUS.
     """
     global BINANCE_STATUS
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "Connection": "keep-alive",
+    }
+
     urls = [
-        ("Vision", f"{BINANCE_VISION_BASE}/api/v3/klines"),
-        ("REST", f"{BINANCE_REST_BASE}/api/v3/klines"),
+        ("Binance Global", f"https://api.binance.com/api/v3/klines"),
+        ("Binance Vision", f"https://data-api.binance.vision/api/v3/klines"),
     ]
     last_err = None
 
     for src, url in urls:
         try:
-            r = requests.get(
-                url,
-                params={"symbol": simbolo, "interval": intervalo, "limit": limite},
-                headers=UA, timeout=10,
-            )
-            if r.status_code == 200:
-                data = r.json()
-                if isinstance(data, list) and data:
-                    BINANCE_STATUS = f"✅ Klines desde Binance {src}"
-                    return data
-            last_err = f"HTTP {r.status_code} desde {src}"
+            for intento in range(3):
+                r = requests.get(
+                    url,
+                    params={"symbol": simbolo, "interval": intervalo, "limit": limite},
+                    headers=headers,
+                    timeout=10,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    if isinstance(data, list) and data:
+                        BINANCE_STATUS = f"✅ Klines desde {src}"
+                        return data
+                elif r.status_code in (403, 429, 451):
+                    time.sleep(2)
+                    continue
+                else:
+                    last_err = f"HTTP {r.status_code} desde {src}"
+                    break
         except Exception as e:
             last_err = f"{src}: {type(e).__name__} {e}"
 
@@ -117,7 +130,8 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
         r = requests.get(
             "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart",
             params={"vs_currency": "usd", "days": 7, "interval": cg_interval},
-            headers=UA, timeout=10,
+            headers=headers,
+            timeout=10,
         )
         r.raise_for_status()
         prices = r.json().get("prices", [])
@@ -134,7 +148,6 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
 
     BINANCE_STATUS = f"⛔ Sin datos válidos ({last_err})"
     return []
-
 
 # ===================================
 # 🔹 FUNCIÓN PDH / PDL 24h
