@@ -1,58 +1,66 @@
+# ==============================================
+# 📦 TESLABTC.KG — utils/price_utils.py (v3.6.0)
+# ==============================================
+# 1) Precio actual (Binance Vision REST -> CoinGecko fallback)
+# 2) Klines multi-timeframe usando data mirror oficial
+# 3) Sesión NY
+# 4) PDH/PDL últimas 24h
+# ==============================================
+
 import requests
 from datetime import datetime, timezone, timedelta
 
-# ==============================================
-# 📦 TESLABTC.KG — price_utils.py (v3.6.0 PRO)
-# ==============================================
-# Módulo encargado de:
-# 1️⃣ Obtener el precio actual de BTCUSDT.
-# 2️⃣ Consultar velas (klines) para H4, H1, M15.
-# 3️⃣ Verificar sesión de Nueva York.
-# 4️⃣ Calcular PDH/PDL de las últimas 24h.
-# ==============================================
-
 BINANCE_STATUS = "⚙️ No conectado"
 TZ_COL = timezone(timedelta(hours=-5))
+
+UA = {"User-Agent": "teslabtc-kg/3.6"}
+
+# Endpoints (data mirror público de Binance)
+BINANCE_VISION_BASE = "https://data-api.binance.vision"
+BINANCE_REST_BASE = "https://api.binance.com"
 
 # ===============================
 # 🔹 FUNCIÓN PRINCIPAL DE PRECIO
 # ===============================
 
 def obtener_precio(simbolo="BTCUSDT"):
-    """Obtiene el precio actual del símbolo desde Binance o CoinGecko (fallback)."""
+    """
+    Intenta precio desde Binance (REST público) y cae a CoinGecko.
+    No requiere API Keys.
+    """
     global BINANCE_STATUS
 
-    # --- Intento 1: Binance Vision ---
+    # Intento 1: Binance REST público
     try:
-        from binance.spot import Spot as Client
-        client = Client()
-        data = client.ticker_price(symbol=simbolo)
-        precio = float(data["price"])
-        BINANCE_STATUS = "✅ Conectado a Binance Vision"
-        return {"precio": precio, "fuente": "Binance (Vision)"}
-
+        r = requests.get(
+            f"{BINANCE_REST_BASE}/api/v3/ticker/price",
+            params={"symbol": simbolo},
+            headers=UA, timeout=6
+        )
+        r.raise_for_status()
+        price = float(r.json()["price"])
+        BINANCE_STATUS = "✅ Conectado a Binance REST"
+        return {"precio": price, "fuente": "Binance (REST)"}
     except Exception as e:
-        print(f"[⚠️ Binance Error]: {e}")
-        BINANCE_STATUS = f"⚠️ Error de conexión Binance: {e}"
+        BINANCE_STATUS = f"⚠️ Binance REST: {e}"
 
-    # --- Intento 2: CoinGecko (fallback) ---
+    # Intento 2: CoinGecko fallback
     try:
         r = requests.get(
             "https://api.coingecko.com/api/v3/simple/price",
             params={"ids": "bitcoin", "vs_currencies": "usd"},
-            timeout=5,
+            headers=UA, timeout=6
         )
+        r.raise_for_status()
         data = r.json()
         if "bitcoin" in data and "usd" in data["bitcoin"]:
-            precio = float(data["bitcoin"]["usd"])
-            BINANCE_STATUS = "🦎 Conectado a CoinGecko (fallback)"
-            return {"precio": precio, "fuente": "CoinGecko"}
-
+            price = float(data["bitcoin"]["usd"])
+            BINANCE_STATUS = "🦎 CoinGecko (fallback)"
+            return {"precio": price, "fuente": "CoinGecko"}
     except Exception as e:
-        print(f"[⚠️ CoinGecko Error]: {e}")
+        BINANCE_STATUS = f"⚠️ CoinGecko: {e}"
 
-    # --- Si ambas fuentes fallan ---
-    BINANCE_STATUS = "⚙️ Sin conexión a fuentes válidas"
+    BINANCE_STATUS = "⛔ Sin conexión de precio"
     return {"precio": None, "fuente": "⚙️ No conectado"}
 
 # ===================================
@@ -60,37 +68,55 @@ def obtener_precio(simbolo="BTCUSDT"):
 # ===================================
 
 def sesion_ny_activa():
-    """Verifica si la sesión de Nueva York está activa (07:00 - 16:00 hora Colombia)."""
-    hora_local = datetime.now(TZ_COL).time()
-    return hora_local >= datetime.strptime("07:00", "%H:%M").time() and hora_local <= datetime.strptime("16:00", "%H:%M").time()
+    """
+    NY: 07:00–13:30 COL (horario operativo PA Puro)
+    *Si deseas extender a 16:00 COL, cambia el fin a 16:00.
+    """
+    now = datetime.now(TZ_COL)
+    h = now.hour + now.minute / 60
+    return 7 <= h < 13.5  # 13:30
 
 # ===================================
-# 🔹 FUNCIÓN DE VELAS BINANCE
+# 🔹 FUNCIÓN DE VELAS (klines)
 # ===================================
 
-def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=100):
-    """Obtiene velas del mercado desde Binance Vision (sin API key)."""
+def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
+    """
+    Devuelve velas desde el mirror público (data-api.binance.vision) y si falla, usa api.binance.com.
+    Formato de retorno: lista de velas Kline como en Binance REST.
+    """
+    # Intento 1: data mirror
     try:
-        from binance.spot import Spot as Client
-        client = Client()
-        data = client.klines(symbol=simbolo, interval=intervalo, limit=limite)
-        return data
-    except Exception as e:
-        print(f"[⚠️ Kline Error {intervalo}]: {e}")
+        url = f"{BINANCE_VISION_BASE}/api/v3/klines"
+        r = requests.get(url, params={"symbol": simbolo, "interval": intervalo, "limit": limite},
+                         headers=UA, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        pass
+
+    # Intento 2: REST directo
+    try:
+        url = f"{BINANCE_REST_BASE}/api/v3/klines"
+        r = requests.get(url, params={"symbol": simbolo, "interval": intervalo, "limit": limite},
+                         headers=UA, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
         return []
 
 # ===================================
-# 🔹 FUNCIÓN PDH / PDL
+# 🔹 FUNCIÓN PDH / PDL 24h
 # ===================================
 
 def _pdh_pdl(simbolo="BTCUSDT"):
-    """Calcula el máximo (PDH) y mínimo (PDL) de las últimas 24h."""
+    """
+    Máximo y mínimo de últimas 24h usando klines 1h x 24.
+    """
     try:
         klines = obtener_klines_binance(simbolo, "1h", 24)
-        if klines:
-            highs = [float(k[2]) for k in klines]
-            lows = [float(k[3]) for k in klines]
-            return {"PDH": max(highs), "PDL": min(lows)}
-    except Exception as e:
-        print(f"[⚠️ PDH/PDL Error]: {e}")
-    return {"PDH": None, "PDL": None}
+        highs = [float(k[2]) for k in klines] if klines else []
+        lows  = [float(k[3]) for k in klines] if klines else []
+        return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
+    except Exception:
+        return {"PDH": None, "PDL": None}
