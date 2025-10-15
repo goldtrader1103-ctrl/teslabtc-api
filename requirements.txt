@@ -1,8 +1,52 @@
-fastapi
-uvicorn
-python-binance
-requests
-dateparser
-pydantic
-pytz
-aiohttp
+# ================================
+# TESLABTC.KG — Requisitos base
+# ================================
+
+# Servidor FastAPI
+fastapi==0.115.0
+uvicorn==0.30.6
+starlette==0.37.2
+
+# Cliente HTTP y asincronía
+httpx==0.27.0
+requests==2.32.3
+aiohttp==3.9.5
+asyncio==3.4.3
+aiosignal==1.3.1
+
+# Binance Vision (cliente oficial seguro)
+python-binance==1.0.19
+
+# Respaldo de datos y precios (CoinGecko)
+pycoingecko==3.2.0
+
+# Parsing de fechas y zonas horarias
+pytz==2025.2
+dateparser==1.2.2
+python-dateutil==2.9.0.post0
+tzlocal==5.3
+
+# Compresión y rendimiento
+ujson==5.10.0
+propcache==0.4.1
+aiohappyeyeballs==2.6.1
+
+# Criptografía (para Binance API)
+pycryptodome==3.23.0
+
+# Tipado y validación
+pydantic==2.9.2
+pydantic-core==2.23.4
+typing-extensions==4.12.2
+
+# Regex, compatibilidad y utilidades
+regex==2025.9.18
+six==1.17.0
+attrs==25.1.0
+certifi==2025.10.5
+charset_normalizer==3.4.0
+idna==3.10
+urllib3==2.3.0
+
+# Compresión GZIP en FastAPI
+brotli==1.1.0
