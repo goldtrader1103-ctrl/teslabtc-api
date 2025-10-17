@@ -1,17 +1,22 @@
-# ✈️ TESLABTC.KG — fly.toml (v3.6.0)
 app = "teslabtc-api"
-primary_region = "gru"
+primary_region = "iad"
 
 [build]
   dockerfile = "Dockerfile"
 
 [env]
-  PYTHONUNBUFFERED = "1"
+  REGION = "iad"
+  PYTHONUNBUFFERED = "true"
+  PORT = "8080"
+
+[deploy]
+  strategy = "rolling"
+  release_command = ""
+  max_unavailable = 0
 
 [[services]]
-  protocol = "tcp"
   internal_port = 8080
-  processes = ["app"]
+  protocol = "tcp"
 
   [[services.ports]]
     port = 80
@@ -21,16 +26,8 @@ primary_region = "gru"
     port = 443
     handlers = ["tls", "http"]
 
-  [services.concurrency]
-    type = "connections"
-    hard_limit = 50
-    soft_limit = 20
-
-  # Healthcheck principal
-  [[services.http_checks]]
-    interval = "25s"
-    timeout = "8s"
-    grace_period = "30s"
-    method = "GET"
-    path = "/"
-    protocol = "http"
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "5s"
+    restart_limit = 2

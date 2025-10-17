@@ -1,41 +1,44 @@
 # ==============================================
-# 📦 TESLABTC.KG — utils/price_utils.py (v3.6.2)
+# 📦 TESLABTC.KG — utils/price_utils.py (v3.6.3)
 # ==============================================
-# 1) Precio actual (Binance REST -> CoinGecko fallback)
-# 2) Klines multi-timeframe (Binance Global -> Binance Vision -> CoinGecko)
-# 3) Sesión NY
-# 4) PDH/PDL últimas 24h
+# 1️⃣ Precio actual (Binance REST -> CoinGecko fallback)
+# 2️⃣ Klines multi-timeframe (Binance Global -> Binance Vision -> CoinGecko)
+# 3️⃣ Sesión NY
+# 4️⃣ PDH/PDL últimas 24h
 # ==============================================
 
 import requests
 import time
 from datetime import datetime, timezone, timedelta
 
-BINANCE_STATUS = "⚙️ No conectado"
+BINANCE_STATUS = "🦎 Fallback CoinGecko activo"
 TZ_COL = timezone(timedelta(hours=-5))
 UA = {"User-Agent": "teslabtc-kg/3.6"}
 
-# Endpoints base
+# ==============================================
+# 🌐 Endpoints base
+# ==============================================
 BINANCE_REST_BASE = "https://api.binance.com"
 BINANCE_VISION_BASE = "https://data-api.binance.vision"
 
 # ==============================================
-# 🔹 FUNCIÓN PRINCIPAL DE PRECIO
+# 💰 FUNCIÓN PRINCIPAL DE PRECIO
 # ==============================================
 
 def obtener_precio(simbolo="BTCUSDT"):
     """
-    Intenta precio desde Binance (REST público) y cae a CoinGecko.
+    Obtiene el precio actual desde Binance REST y cae a CoinGecko si hay bloqueo.
     No requiere API Keys.
     """
     global BINANCE_STATUS
 
-    # Intento 1: Binance REST público
+    # Intento 1️⃣ — Binance REST público
     try:
         r = requests.get(
             f"{BINANCE_REST_BASE}/api/v3/ticker/price",
             params={"symbol": simbolo},
-            headers=UA, timeout=6
+            headers=UA,
+            timeout=6,
         )
         r.raise_for_status()
         price = float(r.json()["price"])
@@ -44,12 +47,13 @@ def obtener_precio(simbolo="BTCUSDT"):
     except Exception as e:
         BINANCE_STATUS = f"⚠️ Binance REST: {e}"
 
-    # Intento 2: CoinGecko fallback
+    # Intento 2️⃣ — CoinGecko fallback
     try:
         r = requests.get(
             "https://api.coingecko.com/api/v3/simple/price",
             params={"ids": "bitcoin", "vs_currencies": "usd"},
-            headers=UA, timeout=6
+            headers=UA,
+            timeout=6,
         )
         r.raise_for_status()
         data = r.json()
@@ -64,20 +68,20 @@ def obtener_precio(simbolo="BTCUSDT"):
     return {"precio": None, "fuente": "⚙️ No conectado"}
 
 # ==============================================
-# 🔹 SESIÓN NEW YORK
+# 🕒 SESIÓN NEW YORK (07:00–13:30 COL)
 # ==============================================
 
 def sesion_ny_activa():
     """
-    NY: 07:00–13:30 COL (horario operativo PA Puro)
-    *Si deseas extender a 16:00 COL, cambia el fin a 16:00.
+    Verifica si la sesión de Nueva York está activa.
+    NY: 07:00–13:30 hora Colombia.
     """
     now = datetime.now(TZ_COL)
     h = now.hour + now.minute / 60
     return 7 <= h < 13.5  # 13:30
 
 # ==============================================
-# 🔹 FUNCIÓN DE VELAS (KLINES)
+# 📊 FUNCIÓN DE VELAS (KLINES)
 # ==============================================
 
 def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
@@ -131,7 +135,6 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
 
                 elif r.status_code == 451:
                     print(f"⚠️ {src} bloqueado ({r.status_code}), probando mirror Vision...")
-                    # salta al siguiente URL del ciclo
                     break
 
                 elif r.status_code in (403, 429):
@@ -181,18 +184,28 @@ def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
     return []
 
 # ==============================================
-# 🔹 FUNCIÓN PDH / PDL (ÚLTIMAS 24H)
+# 📈 FUNCIÓN PDH / PDL (ÚLTIMAS 24H)
 # ==============================================
 
 def _pdh_pdl(simbolo="BTCUSDT"):
     """
-    Máximo y mínimo de las últimas 24h usando velas 1h.
+    Calcula el máximo (PDH) y mínimo (PDL) de las últimas 24h usando velas 1h.
     """
     try:
         klines = obtener_klines_binance(simbolo, "1h", 24)
         highs = [float(k["high"]) for k in klines] if klines else []
-        lows  = [float(k["low"]) for k in klines] if klines else []
+        lows = [float(k["low"]) for k in klines] if klines else []
         return {"PDH": max(highs) if highs else None, "PDL": min(lows) if lows else None}
     except Exception as e:
         print(f"⚠️ Error PDH/PDL: {e}")
         return {"PDH": None, "PDL": None}
+
+# ==============================================
+# 📊 ESTADO BINANCE
+# ==============================================
+
+def estado_binance():
+    """
+    Devuelve el estado actual de conexión de Binance o CoinGecko.
+    """
+    return BINANCE_STATUS
