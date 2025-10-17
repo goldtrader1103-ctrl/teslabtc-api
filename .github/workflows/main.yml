@@ -1,0 +1,30 @@
+# ============================================================
+# 🚀 TESLABTC.KG — Despliegue automático a Fly.io (v3.6.0)
+# ============================================================
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches:
+      - main    # Se ejecuta cada vez que haces commit a la rama main
+  workflow_dispatch:   # Permite lanzarlo manualmente desde la pestaña "Actions"
+
+jobs:
+  deploy:
+    name: 🚀 Deploy TESLABTC.KG API
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Descarga el código del repositorio
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      # 2️⃣ Instala Fly CLI
+      - name: 🔧 Install Flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # 3️⃣ Despliega a Fly.io
+      - name: 🚀 Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
