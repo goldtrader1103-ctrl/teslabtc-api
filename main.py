@@ -5,6 +5,7 @@
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from datetime import datetime, timedelta, timezone
 
 from utils.price_utils import (
@@ -27,9 +28,13 @@ app = FastAPI(
     version="3.6.0",
 )
 
-# Compresión GZIP para evitar errores por respuestas grandes
+# 🔧 Forzar codificación UTF-8 global (evita símbolos raros)
+JSONResponse.media_type = "application/json; charset=utf-8"
+
+# Compresión GZIP para optimizar respuestas grandes
 app.add_middleware(GZipMiddleware, minimum_size=600)
 
+# Zona horaria Colombia (UTC-5)
 TZ_COL = timezone(timedelta(hours=-5))
 
 # ============================================================
@@ -37,7 +42,11 @@ TZ_COL = timezone(timedelta(hours=-5))
 # ============================================================
 
 @app.get("/analyze", tags=["Análisis"])
-async def analizar(simbolo: str = "BTCUSDT"):
+async def analizar(simbolo: str = "BTCUSDT", token: str | None = None):
+    """
+    Endpoint principal: análisis operativo TESLABTC.KG
+    Retorna estructura, zonas, escenario y conexión Binance.
+    """
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
 
     # Precio actual
@@ -62,7 +71,7 @@ async def analizar(simbolo: str = "BTCUSDT"):
     estructura = {
         "H4 (macro)": e_h4,
         "H1 (intradía)": e_h1,
-        "M15 (reacción)": e_m15
+        "M15 (reacción)": e_m15,
     }
 
     # Zonas PDH/PDL (24h)
@@ -75,9 +84,11 @@ async def analizar(simbolo: str = "BTCUSDT"):
         "M15": e_m15.get("estado", "sin_datos"),
     })
 
-    return {
+    # Paquete final de respuesta
+    payload = {
         "🧠 TESLABTC.KG": {
             "fecha": fecha,
+            "nivel_usuario": "Premium" if token and "PREMIUM" in token else "Free",
             "sesión": sesion,
             "precio_actual": precio_str,
             "fuente_precio": fuente,
@@ -88,6 +99,8 @@ async def analizar(simbolo: str = "BTCUSDT"):
             "mensaje": "✨ Análisis completado correctamente"
         }
     }
+
+    return JSONResponse(content=payload)
 
 # ============================================================
 # 🟣 MONITOR EN VIVO
