@@ -188,3 +188,12 @@ async def health_check():
 @app.get("/", tags=["Home"])
 async def home():
     return {"status": "✅ Servicio operativo", "version": "4.3 PRO STABLE"}
+
+# ============================================================
+# Incluir routers adicionales (al final del archivo)
+# ============================================================
+from routes.admin_extra import router as admin_extra_router
+from routes.auth_extra import router as auth_extra_router
+
+app.include_router(admin_extra_router)
+app.include_router(auth_extra_router)
