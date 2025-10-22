@@ -1,39 +1,58 @@
-from fastapi import APIRouter
+# ============================================================
+# 🧠 analizar_router.py — Enrutador principal TESLABTC
+# ============================================================
+
+from fastapi import APIRouter, Request
 from datetime import datetime, timedelta, timezone
-from utils.price_utils import obtener_precio, obtener_klines_binance
-from utils.estructura_utils import estructura_y_zonas
+from utils.price_utils import obtener_precio
+from utils.analisis_free import generar_analisis_free
+from utils.analisis_premium import generar_analisis_premium
+from utils.token_utils import validar_token
 
 router = APIRouter()
 TZ_COL = timezone(timedelta(hours=-5))
 
-@router.get("/", tags=["TESLABTC"])
-def analizar():
-    ahora = datetime.now(TZ_COL)
-    sesion = "✅ Activa (Sesión New York)" if 7 <= (ahora.hour + ahora.minute/60) < 13.5 else "❌ Cerrada (Fuera de NY)"
 
+@router.get("/", tags=["TESLABTC"])
+async def analizar(request: Request):
+    """
+    Endpoint principal del análisis TESLABTC.
+    Determina si el usuario es Free o Premium según su token.
+    """
+    ahora = datetime.now(TZ_COL)
+
+    # Verificar token en encabezado
+    token = request.headers.get("Authorization")
+    nivel_usuario = "Free"
+    token_valido = False
+print("🔍 TOKEN RECIBIDO:", request.headers.get("Authorization"))
+
+    if token:
+        verif = validar_token(token)
+        if verif.get("valido"):
+            nivel_usuario = verif.get("nivel", "Free")
+            token_valido = True
+
+    # Obtener precio actual
     p = obtener_precio("BTCUSDT")
     precio, fuente = p.get("precio"), p.get("fuente")
-    precio_str = f"{precio:,.2f} USD" if isinstance(precio, (int, float)) else "⚙️ No disponible"
+    precio_float = precio if isinstance(precio, (int, float)) else 0.0
 
-    h4 = obtener_klines_binance("BTCUSDT", "4h", 240) or []
-    h1 = obtener_klines_binance("BTCUSDT", "1h", 300) or []
-    m15 = obtener_klines_binance("BTCUSDT", "15m", 300) or []
+    # Generar análisis según nivel
+    if nivel_usuario.lower() == "premium":
+        analisis = generar_analisis_premium(precio_float)
+    else:
+        analisis = generar_analisis_free(precio_float)
 
-    ez = estructura_y_zonas(h4, h1, m15)
-    macro_estado = ez["macro"]["estado"]
-    intradia_estado = ez["intradía"]["estado"]
+    # Añadir información de sesión
+    hora_local = ahora.hour + (ahora.minute / 60)
+    analisis["sesion"] = "✅ Activa (Sesión NY)" if 7 <= hora_local < 13.5 else "❌ Cerrada (Fuera de NY)"
+    analisis["fuente_precio"] = fuente
 
+    # Cuerpo final
     body = {
-        "🧠 TESLABTC.KG": {
-            "fecha": ahora.strftime("%d/%m/%Y %H:%M:%S"),
-            "sesion": sesion,
-            "fuente": fuente,
-            "precio_actual": precio_str,
-            "macro": ez["macro"],
-            "intradía": ez["intradía"],
-            "reaccion": ez["reaccion"],
-            "mensaje": "✅ Análisis completado correctamente"
-        }
+        "🧠 TESLABTC.KG": analisis,
+        "conexion_binance": "🦎 Fallback CoinGecko activo" if fuente != "Binance (REST)" else "✅ Conectado a Binance"
     }
 
     return body

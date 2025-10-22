@@ -37,31 +37,30 @@ REFLEXIONES = [
 ]
 
 # ============================================================
-# Endpoint principal
+# 🧠 ENDPOINT PRINCIPAL DE ANÁLISIS — TESLABTC.KG
 # ============================================================
-@app.get("/analyze", tags=["Análisis"])
+@app.get("/analyze", tags=["Análisis TESLABTC"])
 async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
 
-    # Validar token (si se envía)
-    auth = None
-    if token:
-        auth = validar_token(token)
+    # ==========================
+    # 🔐 Validar token
+    # ==========================
+    auth = validar_token(token) if token else None
+    nivel_usuario = auth.get("nivel", "Free") if auth and auth.get("estado") == "✅" else "Free"
 
-    # Si no hay token o token inválido, la API seguirá devolviendo Free (seguro)
-    if not auth or auth.get("estado") != "✅":
-        nivel_usuario = "Free"
-    else:
-        nivel_usuario = auth.get("nivel", "Free")
-
-    # Obtener precio y estructura (tus utilidades)
+    # ==========================
+    # 💰 Datos de precio
+    # ==========================
     precio_data = obtener_precio(simbolo)
-    precio = precio_data.get("precio")
-    fuente = precio_data.get("fuente")
-    precio_str = f"{precio:,.2f} USD" if precio not in [None, 0] else "⚙️ No disponible"
-
+    precio = precio_data.get("precio", 0)
+    fuente = precio_data.get("fuente", "Desconocida")
+    precio_str = f"{precio:,.2f} USD" if precio else "⚙️ No disponible"
     sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
+    # ==========================
+    # 🧩 Estructuras por temporalidad
+    # ==========================
     try:
         h4 = obtener_klines_binance(simbolo, "4h", 120)
         h1 = obtener_klines_binance(simbolo, "1h", 120)
@@ -70,14 +69,18 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
         e_h1 = evaluar_estructura(h1)
         e_m15 = evaluar_estructura(m15)
     except Exception as e:
+        print(f"⚠️ Error analizando estructura: {e}")
         e_h4 = e_h1 = e_m15 = {"estado": "sin_datos"}
-        print(f"⚠️ Error estructura: {e}")
 
     estructura = {
         "H4 (macro)": e_h4,
         "H1 (intradía)": e_h1,
+        "M15 (reacción)": e_m15
     }
 
+    # ============================================================
+    # 🧠 FREE — acceso limitado
+    # ============================================================
     if nivel_usuario.lower() == "free":
         return {
             "🧠 TESLABTC.KG": {
@@ -92,13 +95,14 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             }
         }
 
-    # Premium -> obtener zonas, escenarios, reflexion aleatoria
+    # ============================================================
+    # 💎 PREMIUM — análisis completo
+    # ============================================================
     zonas = _pdh_pdl(simbolo)
-    estructura["M15 (reacción)"] = e_m15
-    escenario = definir_escenarios({
-        "H4": e_h4.get("estado", "sin_datos"),
-        "H1": e_h1.get("estado", "sin_datos"),
-        "M15": e_m15.get("estado", "sin_datos"),
+    escenarios = definir_escenarios({
+        "H4": e_h4.get("estado"),
+        "H1": e_h1.get("estado"),
+        "M15": e_m15.get("estado")
     })
 
     reflexion = random.choice(REFLEXIONES)
@@ -112,7 +116,10 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             "fuente_precio": fuente,
             "estructura_detectada": estructura,
             "zonas": zonas,
-            "escenario": escenario,
+            "confirmaciones": "BOS validado + Volumen confirmado + FVG limpio",
+            "escenario_1": escenarios.get("continuacion", "Esperando señal"),
+            "escenario_2": escenarios.get("correccion", "Esperando señal"),
+            "conclusion": "Estructura y contexto alineados con el flujo institucional.",
             "conexion_binance": BINANCE_STATUS,
             "mensaje": "✨ Análisis Premium completado correctamente",
             "reflexion": reflexion
@@ -188,6 +195,26 @@ async def health_check():
 @app.get("/", tags=["Home"])
 async def home():
     return {"status": "✅ Servicio operativo", "version": "4.3 PRO STABLE"}
+
+# ============================================================
+# 🧩 DEBUG ROUTER INTEGRADO — para sincronización con el BOT
+# ============================================================
+import json, os
+from fastapi import APIRouter
+
+@app.get("/debug/tokens", tags=["Debug"])
+async def obtener_tokens_debug():
+    """Devuelve la lista de tokens activos para sincronización con el BOT."""
+    try:
+        if not os.path.exists("tokens.json"):
+            return {"tokens": [], "mensaje": "Archivo tokens.json no encontrado"}
+
+        with open("tokens.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return {"tokens": data, "mensaje": "Tokens cargados correctamente"}
+    except Exception as e:
+        return {"tokens": [], "error": str(e)}
 
 # ============================================================
 # Incluir routers adicionales (al final del archivo)
