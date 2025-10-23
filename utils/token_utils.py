@@ -1,25 +1,36 @@
 # ============================================================
 # 🔐 token_utils.py — Validación simple TESLABTC.KG
 # Integrado con BOT: los tokens se generan y administran desde el BOT.
-# Este archivo solo valida y mantiene estructura temporal (sin tokens.json)
+# Esta versión no usa archivo físico (solo memoria temporal en contenedor)
 # ============================================================
 
 from datetime import datetime, timedelta
 import uuid
 
 # Estructura temporal en memoria (sin archivo físico)
-TOKENS = {}  # token -> {usuario, nivel, fecha_vencimiento}
+TOKENS = {}  # token -> {usuario, nivel, fecha_vencimiento, dias_free}
 
 # ============================================================
-# 🧩 GENERAR TOKEN — (solo usado cuando el BOT llama a /admin/create_token)
+# 🧩 GENERAR TOKEN
 # ============================================================
 def generar_token(usuario: str, dias_premium: int = 30, dias_free: int = 10):
-    """
-    Genera un token nuevo o renueva el existente (sin archivo físico).
-    """
+    """Genera o renueva un token temporal (sin archivo físico)."""
     ahora = datetime.now()
-    token = uuid.uuid4().hex[:16].upper()
 
+    # Si ya existe un token para el usuario, se renueva
+    for t, d in TOKENS.items():
+        if d["usuario"] == str(usuario):
+            d["fecha_vencimiento"] = ahora + timedelta(days=dias_premium)
+            d["nivel"] = "Premium"
+            return {
+                "estado": "✅",
+                "mensaje": "Token renovado correctamente",
+                "token": t,
+                "vencimiento": d["fecha_vencimiento"].strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+    # Si no existe, se crea nuevo
+    token = uuid.uuid4().hex[:16].upper()
     TOKENS[token] = {
         "usuario": str(usuario),
         "nivel": "Premium",
@@ -39,13 +50,7 @@ def generar_token(usuario: str, dias_premium: int = 30, dias_free: int = 10):
 # 🔎 VALIDAR TOKEN
 # ============================================================
 def validar_token(token: str):
-    """
-    Devuelve dict:
-      - estado: ✅ / ❌ / ⚠️
-      - nivel: Premium | Free (si aplica)
-      - usuario
-      - expira
-    """
+    """Valida el token y devuelve su nivel (Premium, Free o Expirado)."""
     if not token:
         return {"estado": "❌", "mensaje": "Token faltante."}
 
@@ -57,7 +62,6 @@ def validar_token(token: str):
     vto = data["fecha_vencimiento"]
     dias_free = data.get("dias_free", 10)
 
-    # Premium activo
     if ahora <= vto:
         return {
             "estado": "✅",
@@ -66,7 +70,6 @@ def validar_token(token: str):
             "expira": vto.strftime("%Y-%m-%d %H:%M:%S")
         }
 
-    # Free post-premium
     if vto < ahora <= (vto + timedelta(days=dias_free)):
         return {
             "estado": "✅",
@@ -76,7 +79,6 @@ def validar_token(token: str):
             "mensaje": "Token en periodo Free post-premium (gracia)."
         }
 
-    # Expirado
     TOKENS.pop(token, None)
     return {"estado": "⚠️", "mensaje": "Token expirado definitivamente y eliminado."}
 
@@ -90,7 +92,7 @@ def liberar_token(token: str):
     return {"estado": "⚠️", "mensaje": "Token no encontrado."}
 
 # ============================================================
-# 🧾 LISTAR TOKENS (para debug opcional)
+# 🧾 LISTAR TOKENS (solo para debug)
 # ============================================================
 def listar_tokens():
     out = {}
@@ -102,9 +104,9 @@ def listar_tokens():
         }
     return out
 
-# ------------------------------
-# Verificar vencimientos y limpiar (puedes invocar periódicamente)
-# ------------------------------
+# ============================================================
+# 🧩 VERIFICAR VENCIMIENTOS
+# ============================================================
 def verificar_vencimientos():
     ahora = datetime.now()
     expirados = []
