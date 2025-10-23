@@ -101,3 +101,15 @@ def listar_tokens():
             "fecha_vencimiento": d["fecha_vencimiento"].strftime("%Y-%m-%d %H:%M:%S"),
         }
     return out
+
+# ------------------------------
+# Verificar vencimientos y limpiar (puedes invocar periódicamente)
+# ------------------------------
+def verificar_vencimientos():
+    ahora = datetime.now()
+    expirados = []
+    for t, d in list(TOKENS.items()):
+        if ahora > d["fecha_vencimiento"] + timedelta(days=d.get("dias_free", 10)):
+            expirados.append(t)
+            TOKENS.pop(t, None)
+    return expirados
