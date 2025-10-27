@@ -25,7 +25,7 @@ async def analizar(request: Request):
     token = request.headers.get("Authorization")
     nivel_usuario = "Free"
     token_valido = False
-print("🔍 TOKEN RECIBIDO:", request.headers.get("Authorization"))
+    print("🔍 TOKEN RECIBIDO:", request.headers.get("Authorization"))
 
     if token:
         verif = validar_token(token)

@@ -224,3 +224,15 @@ from routers.auth_extra import router as auth_extra_router
 
 app.include_router(admin_extra_router)
 app.include_router(auth_extra_router)
+
+# ============================================================
+# 🚀 ENTRYPOINT — EJECUCIÓN LOCAL
+# ============================================================
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8080,
+        reload=True
+    )

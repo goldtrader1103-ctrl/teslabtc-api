@@ -1,33 +1,27 @@
 # ============================================================
-# 📊 analisis_free.py — Lógica de análisis Free (versión extendida)
+# 📊 analisis_free.py — Lógica de análisis Free (educativa v4.0)
 # ============================================================
 
 from datetime import datetime
-from utils.price_utils import obtener_precios
+from utils.price_utils import obtener_precios, sesion_ny_activa
 
 def generar_analisis_free(precio_actual):
-    datos = obtener_precios()
+    precios = obtener_precios()
+    sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
     return {
         "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
         "nivel_usuario": "Free",
         "activo": "BTCUSDT",
-        "sesion": "❌ Cerrada (Fuera de NY)",
+        "sesion": sesion,
         "precio_actual": f"{precio_actual:,.2f} USD",
-        "fuente_precio": "Binance (REST)",
+        "fuente_precio": precios.get("fuente", "Binance (REST)"),
         "temporalidades": "D | H4 | H1 | M15",
 
+        # Educativo, no operativo
         "estructura_detectada": {
-            "H4 (macro)": {
-                "estado": "Rango",
-                "high": 114000,
-                "low": 103500
-            },
-            "H1 (intradía)": {
-                "estado": "Bajista",
-                "high": 114000,
-                "low": 106700
-            }
+            "H4 (macro)": {"estado": "Bajista"},
+            "H1 (intradía)": {"estado": "Rango"}
         },
 
         "zonas_relevantes": "🔒 Desbloquea con Premium",
@@ -36,7 +30,7 @@ def generar_analisis_free(precio_actual):
         "escenario_correccion": "🔒 Desbloquea con Premium",
 
         "conclusion": "🧠 Nivel Free — acceso limitado. Actualiza a Premium para escenarios y alertas BOS.",
-        "conexion_binance": "🦎 Fallback CoinGecko activo",
+        "conexion_binance": precios.get("estado", "🦎 Fallback CoinGecko activo"),
         "reflexion": "📘 El mercado recompensa la disciplina, no la emoción.",
         "nota": "⚠️ Diseñado para operar exclusivamente en la Sesión de Nueva York (NY)."
     }
