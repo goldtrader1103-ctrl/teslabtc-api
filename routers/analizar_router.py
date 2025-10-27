@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from utils.price_utils import obtener_precio
 from utils.analisis_free import generar_analisis_free
 from utils.analisis_premium import generar_analisis_premium
-from utils.token_utils import validar_token
+from utils.userdb import validar_token_api
 
 router = APIRouter()
 TZ_COL = timezone(timedelta(hours=-5))
@@ -32,11 +32,10 @@ async def analizar(request: Request):
     nivel_usuario = "Free"
     token_valido = False
 
-    if token:
-        verif = validar_token(token)
-        if verif.get("valido"):
-            nivel_usuario = verif.get("nivel", "Free")
-            token_valido = True
+    verif = validar_token_api(token)
+    nivel_usuario = verif.get("nivel", "Free")
+    token_valido = verif.get("valido", False)
+
 
     # ==============================
     # 2) Obtener precio actual

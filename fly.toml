@@ -43,6 +43,6 @@ kill_timeout = "5s"
     method = "GET"
     path = "/health"
 
-[mounts]
-  source="teslabtcapi_data"
+[[mounts]]
+  source="teslabtc_data"
   destination="/app/data"
