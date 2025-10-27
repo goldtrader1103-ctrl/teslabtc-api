@@ -221,9 +221,11 @@ async def obtener_tokens_debug():
 # ============================================================
 from routers.admin_extra import router as admin_extra_router
 from routers.auth_extra import router as auth_extra_router
+from routers.analizar_router import router as analizar_router
 
 app.include_router(admin_extra_router)
 app.include_router(auth_extra_router)
+app.include_router(analizar_router, prefix="/tesla")
 
 # ============================================================
 # 🚀 ENTRYPOINT — EJECUCIÓN LOCAL

@@ -21,7 +21,9 @@ async def analizar(request: Request):
     """
     ahora = datetime.now(TZ_COL)
 
-    # Verificar token por HEADER o QUERY
+    # ==============================
+    # 1) Validar token
+    # ==============================
     token = request.headers.get("Authorization")
 
     if not token:
@@ -36,24 +38,32 @@ async def analizar(request: Request):
             nivel_usuario = verif.get("nivel", "Free")
             token_valido = True
 
-    # Obtener precio actual
+    # ==============================
+    # 2) Obtener precio actual
+    # ==============================
     p = obtener_precio("BTCUSDT")
     precio, fuente = p.get("precio"), p.get("fuente")
     precio_float = precio if isinstance(precio, (int, float)) else 0.0
 
-    # DECISIÓN TESLA REAL: premium si el token es válido
+    # ==============================
+    # 3) Decidir análisis
+    # ==============================
     if token_valido:
-    analisis = generar_analisis_premium(precio_float)
+        analisis = generar_analisis_premium(precio_float)
     else:
-    analisis = generar_analisis_free(precio_float)
+        analisis = generar_analisis_free(precio_float)
 
-
-    # Añadir información de sesión
+    # ==============================
+    # 4) Datos de sesión
+    # ==============================
     hora_local = ahora.hour + (ahora.minute / 60)
     analisis["sesion"] = "✅ Activa (Sesión NY)" if 7 <= hora_local < 13.5 else "❌ Cerrada (Fuera de NY)"
     analisis["fuente_precio"] = fuente
+    analisis["nivel_usuario"] = nivel_usuario
 
-    # Cuerpo final
+    # ==============================
+    # 5) Cuerpo final
+    # ==============================
     body = {
         "🧠 TESLABTC.KG": analisis,
         "conexion_binance": "🦎 Fallback CoinGecko activo" if fuente != "Binance (REST)" else "✅ Conectado a Binance"

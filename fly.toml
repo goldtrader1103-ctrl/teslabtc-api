@@ -42,3 +42,7 @@ kill_timeout = "5s"
     grace_period = "5s"
     method = "GET"
     path = "/health"
+
+[mounts]
+  source="teslabtcapi_data"
+  destination="/app/data"
