@@ -1,36 +1,45 @@
 # ============================================================
-# 📊 analisis_free.py — Lógica de análisis Free (educativa v4.0)
+# 📊 analisis_free.py — TESLABTC.KG (versión Free reducida)
+# Mantiene mensaje resumido y claves mínimas para tu bot.
 # ============================================================
 
 from datetime import datetime
-from utils.price_utils import obtener_precios, sesion_ny_activa
+from utils.price_utils import sesion_ny_activa
 
-def generar_analisis_free(precio_actual):
-    precios = obtener_precios()
-    sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
+def _fmt_usd(x: float) -> str:
+    try:
+        return f"{x:,.2f} USD"
+    except Exception:
+        return str(x)
+
+def generar_analisis_free(precio_actual: float) -> dict:
+    ahora = datetime.now()
+    sesion_ok = sesion_ny_activa()
+    sesion_txt = "✅ Activa (Sesión NY)" if sesion_ok else "❌ Cerrada (Fuera de NY)"
+
+    mensaje = (
+        "Estructura bajista mayor con retroceso activo hacia oferta H1. "
+        "Escenarios y confirmaciones BOS disponibles en Premium."
+    )
 
     return {
-        "fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "fecha": ahora.strftime("%Y-%m-%d %H:%M:%S"),
         "nivel_usuario": "Free",
         "activo": "BTCUSDT",
-        "sesion": sesion,
-        "precio_actual": f"{precio_actual:,.2f} USD",
-        "fuente_precio": precios.get("fuente", "Binance (REST)"),
-        "temporalidades": "D | H4 | H1 | M15",
+        "sesión": sesion_txt,
+        "precio_actual": _fmt_usd(precio_actual),
+        "temporalidades": ["D", "H4", "H1", "M15"],
 
-        # Educativo, no operativo
         "estructura_detectada": {
-            "H4 (macro)": {"estado": "Bajista"},
-            "H1 (intradía)": {"estado": "Rango"}
+            "H4 (macro)": {"estado": "bajista"},
+            "H1 (intradía)": {"estado": "retroceso"},
+            "M15 (reacción)": {"estado": "neutro"},
         },
 
-        "zonas_relevantes": "🔒 Desbloquea con Premium",
+        # Campos que el bot ya usa:
+        "mensaje": "🍀 Nivel Free — acceso limitado. Actualiza a Premium para escenarios y alertas BOS.",
+        "zonas": "🔒 Desbloquea con Premium",
         "confirmaciones": "🔒 Desbloquea con Premium",
-        "escenario_continuacion": "🔒 Desbloquea con Premium",
-        "escenario_correccion": "🔒 Desbloquea con Premium",
-
-        "conclusion": "🧠 Nivel Free — acceso limitado. Actualiza a Premium para escenarios y alertas BOS.",
-        "conexion_binance": precios.get("estado", "🦎 Fallback CoinGecko activo"),
-        "reflexion": "📘 El mercado recompensa la disciplina, no la emoción.",
-        "nota": "⚠️ Diseñado para operar exclusivamente en la Sesión de Nueva York (NY)."
+        "escenario_1": "🔒 Desbloquea con Premium",
+        "escenario_2": "🔒 Desbloquea con Premium",
     }

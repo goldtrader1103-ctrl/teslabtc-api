@@ -21,11 +21,14 @@ async def analizar(request: Request):
     """
     ahora = datetime.now(TZ_COL)
 
-    # Verificar token en encabezado
+    # Verificar token por HEADER o QUERY
     token = request.headers.get("Authorization")
+
+    if not token:
+        token = request.query_params.get("token")
+
     nivel_usuario = "Free"
     token_valido = False
-    print("🔍 TOKEN RECIBIDO:", request.headers.get("Authorization"))
 
     if token:
         verif = validar_token(token)
@@ -38,11 +41,12 @@ async def analizar(request: Request):
     precio, fuente = p.get("precio"), p.get("fuente")
     precio_float = precio if isinstance(precio, (int, float)) else 0.0
 
-    # Generar análisis según nivel
-    if nivel_usuario.lower() == "premium":
-        analisis = generar_analisis_premium(precio_float)
+    # DECISIÓN TESLA REAL: premium si el token es válido
+    if token_valido:
+    analisis = generar_analisis_premium(precio_float)
     else:
-        analisis = generar_analisis_free(precio_float)
+    analisis = generar_analisis_free(precio_float)
+
 
     # Añadir información de sesión
     hora_local = ahora.hour + (ahora.minute / 60)
