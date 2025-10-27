@@ -225,7 +225,7 @@ from routers.analizar_router import router as analizar_router
 
 app.include_router(admin_extra_router)
 app.include_router(auth_extra_router)
-app.include_router(analizar_router, prefix="/tesla")
+app.include_router(analizar_router, prefix="/analizar")
 
 # ============================================================
 # 🚀 ENTRYPOINT — EJECUCIÓN LOCAL
