@@ -1,9 +1,13 @@
+# ============================================================
+# TESLABTC.KG - Dependencias API + BOT
+# ============================================================
+
 fastapi==0.119.0
 uvicorn==0.37.0
 requests==2.32.5
 pydantic==2.12.2
 pytz==2025.2
 python-dateutil==2.9.0.post0
-aiofiles>=24.1.0
-starlette>=0.40.0
-# pandas>=2.2.3   # <- descomenta si se usa en utils
+aiofiles==24.1.0
+starlette==0.40.0
+python-telegram-bot==20.7

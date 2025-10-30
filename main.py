@@ -9,12 +9,10 @@ from fastapi.middleware.gzip import GZipMiddleware
 from datetime import datetime, timedelta, timezone
 import random
 
-# Importa tus utilidades (asumiendo que ya existen)
 from utils.price_utils import obtener_precio, obtener_klines_binance, sesion_ny_activa, _pdh_pdl, BINANCE_STATUS
 from utils.estructura_utils import evaluar_estructura, definir_escenarios
 from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
-
-# Import token utils (nuevo)
+from utils.analisis_premium import generar_analisis_premium
 from utils.token_utils import generar_token, validar_token, verificar_vencimientos, liberar_token, listar_tokens
 
 # ============================================================
@@ -37,30 +35,24 @@ REFLEXIONES = [
 ]
 
 # ============================================================
-# 🧠 ENDPOINT PRINCIPAL DE ANÁLISIS — TESLABTC.KG
+# 🧠 ENDPOINT PRINCIPAL DE ANÁLISIS — TESLABTC.KG (formato unificado)
 # ============================================================
 @app.get("/analyze", tags=["Análisis TESLABTC"])
 async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
 
-    # ==========================
-    # 🔐 Validar token
-    # ==========================
+    # 🔐 Validación de token (Premium/Free)
     auth = validar_token(token) if token else None
     nivel_usuario = auth.get("nivel", "Free") if auth and auth.get("valido") else "Free"
 
-    # ==========================
-    # 💰 Datos de precio
-    # ==========================
+    # 💰 Precio y sesión
     precio_data = obtener_precio(simbolo)
     precio = precio_data.get("precio", 0)
     fuente = precio_data.get("fuente", "Desconocida")
     precio_str = f"{precio:,.2f} USD" if precio else "⚙️ No disponible"
     sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
-    # ==========================
-    # 🧩 Estructuras por temporalidad
-    # ==========================
+    # 🧩 Estructuras para cabecera (siempre disponibles)
     try:
         h4 = obtener_klines_binance(simbolo, "4h", 120)
         h1 = obtener_klines_binance(simbolo, "1h", 120)
@@ -78,9 +70,9 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
         "M15 (reacción)": e_m15
     }
 
-    # ============================================================
-    # 🧠 FREE — acceso limitado
-    # ============================================================
+    # ==========================
+    # FREE — acceso limitado
+    # ==========================
     if nivel_usuario.lower() == "free":
         return {
             "🧠 TESLABTC.KG": {
@@ -95,37 +87,42 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             }
         }
 
-    # ============================================================
-    # 💎 PREMIUM — análisis completo
-    # ============================================================
-    zonas = _pdh_pdl(simbolo)
-    escenarios = definir_escenarios({
-        "H4": e_h4.get("estado"),
-        "H1": e_h1.get("estado"),
-        "M15": e_m15.get("estado")
-    })
-
-    reflexion = random.choice(REFLEXIONES)
-
-    return {
-        "🧠 TESLABTC.KG": {
-            "fecha": fecha,
+    # ==========================
+    # PREMIUM — formato unificado para el bot
+    # ==========================
+    try:
+        ap = generar_analisis_premium(precio)  # <-- tu función ya genera los textos
+        # Mapeamos claves a lo que el bot espera y unificamos la envoltura
+        premium_body = {
+            "fecha": fecha,  # puedes usar ap["fecha"] si prefieres
             "nivel_usuario": "Premium",
-            "sesión": sesion,
-            "precio_actual": precio_str,
+            "sesión": ap.get("sesión", sesion),
+            "precio_actual": ap.get("precio_actual", precio_str),
             "fuente_precio": fuente,
-            "estructura_detectada": estructura,
-            "zonas": zonas,
-            "confirmaciones": "BOS validado + Volumen confirmado + FVG limpio",
-            "escenario_1": escenarios.get("continuacion", "Esperando señal"),
-            "escenario_2": escenarios.get("correccion", "Esperando señal"),
-            "conclusion": "Estructura y contexto alineados con el flujo institucional.",
+            # Campos que el bot imprime
+            "zonas": ap.get("zonas", "—"),
+            "confirmaciones": ap.get("confirmaciones", {}),
+            "escenario_1": ap.get("escenario_1", "—"),
+            "escenario_2": ap.get("escenario_2", "—"),
+            "conclusion": ap.get("conclusion_texto", "—"),
             "conexion_binance": BINANCE_STATUS,
-            "mensaje": "✨ Análisis Premium completado correctamente",
-            "reflexion": reflexion
         }
-    }
+        return {"🧠 TESLABTC.KG": premium_body}
 
+    except Exception as e:
+        # En error, al menos devolvemos cabecera premium con mensaje
+        return {
+            "🧠 TESLABTC.KG": {
+                "fecha": fecha,
+                "nivel_usuario": "Premium",
+                "sesión": sesion,
+                "precio_actual": precio_str,
+                "fuente_precio": fuente,
+                "estructura_detectada": estructura,
+                "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
+                "conexion_binance": BINANCE_STATUS
+            }
+        }
 # ============================================================
 # Validación del bot (opcional) - expone la lógica de validación
 # ============================================================
