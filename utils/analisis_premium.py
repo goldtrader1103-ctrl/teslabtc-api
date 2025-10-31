@@ -122,45 +122,54 @@ def generar_analisis_premium(precio_actual: float) -> dict:
         "comentario": "OB H1 mitigado" if (ob_h1 and ob_h1["mitigado"]) else "OB H1 sin mitigar" if ob_h1 else "Sin OB claro",
     }
 
-    # Escenarios TESLA (dependen de sesgo mayor)
-    if sesgo_mayor == "Bajista":
-        esc_cont_dir = "Alcista (retroceso antes de continuidad bajista)"
-        esc_corr_dir = "Bajista (continuación del impulso mayor)"
-        esc_corr_prob = "Alta"
-    elif sesgo_mayor == "Alcista":
-        esc_cont_dir = "Bajista (retroceso antes de continuidad alcista)"
-        esc_corr_dir = "Alcista (continuación del impulso mayor)"
-        esc_corr_prob = "Alta"
-    else:
-        esc_cont_dir = "Neutral/Correctiva condicionada"
-        esc_corr_dir = "Rango a direccional tras BOS"
-        esc_corr_prob = "Media"
+    # ============================================================
+# Escenarios TESLABTC — versión neutral (coherente con el bot)
+# ============================================================
+if sesgo_mayor == "Bajista":
+    esc1_dir = "Corrección alcista antes de continuidad bajista"
+    esc2_dir = "Continuación bajista con ruptura de mínimos"
+    esc1_prob = "Alta"
+    esc2_prob = "Media"
+elif sesgo_mayor == "Alcista":
+    esc1_dir = "Corrección bajista antes de continuidad alcista"
+    esc2_dir = "Continuación alcista con ruptura de máximos"
+    esc1_prob = "Alta"
+    esc2_prob = "Media"
+else:
+    esc1_dir = "Rango lateral en espera de BOS claro"
+    esc2_dir = "Transición con baja direccionalidad"
+    esc1_prob = "Media"
+    esc2_prob = "Media"
 
-    escenario_continuacion = {
-        "dirección": esc_cont_dir,
-        "zona_de_interés": "Mitigación OB H1" if ob_h1 else "Zona M15",
-        "confirmaciones_esperadas": "BOS M15 + quiebre ASIA High" if sesgo_mayor=="Bajista" else "BOS M15 + quiebre ASIA Low",
-        "ejecución": {
-            "entrada": "Reentrada en M5 tras BOS M15",
-            "TP": f"{_fmt(liq_horas.get('PDH'))}" if sesgo_mayor=="Bajista" else f"{_fmt(liq_horas.get('PDL'))}",
-            "SL": f"{_fmt(ob_h1['rango'][0])}" if ob_h1 and ob_h1["tipo"]=="oferta" else f"{_fmt(ob_h1['rango'][1])}" if ob_h1 else "—",
-        },
-        "probabilidad": "Media",
-        "comentario": "Si sostiene estructura en M15 sin devolverse con violencia.",
-    }
+# Escenario 1 — Alta probabilidad
+escenario_1 = {
+    "titulo": "Escenario 1 (Alta probabilidad)",
+    "direccion": esc1_dir,
+    "zona_de_interes": "POI H1 / M15 en zona de volumen",
+    "confirmaciones": "BOS M15 a favor de tendencia mayor + quiebre ASIA",
+    "ejecucion": {
+        "entrada": "Reentrada en M5 tras confirmación BOS M15",
+        "TP": f"{_fmt(liq_horas.get('PDH'))}" if sesgo_mayor=="Bajista" else f"{_fmt(liq_horas.get('PDL'))}",
+        "SL": f"{_fmt(ob_h1['rango'][0])}" if ob_h1 else "—",
+    },
+    "probabilidad": esc1_prob,
+    "comentario": "Escenario más probable según estructura H4 y POI H1."
+}
 
-    escenario_correccion = {
-        "dirección": esc_corr_dir,
-        "zona_de_interés": "Rechazo OB H1" if ob_h1 else "Ruptura micro M15",
-        "confirmaciones_esperadas": "BOS M15/M5 + quiebre mínimo intradía" if sesgo_mayor=="Bajista" else "BOS M15/M5 + quiebre máximo intradía",
-        "ejecución": {
-            "entrada": "Tras confirmación BOS dentro de OB" if ob_h1 else "Tras BOS en M15",
-            "TP": f"{_fmt(liq_horas.get('PDL'))}" if sesgo_mayor=="Bajista" else f"{_fmt(liq_horas.get('PDH'))}",
-            "SL": f"{_fmt(ob_h1['rango'][1])}" if ob_h1 and ob_h1["tipo"]=="oferta" else f"{_fmt(ob_h1['rango'][0])}" if ob_h1 else "—",
-        },
-        "probabilidad": esc_corr_prob,
-        "comentario": "Validación hacia demanda/oferta diaria y liquidez limpia.",
-    }
+# Escenario 2 — Probabilidad media
+escenario_2 = {
+    "titulo": "Escenario 2 (Probabilidad media)",
+    "direccion": esc2_dir,
+    "zona_de_interes": "Rechazo del OB H1 o ruptura micro en M15",
+    "confirmaciones": "BOS M15/M5 contrario a sesgo mayor",
+    "ejecucion": {
+        "entrada": "Tras confirmación en BOS M15 o ruptura del ASIA range",
+        "TP": f"{_fmt(liq_horas.get('PDL'))}" if sesgo_mayor=="Bajista" else f"{_fmt(liq_horas.get('PDH'))}",
+        "SL": f"{_fmt(ob_h1['rango'][1])}" if ob_h1 else "—",
+    },
+    "probabilidad": esc2_prob,
+    "comentario": "Escenario alternativo si se invalida estructura M15 principal."
+}
 
     conclusion_detallada = {
         "escenario_más_probable": "Corrección (bajista)" if sesgo_mayor=="Bajista" else ("Corrección (alcista)" if sesgo_mayor=="Alcista" else "Transición"),
@@ -176,19 +185,25 @@ def generar_analisis_premium(precio_actual: float) -> dict:
         f"📈 Fibo: {zonas_relevantes['nivel_fibo']}."
     )
     escenario_1_texto = (
-        f"🟢 *Escenario de continuación:*\nDirección: {escenario_continuacion['dirección']}\n"
-        f"Zona: {escenario_continuacion['zona_de_interés']}\n"
-        f"Confirmaciones: {escenario_continuacion['confirmaciones_esperadas']}\n"
-        f"TP: {escenario_continuacion['ejecución']['TP']} | SL: {escenario_continuacion['ejecución']['SL']}\n"
-        f"Probabilidad: {escenario_continuacion['probabilidad']}"
-    )
-    escenario_2_texto = (
-        f"🔴 *Escenario de corrección:*\nDirección: {escenario_correccion['dirección']}\n"
-        f"Zona: {escenario_correccion['zona_de_interés']}\n"
-        f"Confirmaciones: {escenario_correccion['confirmaciones_esperadas']}\n"
-        f"TP: {escenario_correccion['ejecución']['TP']} | SL: {escenario_correccion['ejecución']['SL']}\n"
-        f"Probabilidad: {escenario_correccion['probabilidad']}"
-    )
+    f"📈 *{escenario_1['titulo']}*\n"
+    f"Dirección: {escenario_1['direccion']}\n"
+    f"Zona: {escenario_1['zona_de_interes']}\n"
+    f"Confirmaciones: {escenario_1['confirmaciones']}\n"
+    f"TP: {escenario_1['ejecucion']['TP']} | SL: {escenario_1['ejecucion']['SL']}\n"
+    f"Probabilidad: {escenario_1['probabilidad']}\n"
+    f"{escenario_1['comentario']}"
+)
+
+escenario_2_texto = (
+    f"📉 *{escenario_2['titulo']}*\n"
+    f"Dirección: {escenario_2['direccion']}\n"
+    f"Zona: {escenario_2['zona_de_interes']}\n"
+    f"Confirmaciones: {escenario_2['confirmaciones']}\n"
+    f"TP: {escenario_2['ejecucion']['TP']} | SL: {escenario_2['ejecucion']['SL']}\n"
+    f"Probabilidad: {escenario_2['probabilidad']}\n"
+    f"{escenario_2['comentario']}"
+)
+
     conclusion_texto = (
         f"🧠 Escenario más probable: {conclusion_detallada['escenario_más_probable']}\n"
         f"Motivo: {conclusion_detallada['motivo']}\n"
