@@ -87,42 +87,53 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             }
         }
 
-    # ==========================
-    # PREMIUM — formato unificado para el bot
-    # ==========================
-    try:
-        ap = generar_analisis_premium(precio)  # <-- tu función ya genera los textos
-        # Mapeamos claves a lo que el bot espera y unificamos la envoltura
-        premium_body = {
-            "fecha": fecha,  # puedes usar ap["fecha"] si prefieres
-            "nivel_usuario": "Premium",
-            "sesión": ap.get("sesión", sesion),
-            "precio_actual": ap.get("precio_actual", precio_str),
-            "fuente_precio": fuente,
-            # Campos que el bot imprime
-            "zonas": ap.get("zonas", "—"),
-            "confirmaciones": ap.get("confirmaciones", {}),
-            "escenario_1": ap.get("escenario_1", "—"),
-            "escenario_2": ap.get("escenario_2", "—"),
-            "conclusion": ap.get("conclusion_texto", "—"),
-            "conexion_binance": BINANCE_STATUS,
-        }
-        return {"🧠 TESLABTC.KG": premium_body}
+        # ==========================
+        # PREMIUM — formato completo unificado TESLABTC
+        # ==========================
+        try:
+            ap = generar_analisis_premium(precio)  # genera todo el diccionario
 
-    except Exception as e:
-        # En error, al menos devolvemos cabecera premium con mensaje
-        return {
-            "🧠 TESLABTC.KG": {
-                "fecha": fecha,
-                "nivel_usuario": "Premium",
-                "sesión": sesion,
-                "precio_actual": precio_str,
-                "fuente_precio": fuente,
-                "estructura_detectada": estructura,
-                "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
-                "conexion_binance": BINANCE_STATUS
+            premium_body = {
+                "fecha": ap.get("fecha", fecha),
+                "nivel_usuario": ap.get("nivel_usuario", "Premium"),
+                "sesión": ap.get("sesión", sesion),
+                "precio_actual": ap.get("precio_actual", precio_str),
+                "activo": ap.get("activo", simbolo),
+                "temporalidades": ap.get("temporalidades", ["H4", "H1", "M15"]),
+                "fuente": ap.get("fuente", "💱 Fuente: Binance (precio en tiempo real)"),
+
+                # 🔹 Estructura avanzada
+                "dirección_general": ap.get("dirección_general", {}),
+                "tendencias": ap.get("tendencias", ""),
+                "estructura_global": ap.get("estructura_global", {}),
+                "zonas_relevantes": ap.get("zonas_relevantes", {}),
+                "liquidez": ap.get("liquidez", {}),
+                "confirmaciones": ap.get("confirmaciones", ""),
+                "escenario_1": ap.get("escenario_1", "—"),
+                "escenario_2": ap.get("escenario_2", "—"),
+                "conclusion_texto": ap.get("conclusion_texto", "—"),
+                "reflexion": ap.get("reflexion", ""),
+                "nota": ap.get("nota", ""),
+                "setup": ap.get("setup", "Sin setup válido detectado"),
+                "conexion_binance": BINANCE_STATUS,
             }
-        }
+
+            return {"🧠 TESLABTC.KG": premium_body}
+
+        except Exception as e:
+            # En error, devolvemos información base y log del error
+            return {
+                "🧠 TESLABTC.KG": {
+                    "fecha": fecha,
+                    "nivel_usuario": "Premium",
+                    "sesión": sesion,
+                    "precio_actual": precio_str,
+                    "fuente_precio": fuente,
+                    "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
+                    "conexion_binance": BINANCE_STATUS
+                }
+            }
+
 # ============================================================
 # Validación del bot (opcional) - expone la lógica de validación
 # ============================================================
@@ -223,6 +234,36 @@ from routers.analizar_router import router as analizar_router
 app.include_router(admin_extra_router)
 app.include_router(auth_extra_router)
 app.include_router(analizar_router)  # <- sin prefix, ya lo tiene internamente
+
+# ============================================================
+# 🔁 ALIAS DE COMPATIBILIDAD — Endpoint antiguo del BOT
+# ============================================================
+@app.get("/analisis/premium", tags=["Compatibilidad"])
+async def analisis_premium_alias():
+    """
+    Mantiene compatibilidad con el BOT TESLABTC que llama al endpoint /analisis/premium.
+    Internamente redirige al mismo análisis Premium de /analyze.
+    """
+    try:
+        from utils.price_utils import obtener_precio
+        from utils.analisis_premium import generar_analisis_premium
+
+        # Obtener precio actual desde Binance (fuente principal)
+        precio_data = obtener_precio("BTCUSDT")
+        precio = precio_data.get("precio", 0)
+
+        # Ejecutar análisis premium original
+        analisis = generar_analisis_premium(precio)
+
+        return {"🧠 TESLABTC.KG": analisis}
+
+    except Exception as e:
+        return {
+            "🧠 TESLABTC.KG": {
+                "estado": "❌",
+                "mensaje": f"Error en alias /analisis/premium: {str(e)}"
+            }
+        }
 
 # ============================================================
 # 🚀 ENTRYPOINT — EJECUCIÓN LOCAL
