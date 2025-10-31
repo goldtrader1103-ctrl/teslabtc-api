@@ -135,6 +135,7 @@ def validar_token(token: str):
     if ahora <= vto:
         return {
             "estado": "✅",
+	    "valido": True,
             "nivel": "Premium",
             "usuario": data["usuario"],
             "expira": vto.strftime("%Y-%m-%d %H:%M:%S")
@@ -152,7 +153,7 @@ def validar_token(token: str):
     # Expirado definitivo
     TOKENS.pop(token, None)
     _save_tokens()
-    return {"estado": "❌", "nivel": "Free", "mensaje": "Token expirado definitivo."}
+    return {"estado": "❌", "valido": False, "nivel": "Free", "mensaje": "Token expirado definitivo."}
 
 # ============================================================
 # ♻️ Liberar token

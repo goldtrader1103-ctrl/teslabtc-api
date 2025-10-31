@@ -43,7 +43,7 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
 
     # 🔐 Validación de token (Premium/Free)
     auth = validar_token(token) if token else None
-    nivel_usuario = auth.get("nivel", "Free") if auth and auth.get("valido") else "Free"
+    nivel_usuario = auth.get("nivel", "Free") if auth and auth.get("estado") == "✅" else "Free"
 
     # 💰 Precio y sesión
     precio_data = obtener_precio(simbolo)
