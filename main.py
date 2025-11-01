@@ -52,7 +52,7 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     precio_str = f"{precio:,.2f} USD" if precio else "⚙️ No disponible"
     sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
-    # 🧩 Estructuras para cabecera (siempre disponibles)
+    # 🧩 Estructura base
     try:
         h4 = obtener_klines_binance(simbolo, "4h", 120)
         h1 = obtener_klines_binance(simbolo, "1h", 120)
@@ -87,53 +87,49 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             }
         }
 
-        # ==========================
-        # PREMIUM — formato completo unificado TESLABTC
-        # ==========================
-        try:
-            ap = generar_analisis_premium(precio)  # genera todo el diccionario
+    # ==========================
+    # PREMIUM — acceso completo
+    # ==========================
+    try:
+        ap = generar_analisis_premium(precio)
 
-            premium_body = {
-                "fecha": ap.get("fecha", fecha),
-                "nivel_usuario": ap.get("nivel_usuario", "Premium"),
-                "sesión": ap.get("sesión", sesion),
-                "precio_actual": ap.get("precio_actual", precio_str),
-                "activo": ap.get("activo", simbolo),
-                "temporalidades": ap.get("temporalidades", ["H4", "H1", "M15"]),
-                "fuente": ap.get("fuente", "💱 Fuente: Binance (precio en tiempo real)"),
+        premium_body = {
+            "fecha": ap.get("fecha", fecha),
+            "nivel_usuario": "Premium",
+            "sesión": ap.get("sesión", sesion),
+            "precio_actual": ap.get("precio_actual", precio_str),
+            "activo": ap.get("activo", simbolo),
+            "temporalidades": ap.get("temporalidades", ["H4", "H1", "M15"]),
+            "fuente": ap.get("fuente", "💱 Fuente: Binance (precio en tiempo real)"),
+            "dirección_general": ap.get("dirección_general", {}),
+            "tendencias": ap.get("tendencias", ""),
+            "estructura_global": ap.get("estructura_global", {}),
+            "zonas_relevantes": ap.get("zonas_relevantes", {}),
+            "liquidez": ap.get("liquidez", {}),
+            "confirmaciones": ap.get("confirmaciones", ""),
+            "escenario_1": ap.get("escenario_1", "—"),
+            "escenario_2": ap.get("escenario_2", "—"),
+            "conclusion_texto": ap.get("conclusion_texto", "—"),
+            "reflexion": ap.get("reflexion", ""),
+            "nota": ap.get("nota", ""),
+            "setup": ap.get("setup", "Sin setup válido detectado"),
+            "conexion_binance": BINANCE_STATUS,
+        }
 
-                # 🔹 Estructura avanzada
-                "dirección_general": ap.get("dirección_general", {}),
-                "tendencias": ap.get("tendencias", ""),
-                "estructura_global": ap.get("estructura_global", {}),
-                "zonas_relevantes": ap.get("zonas_relevantes", {}),
-                "liquidez": ap.get("liquidez", {}),
-                "confirmaciones": ap.get("confirmaciones", ""),
-                "escenario_1": ap.get("escenario_1", "—"),
-                "escenario_2": ap.get("escenario_2", "—"),
-                "conclusion_texto": ap.get("conclusion_texto", "—"),
-                "reflexion": ap.get("reflexion", ""),
-                "nota": ap.get("nota", ""),
-                "setup": ap.get("setup", "Sin setup válido detectado"),
-                "conexion_binance": BINANCE_STATUS,
+        return {"🧠 TESLABTC.KG": premium_body}
+
+    except Exception as e:
+        return {
+            "🧠 TESLABTC.KG": {
+                "fecha": fecha,
+                "nivel_usuario": "Premium",
+                "sesión": sesion,
+                "precio_actual": precio_str,
+                "fuente_precio": fuente,
+                "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
+                "conexion_binance": BINANCE_STATUS
             }
-
-            return {"🧠 TESLABTC.KG": premium_body}
-
-        except Exception as e:
-            # En error, devolvemos información base y log del error
-            return {
-                "🧠 TESLABTC.KG": {
-                    "fecha": fecha,
-                    "nivel_usuario": "Premium",
-                    "sesión": sesion,
-                    "precio_actual": precio_str,
-                    "fuente_precio": fuente,
-                    "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
-                    "conexion_binance": BINANCE_STATUS
-                }
-            }
-
+        }
 # ============================================================
 # Validación del bot (opcional) - expone la lógica de validación
 # ============================================================

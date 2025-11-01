@@ -189,6 +189,30 @@ def generar_analisis_premium(precio_actual: float) -> dict:
         f"🎯 Recomendación: Esperar CHoCH M15 y confirmar con volumen."
     )
 
+print("DEBUG OB_H1:", ob_h1)
+print("DEBUG ofe_txt:", ofe_txt, "dem_txt:", dem_txt, "poi_txt:", poi_txt)
+
+    # === 10.5) Zonas relevantes TESLABTC ===
+    zonas_relevantes = {}
+
+    # POI H1 (Order Block principal)
+    if poi_txt and poi_txt != "—":
+        zonas_relevantes["POI H1"] = poi_txt
+
+    # Oferta / Demanda detectadas
+    if ofe_txt and ofe_txt != "—":
+        zonas_relevantes["Oferta H1"] = ofe_txt
+    if dem_txt and dem_txt != "—":
+        zonas_relevantes["Demanda H1"] = dem_txt
+
+    # Rango asiático
+    if asia and asia.get("ASIAN_LOW") and asia.get("ASIAN_HIGH"):
+        zonas_relevantes["Rango Asiático"] = f"{_fmt(asia['ASIAN_LOW'])} – {_fmt(asia['ASIAN_HIGH'])}"
+
+    # Fibo ratio (solo informativo)
+    if fib_ratio is not None:
+        zonas_relevantes["Fibonacci Ratio"] = f"{fib_ratio:.2f}"
+
     # === 11) Construcción final ===
     analisis = {
         "fecha": ahora.strftime("%Y-%m-%d %H:%M:%S"),
@@ -197,6 +221,7 @@ def generar_analisis_premium(precio_actual: float) -> dict:
         "sesión": sesion_txt,
         "precio_actual": f"{precio_actual:,.2f} USD",
         "temporalidades": ["H4", "H1", "M15", "M5"],
+        "zonas_relevantes": zonas_relevantes,
         "confirmaciones": confirmaciones_texto,
         "setup": setup_texto,
         "escenario_1": escenario_1_texto,
