@@ -182,34 +182,24 @@ def generar_analisis_premium(precio_actual: float) -> dict:
         f"Probabilidad: {esc2_prob}"
     )
 
-    # === 10) Conclusión ===
+        # === 10) Conclusión ===
     conclusion_texto = (
         f"🧠 Escenario más probable: {'Corrección (bajista)' if sesgo_mayor == 'Bajista' else 'Corrección (alcista)' if sesgo_mayor == 'Alcista' else 'Transición'}\n"
         f"Motivo: Estructura H4 {sesgo_mayor.lower()} + OB H1 {'mitigado' if (ob_h1 and ob_h1['mitigado']) else 'activo'}.\n"
         f"🎯 Recomendación: Esperar CHoCH M15 y confirmar con volumen."
     )
 
-print("DEBUG OB_H1:", ob_h1)
-print("DEBUG ofe_txt:", ofe_txt, "dem_txt:", dem_txt, "poi_txt:", poi_txt)
-
     # === 10.5) Zonas relevantes TESLABTC ===
     zonas_relevantes = {}
 
-    # POI H1 (Order Block principal)
     if poi_txt and poi_txt != "—":
         zonas_relevantes["POI H1"] = poi_txt
-
-    # Oferta / Demanda detectadas
     if ofe_txt and ofe_txt != "—":
         zonas_relevantes["Oferta H1"] = ofe_txt
     if dem_txt and dem_txt != "—":
         zonas_relevantes["Demanda H1"] = dem_txt
-
-    # Rango asiático
     if asia and asia.get("ASIAN_LOW") and asia.get("ASIAN_HIGH"):
         zonas_relevantes["Rango Asiático"] = f"{_fmt(asia['ASIAN_LOW'])} – {_fmt(asia['ASIAN_HIGH'])}"
-
-    # Fibo ratio (solo informativo)
     if fib_ratio is not None:
         zonas_relevantes["Fibonacci Ratio"] = f"{fib_ratio:.2f}"
 
@@ -239,3 +229,4 @@ print("DEBUG ofe_txt:", ofe_txt, "dem_txt:", dem_txt, "poi_txt:", poi_txt)
     }
 
     return analisis
+
