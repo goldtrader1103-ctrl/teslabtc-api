@@ -189,8 +189,8 @@ def generar_analisis_premium(precio_actual: float) -> dict:
         f"🎯 Recomendación: Esperar CHoCH M15 y confirmar con volumen."
     )
 
-print("DEBUG OB_H1:", ob_h1)
-print("DEBUG ofe_txt:", ofe_txt, "dem_txt:", dem_txt, "poi_txt:", poi_txt)
+    print("DEBUG OB_H1:", ob_h1)
+    print("DEBUG ofe_txt:", ofe_txt, "dem_txt:", dem_txt, "poi_txt:", poi_txt)
 
     # === 10.5) Zonas relevantes TESLABTC ===
     zonas_relevantes = {}

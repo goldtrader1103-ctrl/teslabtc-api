@@ -14,6 +14,7 @@ from utils.estructura_utils import evaluar_estructura, definir_escenarios
 from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
 from utils.analisis_premium import generar_analisis_premium
 from utils.token_utils import generar_token, validar_token, verificar_vencimientos, liberar_token, listar_tokens
+from utils.intelligent_formatter import construir_mensaje_operativo
 
 # ============================================================
 app = FastAPI(title="TESLABTC.KG", description="API TESLABTC.KG", version="4.3")
@@ -86,7 +87,6 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
                 "conexion_binance": BINANCE_STATUS
             }
         }
-
     # ==========================
     # PREMIUM — acceso completo
     # ==========================
@@ -116,6 +116,10 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             "conexion_binance": BINANCE_STATUS,
         }
 
+        # 🧠 Integración del formato inteligente TESLA
+        mensaje_formateado = construir_mensaje_operativo(ap)
+        premium_body["mensaje_formateado"] = mensaje_formateado
+
         return {"🧠 TESLABTC.KG": premium_body}
 
     except Exception as e:
@@ -130,6 +134,23 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
                 "conexion_binance": BINANCE_STATUS
             }
         }
+# ============================================================
+# 📘 ENDPOINT EDUCATIVO — CONCEPTOS TESLA
+# ============================================================
+from utils.conceptos_tesla import obtener_concepto
+
+@app.get("/concepto")
+def get_concepto(nombre: str):
+    """
+    Devuelve la definición educativa de un término Tesla Strategy.
+    Ejemplo: /concepto?nombre=bos
+    """
+    try:
+        concepto = obtener_concepto(nombre)
+        return {"TESLABTC.KG - Concepto": concepto}
+    except Exception as e:
+        return {"error": f"❌ Error en /concepto: {str(e)}"}
+
 # ============================================================
 # Validación del bot (opcional) - expone la lógica de validación
 # ============================================================
