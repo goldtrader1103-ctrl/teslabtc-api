@@ -14,7 +14,11 @@ from utils.estructura_utils import evaluar_estructura, definir_escenarios
 from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
 from utils.analisis_premium import generar_analisis_premium
 from utils.token_utils import generar_token, validar_token, verificar_vencimientos, liberar_token, listar_tokens
-from utils.intelligent_formatter import construir_mensaje_operativo
+from utils.intelligent_formatter import (
+    construir_mensaje_operativo,
+    construir_mensaje_free,
+    limpiar_texto
+)
 
 
 # ============================================================
@@ -42,6 +46,12 @@ REFLEXIONES = [
 @app.get("/analyze", tags=["Análisis TESLABTC"])
 async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
+
+    # 🧩 Importar los formateadores (si no están arriba en el archivo)
+    from utils.intelligent_formatter import (
+        construir_mensaje_free,
+        construir_mensaje_operativo,
+    )
 
     # 🔐 Validación de token (Premium/Free)
     auth = validar_token(token) if token else None
@@ -76,62 +86,73 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     # FREE — acceso limitado
     # ==========================
     if nivel_usuario.lower() == "free":
-        return {
-            "🧠 TESLABTC.KG": {
-                "fecha": fecha,
-                "nivel_usuario": "Free",
-                "sesión": sesion,
-                "precio_actual": precio_str,
-                "fuente_precio": fuente,
-                "estructura_detectada": estructura,
-                "mensaje": "🧩 Nivel Free — acceso limitado. Actualiza a Premium para escenarios y alertas BOS.",
-                "conexion_binance": BINANCE_STATUS
-            }
-        }
-           # ==========================
-    # PREMIUM — acceso completo
-    # ==========================
-    try:
-        # ⚙️ Generar análisis completo desde analisis_premium.py
-        ap_full = generar_analisis_premium(simbolo)
-        ap = ap_full.get("🧠 TESLABTC.KG", ap_full)
-
-
-        # 🧩 Estructura del cuerpo Premium
-        premium_body = {
-            "fecha": ap.get("fecha", fecha),
-            "nivel_usuario": "Premium",
-            "sesión": ap.get("sesion", sesion),
-            "activo": ap.get("activo", simbolo),
-            "precio_actual": ap.get("precio_actual", precio_str),
+        body_free = {
+            "fecha": fecha,
+            "nivel_usuario": "Free",
+            "sesión": sesion,
+            "precio_actual": precio_str,
             "fuente_precio": fuente,
-            "estructura_detectada": ap.get("estructura_detectada", {}),
-            "zonas_detectadas": ap.get("zonas_detectadas", {}),
-            "confirmaciones": ap.get("confirmaciones", {}),
-            "probabilidad": ap.get("probabilidad", "—"),
-            "setup_tesla": ap.get("setup_tesla", {}),
-            "conclusion_general": ap.get("conclusion_general", "—"),
+            "estructura_detectada": estructura,
             "conexion_binance": BINANCE_STATUS,
         }
 
-        # 🧠 Integración con el formateador inteligente
-        premium_body["mensaje_formateado"] = construir_mensaje_operativo(ap)
+        # 🧠 Generar formato explicativo estilo TESLABTC
+        body_free["mensaje_formateado"] = construir_mensaje_free(body_free)
 
-        # ✅ Retorno final para el bot
-        return {"🧠 TESLABTC.KG": premium_body}
+        return {"🧠 TESLABTC.KG": body_free}
 
-    except Exception as e:
-        return {
-            "🧠 TESLABTC.KG": {
-                "fecha": fecha,
+
+    # ==========================
+    # PREMIUM — acceso completo
+    # ==========================
+    else:
+        try:
+            # ⚙️ Generar análisis completo desde analisis_premium.py
+            ap_full = generar_analisis_premium(simbolo)
+            ap = ap_full.get("🧠 TESLABTC.KG", ap_full)
+
+            # 🧩 Estructura del cuerpo Premium
+                       setup_info = ap.get("setup_tesla", {})
+            setup_flag = setup_info.get("activo", False)
+
+            premium_body = {
+                "fecha": ap.get("fecha", fecha),
                 "nivel_usuario": "Premium",
-                "sesión": sesion,
-                "precio_actual": precio_str,
+                "sesión": ap.get("sesion", sesion),
+                "activo": ap.get("activo", simbolo),
+                "precio_actual": ap.get("precio_actual", precio_str),
                 "fuente_precio": fuente,
-                "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
+                "estructura_detectada": ap.get("estructura_detectada", {}),
+                "zonas_detectadas": ap.get("zonas_detectadas", {}),
+                "confirmaciones": ap.get("confirmaciones", {}),
+                "probabilidad": ap.get("probabilidad", "—"),
+                "setup_tesla": setup_info,
+                "setup_flag": setup_flag,   # 👈 NUEVO CAMPO
+                "conclusion_general": ap.get("conclusion_general", "—"),
                 "conexion_binance": BINANCE_STATUS,
             }
-        }
+
+
+            # 🧠 Integración con el formateador inteligente
+            premium_body["mensaje_formateado"] = construir_mensaje_operativo(premium_body)
+
+
+
+            # ✅ Retorno final para el bot
+            return {"🧠 TESLABTC.KG": premium_body}
+
+        except Exception as e:
+            return {
+                "🧠 TESLABTC.KG": {
+                    "fecha": fecha,
+                    "nivel_usuario": "Premium",
+                    "sesión": sesion,
+                    "precio_actual": precio_str,
+                    "fuente_precio": fuente,
+                    "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
+                    "conexion_binance": BINANCE_STATUS,
+                }
+            }
 
 # ============================================================
 # 🔍 FUNCIÓN AUXILIAR PARA BUSCAR CONCEPTOS
