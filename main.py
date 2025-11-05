@@ -16,6 +16,7 @@ from utils.analisis_premium import generar_analisis_premium
 from utils.token_utils import generar_token, validar_token, verificar_vencimientos, liberar_token, listar_tokens
 from utils.intelligent_formatter import construir_mensaje_operativo
 
+
 # ============================================================
 app = FastAPI(title="TESLABTC.KG", description="API TESLABTC.KG", version="4.3")
 app.add_middleware(GZipMiddleware, minimum_size=600)
@@ -87,39 +88,36 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
                 "conexion_binance": BINANCE_STATUS
             }
         }
-    # ==========================
+           # ==========================
     # PREMIUM — acceso completo
     # ==========================
     try:
-        ap = generar_analisis_premium(precio)
+        # ⚙️ Generar análisis completo desde analisis_premium.py
+        ap_full = generar_analisis_premium(simbolo)
+        ap = ap_full.get("🧠 TESLABTC.KG", ap_full)
 
+
+        # 🧩 Estructura del cuerpo Premium
         premium_body = {
             "fecha": ap.get("fecha", fecha),
             "nivel_usuario": "Premium",
-            "sesión": ap.get("sesión", sesion),
-            "precio_actual": ap.get("precio_actual", precio_str),
+            "sesión": ap.get("sesion", sesion),
             "activo": ap.get("activo", simbolo),
-            "temporalidades": ap.get("temporalidades", ["H4", "H1", "M15"]),
-            "fuente": ap.get("fuente", "💱 Fuente: Binance (precio en tiempo real)"),
-            "dirección_general": ap.get("dirección_general", {}),
-            "tendencias": ap.get("tendencias", ""),
-            "estructura_global": ap.get("estructura_global", {}),
-            "zonas_relevantes": ap.get("zonas_relevantes", {}),
-            "liquidez": ap.get("liquidez", {}),
-            "confirmaciones": ap.get("confirmaciones", ""),
-            "escenario_1": ap.get("escenario_1", "—"),
-            "escenario_2": ap.get("escenario_2", "—"),
-            "conclusion_texto": ap.get("conclusion_texto", "—"),
-            "reflexion": ap.get("reflexion", ""),
-            "nota": ap.get("nota", ""),
-            "setup": ap.get("setup", "Sin setup válido detectado"),
+            "precio_actual": ap.get("precio_actual", precio_str),
+            "fuente_precio": fuente,
+            "estructura_detectada": ap.get("estructura_detectada", {}),
+            "zonas_detectadas": ap.get("zonas_detectadas", {}),
+            "confirmaciones": ap.get("confirmaciones", {}),
+            "probabilidad": ap.get("probabilidad", "—"),
+            "setup_tesla": ap.get("setup_tesla", {}),
+            "conclusion_general": ap.get("conclusion_general", "—"),
             "conexion_binance": BINANCE_STATUS,
         }
 
-        # 🧠 Integración del formato inteligente TESLA
-        mensaje_formateado = construir_mensaje_operativo(ap)
-        premium_body["mensaje_formateado"] = mensaje_formateado
+        # 🧠 Integración con el formateador inteligente
+        premium_body["mensaje_formateado"] = construir_mensaje_operativo(ap)
 
+        # ✅ Retorno final para el bot
         return {"🧠 TESLABTC.KG": premium_body}
 
     except Exception as e:
@@ -131,23 +129,62 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
                 "precio_actual": precio_str,
                 "fuente_precio": fuente,
                 "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
-                "conexion_binance": BINANCE_STATUS
+                "conexion_binance": BINANCE_STATUS,
             }
         }
+
+# ============================================================
+# 🔍 FUNCIÓN AUXILIAR PARA BUSCAR CONCEPTOS
+# ============================================================
+def obtener_concepto(nombre: str):
+    from utils.conceptos_tesla import CONCEPTOS
+    for clave, valor in CONCEPTOS.items():
+        if clave.lower() == nombre.lower():
+            return valor
+    return {
+        "titulo": "❌ No encontrado",
+        "definicion": "El concepto solicitado no está disponible en la base actual.",
+        "ejemplo": ""
+    }
+
 # ============================================================
 # 📘 ENDPOINT EDUCATIVO — CONCEPTOS TESLA
 # ============================================================
-from utils.conceptos_tesla import obtener_concepto
-
 @app.get("/concepto")
 def get_concepto(nombre: str):
     """
-    Devuelve la definición educativa de un término Tesla Strategy.
-    Ejemplo: /concepto?nombre=bos
+    Devuelve la definición de un concepto individual o la lista completa.
+    Ejemplo:
+      /concepto?nombre=bos
+      /concepto?nombre=todos
     """
     try:
-        concepto = obtener_concepto(nombre)
-        return {"TESLABTC.KG - Concepto": concepto}
+        from utils.conceptos_tesla import CONCEPTOS
+
+        # ✅ Si es una lista (como en tu JSON actual)
+        if isinstance(CONCEPTOS, list):
+            conceptos_lista = CONCEPTOS
+        else:
+            conceptos_lista = list(CONCEPTOS.values())
+
+        # ✅ Mostrar todos
+        if nombre.lower() == "todos":
+            return {"TESLABTC.KG - Concepto": conceptos_lista}
+
+        # ✅ Buscar por nombre
+        for c in conceptos_lista:
+            if c.get("nombre", "").lower() == nombre.lower():
+                return {"TESLABTC.KG - Concepto": c}
+
+        # ❌ No encontrado
+        return {
+            "TESLABTC.KG - Concepto": {
+                "titulo": "No encontrado",
+                "definicion": "El concepto solicitado no está registrado.",
+                "ejemplo": ""
+            }
+        }
+
     except Exception as e:
         return {"error": f"❌ Error en /concepto: {str(e)}"}
 
@@ -262,15 +299,10 @@ async def analisis_premium_alias():
     Internamente redirige al mismo análisis Premium de /analyze.
     """
     try:
-        from utils.price_utils import obtener_precio
         from utils.analisis_premium import generar_analisis_premium
 
-        # Obtener precio actual desde Binance (fuente principal)
-        precio_data = obtener_precio("BTCUSDT")
-        precio = precio_data.get("precio", 0)
-
-        # Ejecutar análisis premium original
-        analisis = generar_analisis_premium(precio)
+        # ✅ Ejecutar análisis premium normal usando símbolo
+        analisis = generar_analisis_premium("BTCUSDT")
 
         return {"🧠 TESLABTC.KG": analisis}
 

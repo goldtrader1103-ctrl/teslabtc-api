@@ -87,12 +87,13 @@ def sesion_ny_activa():
 def obtener_klines_binance(simbolo="BTCUSDT", intervalo="1h", limite=120):
     """
     🔁 Sistema híbrido:
-      1️⃣ Binance Global
-      2️⃣ Binance Vision (si Global bloquea)
-      3️⃣ CoinGecko (fallback)
+        1️⃣ Binance Global
+        2️⃣ Binance Vision (si Global bloquea)
+        3️⃣ CoinGecko (fallback)
     Devuelve lista de velas en formato dict y actualiza BINANCE_STATUS.
     """
     global BINANCE_STATUS
+    simbolo = str(simbolo).upper()  # ✅ Asegura formato correcto
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",

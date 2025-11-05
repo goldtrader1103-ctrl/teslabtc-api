@@ -1,99 +1,100 @@
+# 🔰 INICIO DE BLOQUE (intelligent_formatter.py)
 # ============================================================
-# 🧠 TESLABTC.KG — INTELLIGENT FORMATTER MODULE
-# Genera conclusiones precisas, amigables y coherentes
+# 🧠 TESLABTC.KG — FORMATEADOR INTELIGENTE DE TEXTO
+# ============================================================
+# Limpia acentos, corrige UTF-8 y da formato legible a los reportes
+# enviados por la API y el bot, incluyendo las confirmaciones del setup.
 # ============================================================
 
-from datetime import datetime
+import unicodedata
+import json
 
-def construir_mensaje_operativo(escenario: dict) -> str:
+# ------------------------------------------------------------
+# 🧹 LIMPIEZA GENERAL DE TEXTO
+# ------------------------------------------------------------
+def limpiar_texto(valor: str) -> str:
+    """Normaliza y limpia texto sin eliminar emojis."""
+    texto = unicodedata.normalize("NFKC", valor)
+    reemplazos = {
+        "Ã³": "ó", "Ã¡": "á", "Ã©": "é", "Ã­": "í", "Ãº": "ú", "Ã±": "ñ",
+        "â": "'", "â": "-", "â": "\"", "â": "\"", "â¢": "•",
+        "â": "✔️", "â": "❌", "â¡": "⚡", "â": "⚠️",
+        "â": "✈️", "â": "☕", "â³": "⏳", "â": "♂️",
+        "â": "♀️", "Â": "", "â¦": "…"
+    }
+    for k, v in reemplazos.items():
+        texto = texto.replace(k, v)
+    return texto.encode("utf-8", errors="ignore").decode("utf-8", errors="ignore").strip()
+
+# ------------------------------------------------------------
+# 🎨 CONSTRUCCIÓN DE MENSAJE OPERATIVO PREMIUM
+# ------------------------------------------------------------
+def construir_mensaje_operativo(data: dict) -> str:
     """
-    Recibe la data cruda del análisis (estructuras, BOS, POI, etc.)
-    y devuelve un texto listo para mostrar al usuario.
+    Convierte el análisis dict de la API en texto formateado para el bot.
+    Incluye todas las confirmaciones con ✅ o ❌.
     """
+    try:
+        fecha = data.get("fecha", "—")
+        sesion = data.get("sesion", "—")
+        activo = data.get("activo", "BTCUSDT")
+        precio = data.get("precio_actual", "—")
+        prob = data.get("probabilidad", "—")
+        setup = data.get("setup_tesla", {})
+        confs = data.get("confirmaciones", {})
+        conclusion = data.get("conclusion_general", "—")
 
-    # 🕒 Sesión y hora
-    hora = datetime.now().strftime("%H:%M")
-    sesion = escenario.get("sesion", "Desconocida")
+        # 🔹 Formato de confirmaciones
+        confs_txt = "\n".join([f"• {k}: {v}" for k, v in confs.items()])
 
-    # 📈 Tendencias
-    tendencia_h1 = escenario.get("tendencia_h1", "Indefinida")
-    tendencia_m15 = escenario.get("tendencia_m15", "Indefinida")
-
-    # 📊 Elementos estructurales
-    bos = escenario.get("bos", "Sin BOS")
-    poi = escenario.get("poi", {})
-    fvg = escenario.get("fvg", None)
-    volumen = escenario.get("volumen", 0.0)
-
-    # ============================================================
-    # 🧩 Lógica contextual (precisión y coherencia)
-    # ============================================================
-    direccion = "alcista" if tendencia_h1 == "alcista" else "bajista"
-    direccion_icon = "📈" if direccion == "alcista" else "📉"
-
-    mensaje = f"{direccion_icon} *ESCENARIO TESLABTC.KG — Sesión {sesion} ({hora})*\n\n"
-    mensaje += f"🧭 **Dirección general:** {tendencia_h1.upper()}\n"
-    mensaje += f"🪞 **Tendencia interna (M15):** {tendencia_m15}\n"
-
-    # POI o FVG
-    if poi:
-        mensaje += f"📍 **Zona de interés:** {poi.get('nombre', 'POI detectado')} ({poi.get('nivel', 'sin nivel')})\n"
-    elif fvg:
-        mensaje += f"⚡ **FVG detectado:** {fvg}\n"
-    else:
-        mensaje += f"⚠️ Sin zonas activas relevantes.\n"
-
-    # BOS
-    if bos.lower() == "alcista":
-        mensaje += "🔹 Se confirma un **BOS alcista**, posible continuación del impulso.\n"
-    elif bos.lower() == "bajista":
-        mensaje += "🔹 Se confirma un **BOS bajista**, posible inicio de corrección o retroceso.\n"
-    else:
-        mensaje += "🔸 No hay BOS confirmado en el marco operativo.\n"
-
-    # ============================================================
-    # 🎯 Conclusión final (humanizada e inteligente)
-    # ============================================================
-    if tendencia_h1 == tendencia_m15 == bos:
-        conclusion = (
-            "✅ *Alta confluencia:* el precio mantiene alineación estructural en H1 y M15. "
-            "Podría darse una entrada operativa tras retroceso controlado."
-        )
-    elif tendencia_h1 != tendencia_m15:
-        conclusion = (
-            "⚠️ *Contradicción temporal:* la estructura interna no acompaña la tendencia general. "
-            "Esperar confirmación antes de ejecutar cualquier entrada."
-        )
-    elif volumen < 0.5:
-        conclusion = (
-            "💤 *Volumen débil:* el movimiento actual carece de fuerza institucional. "
-            "Evita anticipar rupturas sin validación adicional."
-        )
-    else:
-        conclusion = (
-            "🤔 *Escenario neutro:* aún no hay suficientes confirmaciones para una dirección clara. "
-            "Monitorear zonas marcadas."
+        # 🔹 Formato de setup
+        setup_txt = (
+            f"📍 Zona de entrada: {setup.get('zona_entrada','—')}\n"
+            f"⛔ SL: {setup.get('sl','—')}\n"
+            f"🎯 TP1: {setup.get('tp1','—')}\n"
+            f"🎯 TP2: {setup.get('tp2','—')}\n"
+            f"🎯 TP3: {setup.get('tp3','—')}\n"
+            f"🧭 Observación: {setup.get('observacion','—')}"
         )
 
-    # ============================================================
-    # 📊 Coherencia e interpretación
-    # ============================================================
-    confiabilidad = _calcular_confiabilidad(escenario)
-    mensaje += f"\n🎯 **Nivel de confiabilidad:** {confiabilidad}\n\n"
-    mensaje += f"📘 *Conclusión TESLABTC.KG:*\n{conclusion}"
+        texto = (
+            f"📋 *REPORTE TESLABTC A.P. – Sesión NY*\n"
+            f"📅 {fecha}\n"
+            f"💰 {activo}\n"
+            f"🕒 {sesion}\n"
+            f"💵 {precio}\n"
+            f"📊 Probabilidad: *{prob}*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ *CONFIRMACIONES TESLA:*\n{confs_txt}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 *SETUP TESLA:*\n{setup_txt}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🧠 *CONCLUSIÓN:*\n{conclusion}\n\n"
+            "📓 El mercado recompensa la disciplina, no la emoción."
+        )
 
-    return mensaje
+        return limpiar_texto(texto)
+    except Exception as e:
+        return f"⚠️ Error al formatear mensaje: {e}"
+
+# 🔰 FIN DE BLOQUE
 
 
-def _calcular_confiabilidad(data: dict) -> str:
-    """Calcula un índice simple de coherencia estructural."""
-    score = 0
-    if data.get("tendencia_h1") == data.get("tendencia_m15"): score += 0.3
-    if data.get("bos") == data.get("tendencia_m15"): score += 0.3
-    if data.get("poi"): score += 0.2
-    if data.get("sesion") == "NY": score += 0.2
-    total = round(score, 2)
-
-    if total >= 0.8: return "Alta ✅"
-    elif total >= 0.5: return "Media ⚠️"
-    else: return "Baja ❌"
+# ============================================================
+# 🧪 PRUEBA LOCAL
+# ============================================================
+if __name__ == "__main__":
+    ejemplo = {
+        "fecha": "04/11/2025 15:40:00",
+        "activo": "BTCUSDT",
+        "sesion": "New York",
+        "precio_actual": "100,428 USD",
+        "direccion_general": "Alcista (H1 y M15)",
+        "zonas_detectadas": {"PDH": "101,200", "PDL": "99,800"},
+        "confirmaciones_detectadas": {"BOS": "✔️", "Barrida": "✔️", "OB válido": "❌"},
+        "escenario_1": "Compra hacia PDH",
+        "escenario_2": "Venta hacia PDL",
+        "conclusion": "Esperar reacción en OB H1 con volumen.",
+        "fuente_precio": "Binance REST"
+    }
+    print(construir_mensaje_operativo(ejemplo))
