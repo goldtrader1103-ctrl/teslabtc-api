@@ -130,3 +130,153 @@ def definir_escenarios(estados):
         "gestión": "Evitar operar sin gatillo validado.",
         "mensaje": "Estructuras no alineadas o datos insuficientes."
     }
+# ============================================================
+# 🔍 DETECCIÓN DE BOS Y OB (Soporte para analisis_estructura.py)
+# ============================================================
+
+def detectar_bos(klines):
+    """
+    Detecta un BOS (Break of Structure) simple:
+    - Si el cierre actual supera el último máximo → BOS alcista
+    - Si el cierre actual rompe el último mínimo → BOS bajista
+    Retorna: {"bos": True/False, "tipo": "alcista"/"bajista"/None}
+    """
+    try:
+        if not klines or len(klines) < 10:
+            return {"bos": False, "tipo": None}
+
+        closes = [float(k["close"]) for k in klines[-20:]] if isinstance(klines[0], dict) else [float(k[4]) for k in klines[-20:]]
+        highs = [float(k["high"]) for k in klines[-20:]] if isinstance(klines[0], dict) else [float(k[2]) for k in klines[-20:]]
+        lows = [float(k["low"]) for k in klines[-20:]] if isinstance(klines[0], dict) else [float(k[3]) for k in klines[-20:]]
+
+        last_close = closes[-1]
+        prev_high = max(highs[:-1])
+        prev_low = min(lows[:-1])
+
+        if last_close > prev_high:
+            return {"bos": True, "tipo": "alcista"}
+        elif last_close < prev_low:
+            return {"bos": True, "tipo": "bajista"}
+        else:
+            return {"bos": False, "tipo": None}
+    except Exception:
+        return {"bos": False, "tipo": None}
+
+
+def detectar_ob(klines):
+    """
+    Detecta un Order Block simple:
+    - Busca la última vela con cuerpo grande y dirección opuesta al impulso actual.
+    Retorna: {"ob": True/False, "tipo": "oferta"/"demanda"/None}
+    """
+    try:
+        if not klines or len(klines) < 10:
+            return {"ob": False, "tipo": None}
+
+        # Detectar cuerpo promedio
+        if isinstance(klines[0], dict):
+            bodies = [abs(float(k["close"]) - float(k["open"])) for k in klines[-30:]]
+        else:
+            bodies = [abs(float(k[4]) - float(k[1])) for k in klines[-30:]]
+
+        avg_body = sum(bodies) / len(bodies)
+        threshold = avg_body * 1.5
+
+        for k in reversed(klines[-15:]):
+            if isinstance(k, dict):
+                o, c = float(k["open"]), float(k["close"])
+            else:
+                o, c = float(k[1]), float(k[4])
+            body_size = abs(c - o)
+
+            # Si el cuerpo es grande, consideramos OB
+            if body_size > threshold:
+                tipo = "demanda" if c > o else "oferta"
+                return {"ob": True, "tipo": tipo}
+
+        return {"ob": False, "tipo": None}
+    except Exception:
+        return {"ob": False, "tipo": None}
+# ============================================================
+# 💬 CONTEXTO AUTOMÁTICO TESLABTC — frases dinámicas (v3.6.2)
+# ============================================================
+import random
+
+def generar_contexto_auto(tendencia: str, bos_tipo: str | None, ob_tipo: str | None, sesion_activa: bool) -> str:
+    """
+    Genera un contexto narrativo aleatorio según el estado estructural.
+    Retorna una frase coherente y diferente en cada análisis.
+    """
+    try:
+        frases = []
+
+        # 🔻 Contextos bajistas
+        if tendencia == "bajista":
+            frases += [
+                "El precio mantiene una estructura bajista clara con presión de venta institucional.",
+                "Se observa continuidad bajista tras reacción en zona de oferta activa.",
+                "Mercado dominado por vendedores; posible continuación hacia mínimos anteriores.",
+                "La estructura sigue siendo bajista, con liquidez limpia pendiente por debajo del PDL.",
+                "Presión bajista sólida; el precio se encuentra bajo la media clave y respeta la estructura macro."
+            ]
+
+            if bos_tipo == "bajista":
+                frases += [
+                    "BOS bajista confirmado, reforzando la intención de continuidad descendente.",
+                    "Nueva ruptura de estructura a la baja, alineada con la macro dirección.",
+                ]
+
+            if ob_tipo == "oferta":
+                frases += [
+                    "Reacción técnica en OB de oferta; el impulso vendedor domina la sesión.",
+                    "El precio rechazó con fuerza el OB de oferta más reciente.",
+                ]
+
+        # 🔺 Contextos alcistas
+        elif tendencia == "alcista":
+            frases += [
+                "El mercado mantiene estructura alcista y los compradores controlan el impulso.",
+                "Se consolida una tendencia alcista estable con mínimos ascendentes.",
+                "El precio muestra fuerza compradora y sostiene la estructura positiva.",
+                "Presión alcista sostenida tras mitigación de zona de demanda clave.",
+                "Estructura saludable con BOS alcista confirmado y demanda respetada."
+            ]
+
+            if bos_tipo == "alcista":
+                frases += [
+                    "BOS alcista reciente; los compradores recuperan el control del movimiento.",
+                    "Confirmación de ruptura al alza que valida continuidad hacia niveles superiores.",
+                ]
+
+            if ob_tipo == "demanda":
+                frases += [
+                    "Reacción positiva en OB de demanda, validando absorción de liquidez bajista.",
+                    "Zona de demanda respetada con alto volumen; continuidad esperada.",
+                ]
+
+        # 🔸 Contextos neutros / rango
+        else:
+            frases += [
+                "Mercado lateral; sin claridad direccional hasta ruptura limpia.",
+                "Estructura neutral entre oferta y demanda; preferible esperar confirmaciones.",
+                "Consolidación sin dirección definida; se sugiere paciencia operativa.",
+                "Movimiento rango con baja volatilidad; posible expansión próxima.",
+            ]
+
+        # ⏰ Añadir contexto de sesión
+        if sesion_activa:
+            frases += [
+                "La sesión de Nueva York está activa, incrementando la volatilidad esperada.",
+                "Sesión NY abierta; posibles manipulaciones antes del movimiento real.",
+                "Con la apertura de NY, se esperan movimientos institucionales direccionales.",
+            ]
+        else:
+            frases += [
+                "Fuera de la sesión NY, el volumen institucional se mantiene reducido.",
+                "El mercado opera con bajo impulso fuera de la sesión de Nueva York.",
+            ]
+
+        # 🎲 Devolver una frase aleatoria
+        return random.choice(frases)
+    except Exception:
+        return "Contexto general no disponible."

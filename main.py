@@ -20,7 +20,6 @@ from utils.intelligent_formatter import (
     limpiar_texto
 )
 
-
 # ============================================================
 app = FastAPI(title="TESLABTC.KG", description="API TESLABTC.KG", version="4.3")
 app.add_middleware(GZipMiddleware, minimum_size=600)
@@ -47,13 +46,13 @@ REFLEXIONES = [
 async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
 
-    # 🧩 Importar los formateadores (si no están arriba en el archivo)
+    # 🧩 Importar los formateadores
     from utils.intelligent_formatter import (
         construir_mensaje_free,
         construir_mensaje_operativo,
     )
 
-    # 🔐 Validación de token (Premium/Free)
+    # 🔐 Validación de token
     auth = validar_token(token) if token else None
     nivel_usuario = auth.get("nivel", "Free") if auth and auth.get("estado") == "✅" else "Free"
 
@@ -64,7 +63,9 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     precio_str = f"{precio:,.2f} USD" if precio else "⚙️ No disponible"
     sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
-    # 🧩 Estructura base
+    # ==============================================
+    # 🧩 Estructura Base (seguridad por si falla)
+    # ==============================================
     try:
         h4 = obtener_klines_binance(simbolo, "4h", 120)
         h1 = obtener_klines_binance(simbolo, "1h", 120)
@@ -82,9 +83,9 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
         "M15 (reacción)": e_m15
     }
 
-    # ==========================
-    # FREE — acceso limitado
-    # ==========================
+    # ============================================================
+    # FREE — versión resumida
+    # ============================================================
     if nivel_usuario.lower() == "free":
         body_free = {
             "fecha": fecha,
@@ -96,25 +97,24 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             "conexion_binance": BINANCE_STATUS,
         }
 
-        # 🧠 Generar formato explicativo estilo TESLABTC
         body_free["mensaje_formateado"] = construir_mensaje_free(body_free)
-
         return {"🧠 TESLABTC.KG": body_free}
 
-
-    # ==========================
-    # PREMIUM — acceso completo
-    # ==========================
+    # ============================================================
+    # PREMIUM — versión completa
+    # ============================================================
     else:
         try:
-            # ⚙️ Generar análisis completo desde analisis_premium.py
+            # ⚙️ Análisis Premium base
             ap_full = generar_analisis_premium(simbolo)
             ap = ap_full.get("🧠 TESLABTC.KG", ap_full)
 
-            # 🧩 Estructura del cuerpo Premium
-                       setup_info = ap.get("setup_tesla", {})
-            setup_flag = setup_info.get("activo", False)
+            # 🔁 INTEGRAR ESTRUCTURA REAL MULTI-TF
+            from utils.analisis_estructura import analizar_estructura_general
+            estructura_real = analizar_estructura_general(simbolo)
+            ap.update(estructura_real)
 
+            # 🧩 Estructura Premium completa
             premium_body = {
                 "fecha": ap.get("fecha", fecha),
                 "nivel_usuario": "Premium",
@@ -126,19 +126,14 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
                 "zonas_detectadas": ap.get("zonas_detectadas", {}),
                 "confirmaciones": ap.get("confirmaciones", {}),
                 "probabilidad": ap.get("probabilidad", "—"),
-                "setup_tesla": setup_info,
-                "setup_flag": setup_flag,   # 👈 NUEVO CAMPO
+                "setup_tesla": ap.get("setup_tesla", {}),
                 "conclusion_general": ap.get("conclusion_general", "—"),
+                "contexto_general": ap.get("contexto_general", "—"),
                 "conexion_binance": BINANCE_STATUS,
             }
 
-
             # 🧠 Integración con el formateador inteligente
             premium_body["mensaje_formateado"] = construir_mensaje_operativo(premium_body)
-
-
-
-            # ✅ Retorno final para el bot
             return {"🧠 TESLABTC.KG": premium_body}
 
         except Exception as e:
