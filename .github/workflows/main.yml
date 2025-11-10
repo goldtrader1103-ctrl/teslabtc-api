@@ -1,38 +1,42 @@
 # ============================================================
-# 🚀 TESLABTC.KG — Despliegue automático a Fly.io (v5.2.0)
+# 🚀 TESLABTC.KG — Flujo de CI sin despliegue automático (v5.2.0)
 # ============================================================
 
-name: Despliegue automático en Fly.io
+name: 🚫 Despliegue manual en Fly.io (control local)
 
 on:
-  # 1️⃣ Cada vez que hagas un push a la rama principal
+  # 1️⃣ Cada vez que hagas un push a la rama principal (solo validación)
   push:
     branches:
       - main
 
-  # 2️⃣ Permite ejecutarlo manualmente desde la pestaña "Comportamiento"
+  # 2️⃣ Permite ejecutarlo manualmente desde la pestaña "Acciones"
   workflow_dispatch:
 
-  # 3️⃣ Programa una reconstrucción automática el día 1 de cada mes a las 9 AM UTC
+  # 3️⃣ Programa una ejecución automática mensual (solo validación)
   schedule:
     - cron: '0 9 1 * *'
 
 jobs:
-  deploy:
-    name: 🚀 Desplegar TESLABTC.KG API en Fly.io
+  validate:
+    name: 🧠 Validar proyecto TESLABTC.KG (sin deploy)
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Descarga el código del repositorio
-      - name: 📦 Descargar código del repositorio
+      # 1️⃣ Descargar el código del repositorio
+      - name: 📦 Descargar código
         uses: actions/checkout@v4
 
-      # 2️⃣ Instala Flyctl (CLI de Fly.io)
+      # 2️⃣ Instalar Flyctl (por compatibilidad, sin ejecutar deploy)
       - name: 🔧 Instalar Flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # 3️⃣ Despliega la API en Fly.io usando el token guardado en los secretos
-      - name: 🚀 Desplegar en Fly.io
-        run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # 3️⃣ Mensaje informativo (sin subir nada)
+      - name: 🛑 Omitir despliegue automático
+        run: |
+          echo "🚫 Despliegue automático desactivado"
+          echo "👉 Para desplegar manualmente, usa desde tu PC:"
+          echo ""
+          echo "   fly deploy --app teslabtc-api --remote-only --no-cache"
+          echo ""
+          echo "🧩 Control total del despliegue ahora es local."
