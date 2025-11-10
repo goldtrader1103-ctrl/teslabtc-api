@@ -15,7 +15,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from datetime import datetime, timedelta, timezone
 import random
 
-from utils.price_utils import obtener_precio, obtener_klines_binance, sesion_ny_activa, _pdh_pdl, BINANCE_STATUS
+from utils.price_utils import (
+    obtener_precio,
+    obtener_klines_binance,
+    sesion_ny_activa,
+    obtener_datos_sesion_colombia,
+    BINANCE_STATUS
+)
+
 from utils.estructura_utils import evaluar_estructura, definir_escenarios
 from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
 from utils.analisis_premium import generar_analisis_premium
