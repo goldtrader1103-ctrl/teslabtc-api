@@ -1,8 +1,9 @@
-from __future__ import annotations
-print("🧠 TESLABTC.KG — v5.1 REAL MARKET (última compilación activa)")
+from main import VERSION_TESLA
+print(f"🧠 TESLABTC.KG — {VERSION_TESLA}")
+# 🧠 TESLABTC.KG — Análisis Premium (actualizado automáticamente)
 
 # ============================================================
-# 🧠 TESLABTC.KG — Análisis Premium (v5.1 REAL MARKET)
+# 🧠 TESLABTC.KG — Análisis Premium (v5.2 REAL MARKET)
 # ============================================================
 # Fuente: Binance (REST) — sin simulaciones
 # Estructura real multi-TF, Rango Asiático, PDH/PDL, Escenarios TESLA,
