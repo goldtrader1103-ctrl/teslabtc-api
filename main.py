@@ -2,6 +2,12 @@
 # ============================================================
 # 🚀 TESLABTC.KG — main.py (integrado con token_utils persistente)
 # ============================================================
+# ============================================================
+# 🧠 Versión del sistema TESLABTC.KG
+# ============================================================
+VERSION_TESLA = "v5.2 REAL MARKET (última compilación activa)"
+
+print(f"🧠 TESLABTC.KG — {VERSION_TESLA}")
 
 import asyncio
 from fastapi import FastAPI, Query, Request
