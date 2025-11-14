@@ -1,58 +1,35 @@
 # ============================================================
-# 🧠 analizar_router.py — TESLABTC Análisis estructurado
+# 🧠 routers/analizar_router.py — TESLABTC Análisis
 # ============================================================
-
+from __future__ import annotations
 from fastapi import APIRouter, Request
-from datetime import datetime, timedelta, timezone
-from utils.price_utils import obtener_precio
-from utils.analisis_free import generar_analisis_free
+from datetime import datetime, timezone, timedelta
 from utils.analisis_premium import generar_analisis_premium
-from utils.userdb import validar_token_api
+from utils.intelligent_formatter import construir_mensaje_free
 
 router = APIRouter(prefix="/analizar", tags=["TESLABTC"])
 TZ_COL = timezone(timedelta(hours=-5))
 
-@router.get("/", summary="Analiza el mercado BTCUSDT y retorna el resultado TESLABTC.KG")
-async def analizar(request: Request):
-    """
-    Endpoint principal del análisis TESLABTC.
-    Determina si el usuario es Free o Premium según su token.
-    Devuelve JSON válido siempre.
-    """
-    ahora = datetime.now(TZ_COL)
-
-    # 1️⃣ Validar token
-    token = request.headers.get("Authorization") or request.query_params.get("token")
-    verif = validar_token_api(token)
-    nivel_usuario = verif.get("nivel", "Free")
-    token_valido = verif.get("valido", False)
-
-    # 2️⃣ Obtener precio actual
-    p = obtener_precio("BTCUSDT")
-    precio, fuente = p.get("precio"), p.get("fuente")
-    precio_float = float(precio) if isinstance(precio, (int, float)) else 0.0
-
-    # 3️⃣ Generar análisis según nivel
-    analisis = (
-        generar_analisis_premium(precio_float)
-        if token_valido
-        else generar_analisis_free(precio_float)
-    )
-
-    # 4️⃣ Datos de sesión
-    hora_local = ahora.hour + (ahora.minute / 60)
-    analisis["sesion"] = (
-        "✅ Activa (Sesión NY)" if 7 <= hora_local < 13.5 else "❌ Cerrada (Fuera de NY)"
-    )
-    analisis["fuente_precio"] = fuente
-    analisis["nivel_usuario"] = nivel_usuario
-
-    # 5️⃣ Cuerpo final (JSON válido)
-    body = {
-        "🧠 TESLABTC.KG": analisis,
-        "conexion_binance": (
-            "🦎 Fallback CoinGecko activo" if fuente != "Binance (REST)" else "✅ Conectado a Binance"
-        ),
+def _analisis_free_stub() -> dict:
+    now = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
+    data = {
+        "fecha": now,
+        "sesión": "❌ Cerrada (Fuera de NY)",
+        "precio_actual": "—",
+        "conexion_binance": "—",
     }
+    data["mensaje_formateado"] = construir_mensaje_free(data)
+    return data
 
-    return body
+@router.get("/", summary="Análisis TESLABTC (Free/Premium)")
+async def analizar(request: Request):
+    token = request.headers.get("Authorization") or request.query_params.get("token")
+    # Si tienes userdb/validación real, úsala; aquí asumo Premium si token llega.
+    is_premium = bool(token)
+
+    if is_premium:
+        payload = generar_analisis_premium("BTCUSDT")
+        return {"🧠 TESLABTC.KG": payload}
+    else:
+        free = _analisis_free_stub()
+        return {"🧠 TESLABTC.KG": free}

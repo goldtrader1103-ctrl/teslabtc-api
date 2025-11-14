@@ -64,18 +64,26 @@ def analizar_estructura_general(simbolo="BTCUSDT"):
     estructura = {"D": e_d, "H4": e_h4, "H1": e_h1}
 
     # ===============================
-    # 📍 ZONAS
+    # 📍 ZONAS — Ajustadas a horario Colombia (7PM–7PM y 5PM–2AM)
     # ===============================
+    from utils.price_utils import obtener_datos_sesion_colombia
+    pd = obtener_datos_sesion_colombia(simbolo)
+
     zonas = {
-        "PDH": max([float(x["high"]) for x in kl_h1[-96:]]),
-        "PDL": min([float(x["low"]) for x in kl_h1[-96:]]),
+        "PDH": pd.get("PDH"),
+        "PDL": pd.get("PDL"),
+        "ASIAN_HIGH": pd.get("ASIAN_HIGH"),
+        "ASIAN_LOW": pd.get("ASIAN_LOW"),
         "DHIGH": e_d.get("HH"),
         "DLOW": e_d.get("LL"),
         "H4HIGH": e_h4.get("HH"),
         "H4LOW": e_h4.get("LL"),
         "H1HIGH": e_h1.get("HH"),
         "H1LOW": e_h1.get("LL"),
+        "horario_dia": pd.get("horario_dia"),
+        "horario_asia": pd.get("horario_asia"),
     }
+
 
     # ===============================
     # ✅ CONFIRMACIONES
