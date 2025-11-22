@@ -393,6 +393,84 @@ def _calc_range_last_closed_daily_col(kl_15m):
             hi = h if hi is None else max(hi, h)
             lo = l if lo is None else min(lo, l)
     return hi, lo
+def _zigzag_pivots(
+    kl: List[Dict[str, Any]],
+    depth: int = 12,
+    deviation: float = 5.0,
+    backstep: int = 2
+) -> List[Tuple[int, str, float]]:
+    """
+    Replica ZigZag++ básico:
+    - depth: pivote confirmado con depth velas a cada lado
+    - deviation: % mínimo de cambio desde el último pivote
+    - backstep: si aparece pivote del mismo tipo muy cerca, reemplaza por el más extremo
+    Devuelve lista de pivotes [(idx, 'H'/'L', price), ...] ordenados por tiempo.
+    """
+    if not kl or len(kl) < (depth * 2 + 5):
+        return []
+
+    hi_idx, lo_idx = _pivotes(kl, look=depth)
+
+    cands: List[Tuple[int, str, float]] = []
+    for i in hi_idx:
+        cands.append((i, "H", float(kl[i]["high"])))
+    for i in lo_idx:
+        cands.append((i, "L", float(kl[i]["low"])))
+
+    cands.sort(key=lambda x: x[0])
+
+    pivots: List[Tuple[int, str, float]] = []
+    for i, t, p in cands:
+        if not pivots:
+            pivots.append((i, t, p))
+            continue
+
+        li, lt, lp = pivots[-1]
+
+        # mismo tipo de pivote => aplicar backstep / reemplazo por más extremo
+        if t == lt:
+            if (i - li) <= backstep:
+                if (t == "H" and p > lp) or (t == "L" and p < lp):
+                    pivots[-1] = (i, t, p)
+            else:
+                if (t == "H" and p > lp) or (t == "L" and p < lp):
+                    pivots[-1] = (i, t, p)
+            continue
+
+        # tipo opuesto => aplicar deviation mínima
+        if lp != 0:
+            move_pct = abs((p - lp) / lp) * 100.0
+        else:
+            move_pct = 999.0
+
+        if move_pct >= deviation:
+            pivots.append((i, t, p))
+        # si no cumple deviation, se ignora
+
+    return pivots
+
+
+def _calc_range_last_impulse_zigzag(
+    kl: List[Dict[str, Any]],
+    depth: int = 12,
+    deviation: float = 5.0,
+    backstep: int = 2
+) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Devuelve el rango del ÚLTIMO IMPULSO (último tramo ZigZag):
+    high = máximo entre los dos últimos pivotes
+    low  = mínimo entre los dos últimos pivotes
+    """
+    piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
+    if len(piv) < 2:
+        return None, None
+
+    _, _, p_last = piv[-1]
+    _, _, p_prev = piv[-2]
+
+    hi = max(p_last, p_prev)
+    lo = min(p_last, p_prev)
+    return hi, lo
 
 def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
     zonas = {}
@@ -403,10 +481,12 @@ def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
         zonas["ASIAN_HIGH"] = round(float(asian.get("ASIAN_HIGH")), 2)
         zonas["ASIAN_LOW"]  = round(float(asian.get("ASIAN_LOW")),  2)
 
-    # Rangos operativos NO históricos
-    d_hi, d_lo   = _calc_range_last_closed_daily_col(kl_15m)
-    h4_hi, h4_lo = _calc_range_last_closed_candle(h4_kl)
-    h1_hi, h1_lo = _calc_range_last_closed_candle(h1_kl)
+    # ======================================================
+    # Rangos por ÚLTIMO IMPULSO (ZigZag++: depth 12, dev 5, backstep 2)
+    # ======================================================
+    d_hi, d_lo   = _calc_range_last_impulse_zigzag(d_kl,  depth=12, deviation=5.0, backstep=2)
+    h4_hi, h4_lo = _calc_range_last_impulse_zigzag(h4_kl, depth=12, deviation=5.0, backstep=2)
+    h1_hi, h1_lo = _calc_range_last_impulse_zigzag(h1_kl, depth=12, deviation=5.0, backstep=2)
 
     if d_hi is not None and d_lo is not None:
         zonas["D_HIGH"], zonas["D_LOW"] = round(d_hi, 2), round(d_lo, 2)
@@ -416,6 +496,7 @@ def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
         zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi, 2), round(h1_lo, 2)
 
     return zonas or {"info": "Sin zonas detectadas"}
+
 
 
 # 💎 Integración con OB Detector (opcional)
