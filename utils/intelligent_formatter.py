@@ -64,25 +64,25 @@ def construir_mensaje_operativo(data):
     h4 = estructura.get("H4", {}) or {}
     h1 = estructura.get("H1", {}) or {}
 
-    d_estado = str(d.get("estado", "—")).upper()
-    d_bos    = d.get("BOS", "—")
-    d_hh     = d.get("HH", "—")
-    d_ll     = d.get("LL", "—")
+    d_estado  = str(d.get("estado", "—")).upper()
+    h4_estado = str(h4.get("estado", "—")).upper()
+    h1_estado = str(h1.get("estado", "—")).upper()
 
-    # Rango D: si hay datos, se muestra como rango puro
-    if d_hh not in (None, "—") and d_ll not in (None, "—"):
-        d_line = f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hh}–{d_ll}"
-    else:
-        d_line = f"📈 D: {d_estado} ({d_bos})"
+    d_bos  = d.get("BOS", "—")
+    h4_bos = h4.get("BOS", "—")
+    h1_bos = h1.get("BOS", "—")
 
-    h4_line = (
-        f"⚙️ H4: {str(h4.get('estado','—')).upper()} ({h4.get('BOS','—')}) "
-        f"| HH: {h4.get('HH','—')} | LL: {h4.get('LL','—')}"
-    )
-    h1_line = (
-        f"🔹 H1: {str(h1.get('estado','—')).upper()} ({h1.get('BOS','—')}) "
-        f"| HH: {h1.get('HH','—')} | LL: {h1.get('LL','—')}"
-    )
+    # Rangos operativos inyectados por analisis_premium.py
+    d_hi  = d.get("RANGO_HIGH")
+    d_lo  = d.get("RANGO_LOW")
+    h4_hi = h4.get("RANGO_HIGH")
+    h4_lo = h4.get("RANGO_LOW")
+    h1_hi = h1.get("RANGO_HIGH")
+    h1_lo = h1.get("RANGO_LOW")
+
+    d_line  = f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hi}–{d_lo}" if d_hi and d_lo else f"📈 D: {d_estado} ({d_bos})"
+    h4_line = f"⚙️ H4: {h4_estado} ({h4_bos}) | RANGO: {h4_hi}–{h4_lo}" if h4_hi and h4_lo else f"⚙️ H4: {h4_estado} ({h4_bos})"
+    h1_line = f"🔹 H1: {h1_estado} ({h1_bos}) | RANGO: {h1_hi}–{h1_lo}" if h1_hi and h1_lo else f"🔹 H1: {h1_estado} ({h1_bos})"
 
     direccion = f"{d_line}\n{h4_line}\n{h1_line}"
 

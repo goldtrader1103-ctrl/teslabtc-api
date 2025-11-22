@@ -134,21 +134,21 @@ def _pdh_pdl(kl_15m):
     return {"PDH": round(hi, 2), "PDL": round(lo, 2)}
 
 def _asian_range(kl_15m):
-    """Sesión Asiática COL: 5PM → 2AM (America/Bogota) del ciclo operativo actual"""
+    """Última sesión asiática CERRADA COL: 5PM → 2AM usando 15m."""
     if not kl_15m:
         return None
-    tz_col = pytz.timezone("America/Bogota")
-    ahora = datetime.now(tz_col)
-    ref_dia = (ahora - timedelta(days=1)) if ahora.hour < 2 else ahora
-    inicio_asia = ref_dia.replace(hour=17, minute=0, second=0, microsecond=0)
-    fin_asia = (inicio_asia + timedelta(hours=9))
+
+    from utils.time_utils import last_closed_asian_window_col, TZ_COL
+    start, end = last_closed_asian_window_col()
+
     hi, lo = None, None
     for k in kl_15m:
-        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(tz_col)
-        if inicio_asia <= t_col < fin_asia:
+        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL)
+        if start <= t_col < end:
             h = float(k["high"]); l = float(k["low"])
             hi = h if hi is None else max(hi, h)
             lo = l if lo is None else min(lo, l)
+
     if hi is None or lo is None:
         return None
     return {"ASIAN_HIGH": round(hi, 2), "ASIAN_LOW": round(lo, 2)}
@@ -370,21 +370,32 @@ def _setup_activo_m5(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 # ------------------------------------------------------------
 # 🔹 Zonas para mostrar (PDH/PDL, Asia, rangos TF) + OB/POI
 # ------------------------------------------------------------
-def _calc_range(kl: List[Dict[str, Any]]) -> Tuple[Optional[float], Optional[float]]:
-    if not kl:
+def _calc_range_last_closed_candle(kl):
+    """High/Low de la última vela CERRADA del TF."""
+    if not kl or len(kl) < 2:
         return None, None
-    hi = max(k["high"] for k in kl)
-    lo = min(k["low"]  for k in kl)
+    last_closed = kl[-2]  # la última (-1) suele estar abierta
+    return last_closed["high"], last_closed["low"]
+
+def _calc_range_last_closed_daily_col(kl_15m):
+    """Rango diario real según día operativo COL (7PM–7PM) usando 15m."""
+    if not kl_15m:
+        return None, None
+
+    from utils.time_utils import last_closed_daily_window_col, TZ_COL
+    start, end = last_closed_daily_window_col()
+
+    hi, lo = None, None
+    for k in kl_15m:
+        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL)
+        if start <= t_col < end:
+            h, l = float(k["high"]), float(k["low"])
+            hi = h if hi is None else max(hi, h)
+            lo = l if lo is None else min(lo, l)
     return hi, lo
 
-def _fmt_zonas(
-    asian: Optional[Dict[str, float]],
-    pd: Optional[Dict[str, float]],
-    d_kl: List[Dict[str, Any]],
-    h4_kl: List[Dict[str, Any]],
-    h1_kl: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    zonas: Dict[str, Any] = {}
+def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
+    zonas = {}
     if pd:
         zonas["PDH"] = round(float(pd.get("PDH")), 2)
         zonas["PDL"] = round(float(pd.get("PDL")), 2)
@@ -392,12 +403,20 @@ def _fmt_zonas(
         zonas["ASIAN_HIGH"] = round(float(asian.get("ASIAN_HIGH")), 2)
         zonas["ASIAN_LOW"]  = round(float(asian.get("ASIAN_LOW")),  2)
 
-    d_hi, d_lo = _calc_range(d_kl);   h4_hi, h4_lo = _calc_range(h4_kl);   h1_hi, h1_lo = _calc_range(h1_kl)
-    if d_hi and d_lo:   zonas["D_HIGH"], zonas["D_LOW"]   = round(d_hi,2), round(d_lo,2)
-    if h4_hi and h4_lo: zonas["H4_HIGH"], zonas["H4_LOW"] = round(h4_hi,2), round(h4_lo,2)
-    if h1_hi and h1_lo: zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi,2), round(h1_lo,2)
+    # Rangos operativos NO históricos
+    d_hi, d_lo   = _calc_range_last_closed_daily_col(kl_15m)
+    h4_hi, h4_lo = _calc_range_last_closed_candle(h4_kl)
+    h1_hi, h1_lo = _calc_range_last_closed_candle(h1_kl)
+
+    if d_hi is not None and d_lo is not None:
+        zonas["D_HIGH"], zonas["D_LOW"] = round(d_hi, 2), round(d_lo, 2)
+    if h4_hi is not None and h4_lo is not None:
+        zonas["H4_HIGH"], zonas["H4_LOW"] = round(h4_hi, 2), round(h4_lo, 2)
+    if h1_hi is not None and h1_lo is not None:
+        zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi, 2), round(h1_lo, 2)
 
     return zonas or {"info": "Sin zonas detectadas"}
+
 
 # 💎 Integración con OB Detector (opcional)
 def _detectar_ob_poi_cercanos(symbol: str = "BTCUSDT", limite=2) -> dict:
@@ -465,7 +484,16 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     setup_activo = _setup_activo_m5(symbol)
 
     # 🔹 Zonas (PDH/PDL, Asia, rangos) + OB/POI cercanos
-    zonas = _fmt_zonas(asian, pd, kl_d, kl_h4, kl_h1)
+    zonas = _fmt_zonas(asian, pd, kl_15m, kl_d, kl_h4, kl_h1)
+
+    # Inyectar rangos a cada temporalidad para el formatter
+    tf_d["RANGO_HIGH"]  = zonas.get("D_HIGH")
+    tf_d["RANGO_LOW"]   = zonas.get("D_LOW")
+    tf_h4["RANGO_HIGH"] = zonas.get("H4_HIGH")
+    tf_h4["RANGO_LOW"]  = zonas.get("H4_LOW")
+    tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
+    tf_h1["RANGO_LOW"]  = zonas.get("H1_LOW")
+
     ob_poi = _detectar_ob_poi_cercanos(symbol)
     if ob_poi:
         zonas.update(ob_poi)  # Espera keys como "OB_H4", "POI_H1", etc.
