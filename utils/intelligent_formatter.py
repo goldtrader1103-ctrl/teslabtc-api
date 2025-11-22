@@ -71,13 +71,16 @@ def construir_mensaje_operativo(data):
     h4_bos = h4.get("BOS", "—")
     h1_bos = h1.get("BOS", "—")
 
-    # Rangos operativos inyectados por analisis_premium.py
-    d_hi  = d.get("RANGO_HIGH")
-    d_lo  = d.get("RANGO_LOW")
-    h4_hi = h4.get("RANGO_HIGH")
-    h4_lo = h4.get("RANGO_LOW")
-    h1_hi = h1.get("RANGO_HIGH")
-    h1_lo = h1.get("RANGO_LOW")
+    # Rangos operativos:
+    # 1) Preferimos lo inyectado en estructura (RANGO_HIGH/LOW).
+    # 2) Si por alguna capa se pierden, hacemos fallback a zonas_detectadas.
+    d_hi  = d.get("RANGO_HIGH", zonas.get("D_HIGH"))
+    d_lo  = d.get("RANGO_LOW",  zonas.get("D_LOW"))
+    h4_hi = h4.get("RANGO_HIGH", zonas.get("H4_HIGH"))
+    h4_lo = h4.get("RANGO_LOW",  zonas.get("H4_LOW"))
+    h1_hi = h1.get("RANGO_HIGH", zonas.get("H1_HIGH"))
+    h1_lo = h1.get("RANGO_LOW",  zonas.get("H1_LOW"))
+
 
     d_line = (
         f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hi}–{d_lo}"
