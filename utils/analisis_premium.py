@@ -393,40 +393,64 @@ def _calc_range_last_closed_daily_col(kl_15m):
             hi = h if hi is None else max(hi, h)
             lo = l if lo is None else min(lo, l)
     return hi, lo
+def _calc_range_last_impulse(kl: List[Dict[str, Any]], look: int = 3) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Rango del ÚLTIMO IMPULSO (último swing) tipo ZigZag.
+    look = sensibilidad del pivote (más alto = menos pivotes).
+    Devuelve (high_del_impulso, low_del_impulso).
+    """
+    if not kl or len(kl) < (look * 2 + 5):
+        return None, None
 
-def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
-    zonas = {}
+    hi_idx, lo_idx = _pivotes(kl, look=look)
+    if len(hi_idx) == 0 or len(lo_idx) == 0:
+        return None, None
+
+    last_hi_i = hi_idx[-1]
+    last_lo_i = lo_idx[-1]
+
+    last_hi = float(kl[last_hi_i]["high"])
+    last_lo = float(kl[last_lo_i]["low"])
+
+    # El impulso final siempre queda entre el último pivote HIGH y el último pivote LOW
+    # sin importar si el último swing fue alcista o bajista.
+    return last_hi, last_lo
+
+def _fmt_zonas(
+    asian: Optional[Dict[str, float]],
+    pd: Optional[Dict[str, float]],
+    d_kl: List[Dict[str, Any]],
+    h4_kl: List[Dict[str, Any]],
+    h1_kl: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+
+    zonas: Dict[str, Any] = {}
+
+    # PDH / PDL
     if pd:
         zonas["PDH"] = round(float(pd.get("PDH")), 2)
         zonas["PDL"] = round(float(pd.get("PDL")), 2)
+
+    # Asia
     if asian:
         zonas["ASIAN_HIGH"] = round(float(asian.get("ASIAN_HIGH")), 2)
         zonas["ASIAN_LOW"]  = round(float(asian.get("ASIAN_LOW")),  2)
 
-    # Rangos operativos NO históricos
-    d_hi, d_lo   = _calc_range_last_closed_daily_col(kl_15m)
-    h4_hi, h4_lo = _calc_range_last_closed_candle(h4_kl)
-    h1_hi, h1_lo = _calc_range_last_closed_candle(h1_kl)
+    # Rangos por ÚLTIMO IMPULSO (ZigZag-like)
+    d_hi, d_lo   = _calc_range_last_impulse(d_kl,  look=3)
+    h4_hi, h4_lo = _calc_range_last_impulse(h4_kl, look=3)
+    h1_hi, h1_lo = _calc_range_last_impulse(h1_kl,  look=3)
 
     if d_hi is not None and d_lo is not None:
         zonas["D_HIGH"], zonas["D_LOW"] = round(d_hi, 2), round(d_lo, 2)
+
     if h4_hi is not None and h4_lo is not None:
         zonas["H4_HIGH"], zonas["H4_LOW"] = round(h4_hi, 2), round(h4_lo, 2)
+
     if h1_hi is not None and h1_lo is not None:
         zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi, 2), round(h1_lo, 2)
 
     return zonas or {"info": "Sin zonas detectadas"}
-
-
-# 💎 Integración con OB Detector (opcional)
-def _detectar_ob_poi_cercanos(symbol: str = "BTCUSDT", limite=2) -> dict:
-    try:
-        from utils.ob_detector import detectar_ob_poi
-        resultado = detectar_ob_poi(symbol, limite)
-        return resultado if isinstance(resultado, dict) else {}
-    except Exception as e:
-        print(f"⚠️ No se pudo cargar OB Detector: {e}")
-        return {}
 
 # ============================================================
 # 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3)
