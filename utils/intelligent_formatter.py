@@ -56,9 +56,8 @@ def construir_mensaje_operativo(data):
     slogan = data.get("slogan", "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!")
 
     # --------------------------------------------------------
-    # 🧭 DIRECCIÓN GENERAL
-    #   D → muestra estado + BOS + RANGO (HH–LL) sin hablar de HH/LL como estructura.
-    #   H4 / H1 → se mantienen con HH/LL como lo venías usando.
+    # 🧭 DIRECCIÓN GENERAL — RANGO REAL (v5.3.4)
+    #   D/H4/H1 muestran SOLO estado + BOS + rango actual.
     # --------------------------------------------------------
     d  = estructura.get("D", {}) or {}
     h4 = estructura.get("H4", {}) or {}
@@ -80,9 +79,23 @@ def construir_mensaje_operativo(data):
     h1_hi = h1.get("RANGO_HIGH")
     h1_lo = h1.get("RANGO_LOW")
 
-    d_line  = f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hi}–{d_lo}" if d_hi and d_lo else f"📈 D: {d_estado} ({d_bos})"
-    h4_line = f"⚙️ H4: {h4_estado} ({h4_bos}) | RANGO: {h4_hi}–{h4_lo}" if h4_hi and h4_lo else f"⚙️ H4: {h4_estado} ({h4_bos})"
-    h1_line = f"🔹 H1: {h1_estado} ({h1_bos}) | RANGO: {h1_hi}–{h1_lo}" if h1_hi and h1_lo else f"🔹 H1: {h1_estado} ({h1_bos})"
+    d_line = (
+        f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hi}–{d_lo}"
+        if d_hi is not None and d_lo is not None
+        else f"📈 D: {d_estado} ({d_bos})"
+    )
+
+    h4_line = (
+        f"⚙️ H4: {h4_estado} ({h4_bos}) | RANGO: {h4_hi}–{h4_lo}"
+        if h4_hi is not None and h4_lo is not None
+        else f"⚙️ H4: {h4_estado} ({h4_bos})"
+    )
+
+    h1_line = (
+        f"🔹 H1: {h1_estado} ({h1_bos}) | RANGO: {h1_hi}–{h1_lo}"
+        if h1_hi is not None and h1_lo is not None
+        else f"🔹 H1: {h1_estado} ({h1_bos})"
+    )
 
     direccion = f"{d_line}\n{h4_line}\n{h1_line}"
 
