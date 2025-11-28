@@ -563,6 +563,59 @@ def _ob_en_rango(
         return ob_txt
     except Exception:
         return ob_txt
+def _detectar_tendencia_zigzag(
+    kl: List[Dict[str, Any]],
+    depth: int = 12,
+    deviation: float = 5.0,
+    backstep: int = 2
+) -> Dict[str, Any]:
+    """
+    Tendencia basada en el ÚLTIMO TRAMO del ZigZag:
+    - Si el último pivote es H y el anterior L → tramo alcista.
+    - Si el último pivote es L y el anterior H → tramo bajista.
+    - Si no hay cambio claro → lateral.
+    """
+    piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
+    if len(piv) < 2:
+        return {"estado": "lateral", "BOS": "—"}
+
+    idx_prev, tipo_prev, price_prev = piv[-2]
+    idx_last, tipo_last, price_last = piv[-1]
+
+    # Último tramo LOW → HIGH → alcista
+    if tipo_prev == "L" and tipo_last == "H":
+        return {
+            "estado": "alcista",
+            "BOS": "✔️",
+            "ultimo_pivote": price_last,
+            "pivotes": [
+                (idx_prev, tipo_prev, price_prev),
+                (idx_last, tipo_last, price_last),
+            ],
+        }
+
+    # Último tramo HIGH → LOW → bajista
+    if tipo_prev == "H" and tipo_last == "L":
+        return {
+            "estado": "bajista",
+            "BOS": "✔️",
+            "ultimo_pivote": price_last,
+            "pivotes": [
+                (idx_prev, tipo_prev, price_prev),
+                (idx_last, tipo_last, price_last),
+            ],
+        }
+
+    # Si no hay estructura clara, lo dejamos como rango / transición
+    return {
+        "estado": "lateral",
+        "BOS": "—",
+        "ultimo_pivote": price_last,
+        "pivotes": [
+            (idx_prev, tipo_prev, price_prev),
+            (idx_last, tipo_last, price_last),
+        ],
+    }
 
 
 
@@ -628,10 +681,11 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     kl_h4  = _safe_get_klines(symbol, "4h", 600)
     kl_d   = _safe_get_klines(symbol, "1d", 400)
 
-    tf_d   = _detectar_tendencia(kl_d,   look=12)
-    tf_h4  = _detectar_tendencia(kl_h4,  look=12)
-    tf_h1  = _detectar_tendencia(kl_h1,  look=12)
-    tf_m15 = _detectar_tendencia(kl_15m, look=12)
+    tf_d   = _detectar_tendencia_zigzag(kl_d)
+    tf_h4  = _detectar_tendencia_zigzag(kl_h4)
+    tf_h1  = _detectar_tendencia_zigzag(kl_h1)
+    tf_m15 = _detectar_tendencia_zigzag(kl_15m)
+
 
     asian = _asian_range(kl_15m)
     pd    = _pdh_pdl(kl_15m)
