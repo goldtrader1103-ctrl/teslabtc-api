@@ -497,20 +497,39 @@ def _calc_range_last_impulse_zigzag(
     backstep: int = 2
 ) -> Tuple[Optional[float], Optional[float]]:
     """
-    Devuelve el rango del ÚLTIMO IMPULSO (último tramo ZigZag):
-    high = máximo entre los dos últimos pivotes
-    low  = mínimo entre los dos últimos pivotes
+    Devuelve el rango del ÚLTIMO IMPULSO *operativo* del ZigZag:
+    - Se busca el ÚLTIMO tramo cuyo rango [low, high] CONTIENE el precio actual.
+    - Si ninguno contiene el precio, se usa el último tramo ZigZag.
     """
     piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
-    if len(piv) < 2:
+    if not kl or len(piv) < 2:
         return None, None
 
-    _, _, p_last = piv[-1]
-    _, _, p_prev = piv[-2]
+    # Precio actual en ese TF (close de la última vela)
+    precio_actual = float(kl[-1]["close"])
 
-    hi = max(p_last, p_prev)
-    lo = min(p_last, p_prev)
+    # Buscamos desde el final hacia atrás el tramo que contiene al precio
+    idx_seg = None
+    for i in range(len(piv) - 2, -1, -1):
+        _, _, p1 = piv[i]
+        _, _, p2 = piv[i + 1]
+        lo, hi = min(p1, p2), max(p1, p2)
+        if lo <= precio_actual <= hi:
+            idx_seg = i
+            break
+
+    # Si no se encontró ninguno que contenga al precio, usamos el último tramo
+    if idx_seg is None:
+        _, _, p_prev = piv[-2]
+        _, _, p_last = piv[-1]
+    else:
+        _, _, p_prev = piv[idx_seg]
+        _, _, p_last = piv[idx_seg + 1]
+
+    hi = max(p_prev, p_last)
+    lo = min(p_prev, p_last)
     return hi, lo
+
 
 def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
     zonas = {}
@@ -570,19 +589,36 @@ def _detectar_tendencia_zigzag(
     backstep: int = 2
 ) -> Dict[str, Any]:
     """
-    Tendencia basada en el ÚLTIMO TRAMO del ZigZag:
-    - Si el último pivote es H y el anterior L → tramo alcista.
-    - Si el último pivote es L y el anterior H → tramo bajista.
+    Tendencia basada en el TRAMO OPERATIVO del ZigZag (el que contiene al precio actual):
+    - Si el tramo es LOW → HIGH → alcista.
+    - Si el tramo es HIGH → LOW → bajista.
     - Si no hay cambio claro → lateral.
     """
     piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
-    if len(piv) < 2:
+    if not kl or len(piv) < 2:
         return {"estado": "lateral", "BOS": "—"}
 
-    idx_prev, tipo_prev, price_prev = piv[-2]
-    idx_last, tipo_last, price_last = piv[-1]
+    precio_actual = float(kl[-1]["close"])
 
-    # Último tramo LOW → HIGH → alcista
+    # Buscar el tramo cuyo rango incluye al precio
+    idx_seg = None
+    for i in range(len(piv) - 2, -1, -1):
+        _, t1, p1 = piv[i]
+        _, t2, p2 = piv[i + 1]
+        lo, hi = min(p1, p2), max(p1, p2)
+        if lo <= precio_actual <= hi:
+            idx_seg = i
+            break
+
+    # Si no lo encontramos, usamos el último tramo
+    if idx_seg is None:
+        idx_prev, tipo_prev, price_prev = piv[-2]
+        idx_last, tipo_last, price_last = piv[-1]
+    else:
+        idx_prev, tipo_prev, price_prev = piv[idx_seg]
+        idx_last, tipo_last, price_last = piv[idx_seg + 1]
+
+    # LOW → HIGH => tramo alcista
     if tipo_prev == "L" and tipo_last == "H":
         return {
             "estado": "alcista",
@@ -593,6 +629,30 @@ def _detectar_tendencia_zigzag(
                 (idx_last, tipo_last, price_last),
             ],
         }
+
+    # HIGH → LOW => tramo bajista
+    if tipo_prev == "H" and tipo_last == "L":
+        return {
+            "estado": "bajista",
+            "BOS": "✔️",
+            "ultimo_pivote": price_last,
+            "pivotes": [
+                (idx_prev, tipo_prev, price_prev),
+                (idx_last, tipo_last, price_last),
+            ],
+        }
+
+    # Si el tipo no define claramente dirección → rango / transición
+    return {
+        "estado": "lateral",
+        "BOS": "—",
+        "ultimo_pivote": price_last,
+        "pivotes": [
+            (idx_prev, tipo_prev, price_prev),
+            (idx_last, tipo_last, price_last),
+        ],
+    }
+
 
     # Último tramo HIGH → LOW → bajista
     if tipo_prev == "H" and tipo_last == "L":
