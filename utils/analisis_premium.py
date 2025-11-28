@@ -496,18 +496,80 @@ def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
         zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi, 2), round(h1_lo, 2)
 
     return zonas or {"info": "Sin zonas detectadas"}
+def _ob_en_rango(
+    ob_txt: Optional[str],
+    hi: Optional[float],
+    lo: Optional[float]
+) -> Optional[str]:
+    """
+    ob_txt viene como 'low–high'. Se valida contra [lo, hi].
+    Si no cae dentro, se elimina.
+    """
+    if not ob_txt or hi is None or lo is None:
+        return ob_txt
 
-
-
-# 💎 Integración con OB Detector (opcional)
-def _detectar_ob_poi_cercanos(symbol: str = "BTCUSDT", limite=2) -> dict:
     try:
-        from utils.ob_detector import detectar_ob_poi
-        resultado = detectar_ob_poi(symbol, limite)
-        return resultado if isinstance(resultado, dict) else {}
+        # Permitimos tanto '–' como '-'
+        nums = [float(x.strip()) for x in ob_txt.replace("–", "-").split("-")]
+        if len(nums) < 2:
+            return ob_txt
+        ob_lo, ob_hi = min(nums), max(nums)
+
+        # Si el OB está totalmente fuera del rango swing, lo descartamos
+        if ob_hi < lo or ob_lo > hi:
+            return None
+
+        # Si hay intersección con el rango swing, lo aceptamos
+        return ob_txt
+    except Exception:
+        return ob_txt
+
+
+
+def _detectar_ob_poi_cercanos(
+    kl_h4: List[Dict[str, Any]],
+    kl_h1: List[Dict[str, Any]],
+    tf_h4: Dict[str, Any],
+    tf_h1: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Usa utils/ob_detector.detectar_ob_valido para sacar OB H4 y H1.
+    Devuelve precios como rango low–high (str).
+    """
+    try:
+        from utils.ob_detector import detectar_ob_valido
     except Exception as e:
         print(f"⚠️ No se pudo cargar OB Detector: {e}")
         return {}
+
+    out: Dict[str, Any] = {}
+
+    def _fmt_ob(ob: Dict[str, Any]) -> Optional[str]:
+        if not ob or "rango" not in ob:
+            return None
+        lo, hi = ob["rango"]
+        return f"{round(lo, 2)}–{round(hi, 2)}"
+
+    dir_h4 = str(tf_h4.get("estado", "lateral")).lower()
+    dir_h1 = str(tf_h1.get("estado", "lateral")).lower()
+
+    # Si no es claramente bajista, tratamos como alcista (oferta/demanda inverso)
+    dir_h4_api = "bajista" if dir_h4 == "bajista" else "alcista"
+    dir_h1_api = "bajista" if dir_h1 == "bajista" else "alcista"
+
+    ob_h4 = detectar_ob_valido(kl_h4, dir_h4_api)
+    ob_h1 = detectar_ob_valido(kl_h1, dir_h1_api)
+
+    ob_h4_txt = _fmt_ob(ob_h4)
+    ob_h1_txt = _fmt_ob(ob_h1)
+
+    if ob_h4_txt:
+        out["OB_H4"] = ob_h4_txt
+    if ob_h1_txt:
+        out["OB_H1"] = ob_h1_txt
+
+    return out
+
 
 # ============================================================
 # 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3)
@@ -575,9 +637,28 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
     tf_h1["RANGO_LOW"]  = zonas.get("H1_LOW")
 
-    ob_poi = _detectar_ob_poi_cercanos(symbol)
+    ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
     if ob_poi:
-        zonas.update(ob_poi)  # Espera keys como "OB_H4", "POI_H1", etc.
+        zonas.update(ob_poi)
+
+    # ✅ Filtrar OB por rango swing operativo
+    zonas["OB_H4"] = _ob_en_rango(
+        zonas.get("OB_H4"),
+        zonas.get("H4_HIGH"),
+        zonas.get("H4_LOW"),
+    )
+    zonas["OB_H1"] = _ob_en_rango(
+        zonas.get("OB_H1"),
+        zonas.get("H1_HIGH"),
+        zonas.get("H1_LOW"),
+    )
+
+    # Si quedan None, los eliminamos para no imprimir "None"
+    if zonas.get("OB_H4") is None:
+        zonas.pop("OB_H4", None)
+    if zonas.get("OB_H1") is None:
+        zonas.pop("OB_H1", None)
+
 
     # 🔹 Reflexión (si el formatter no recibe una, él randomiza)
     reflexion = random.choice(REFLEXIONES)
@@ -684,8 +765,10 @@ def interpretar_contexto(tf_d, tf_h4, tf_h1, confs, zonas):
     if confs.get("Sesión NY", "").startswith("✅"):
         interpretacion.append("Sesión NY activa: volatilidad elevada.")
 
-    # Rango diario textual
-    if isinstance(zonas, dict) and "PDH" in zonas and "PDL" in zonas:
-        interpretacion.append(f"Rango diario: {zonas['PDL']:,} → {zonas['PDH']:,}.")
+    # Rango D real (último impulso ZigZag) — NO confundir con PDH/PDL
+    if isinstance(zonas, dict) and "D_HIGH" in zonas and "D_LOW" in zonas:
+        interpretacion.append(
+            f"Rango D (último impulso): {zonas['D_LOW']:,} → {zonas['D_HIGH']:,}."
+        )
 
     return " ".join(interpretacion)
