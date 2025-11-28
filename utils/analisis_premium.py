@@ -73,20 +73,23 @@ def _pivotes(kl: List[Dict[str, Any]], look: int = 2) -> Tuple[List[int], List[i
             lo_idx.append(i)
     return hi_idx, lo_idx
 
-def _detectar_tendencia(kl: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, Any]:
     """
-    Devuelve dict con:
+    Usa los mismos pivotes que el ZigZag (look = profundidad).
+    Devuelve:
     - estado: 'alcista'/'bajista'/'lateral'
     - BOS: '✔️' o '—'
-    - HH/LH/LL/HL: últimos pivotes (para coherencia visual)
-    - pair: cuál par mostrar en UI (HH/HL si alcista, LH/LL si bajista)
+    - HH/LH/LL/HL: últimos pivotes
+    - pair: cuál par es coherente con la estructura
     """
-    if not kl or len(kl) < 15:
+    # Necesitamos al menos un bloque razonable de datos
+    if not kl or len(kl) < (look * 2 + 3):
         return {"estado": "lateral", "BOS": "—"}
 
-    hi_idx, lo_idx = _pivotes(kl)
+    hi_idx, lo_idx = _pivotes(kl, look=look)
+
+    # Si casi no hay pivotes, devolvemos algo pero sin BOS
     if len(hi_idx) < 2 or len(lo_idx) < 2:
-        # Aún así regresamos últimos valores si existen para que la UI no quede vacía
         try:
             last_hi = kl[hi_idx[-1]]["high"] if hi_idx else None
             prev_hi = kl[hi_idx[-2]]["high"] if len(hi_idx) > 1 else None
@@ -95,18 +98,55 @@ def _detectar_tendencia(kl: List[Dict[str, Any]]) -> Dict[str, Any]:
         except Exception:
             last_hi = prev_hi = last_lo = prev_lo = None
         return {
-            "estado": "lateral", "BOS": "—",
-            "HH": last_hi, "LH": prev_hi, "LL": last_lo, "HL": prev_lo, "pair": "HH/LL"
+            "estado": "lateral",
+            "BOS": "—",
+            "HH": last_hi,
+            "LH": prev_hi,
+            "LL": last_lo,
+            "HL": prev_lo,
+            "pair": "HH/LL",
         }
 
-    hh = kl[hi_idx[-1]]["high"]; lh = kl[hi_idx[-2]]["high"]
-    ll = kl[lo_idx[-1]]["low"];  hl = kl[lo_idx[-2]]["low"]
+    # Últimos pivotes relevantes con esa profundidad
+    hh = kl[hi_idx[-1]]["high"]
+    lh = kl[hi_idx[-2]]["high"]
+    ll = kl[lo_idx[-1]]["low"]
+    hl = kl[lo_idx[-2]]["low"]
 
+    # Regla TESLA: tendencia por HH/HL vs LH/LL
     if hh > lh and ll > hl:
-        return {"estado": "alcista", "BOS": "✔️", "HH": hh, "LH": lh, "LL": ll, "HL": hl, "pair": "HH/HL"}
+        # estructura alcista (HH/HL)
+        return {
+            "estado": "alcista",
+            "BOS": "✔️",
+            "HH": hh,
+            "LH": lh,
+            "LL": ll,
+            "HL": hl,
+            "pair": "HH/HL",
+        }
     if hh < lh and ll < hl:
-        return {"estado": "bajista", "BOS": "✔️", "HH": hh, "LH": lh, "LL": ll, "HL": hl, "pair": "LH/LL"}
-    return {"estado": "lateral", "BOS": "—", "HH": hh, "LH": lh, "LL": ll, "HL": hl, "pair": "HH/LL"}
+        # estructura bajista (LH/LL)
+        return {
+            "estado": "bajista",
+            "BOS": "✔️",
+            "HH": hh,
+            "LH": lh,
+            "LL": ll,
+            "HL": hl,
+            "pair": "LH/LL",
+        }
+
+    # Si no encaja limpio → rango / transición
+    return {
+        "estado": "lateral",
+        "BOS": "—",
+        "HH": hh,
+        "LH": lh,
+        "LL": ll,
+        "HL": hl,
+        "pair": "HH/LL",
+    }
 
 # ------------------------------------------------------------
 # 🔹 Rangos reales por horario Colombia (PDH/PDL & Asia)
@@ -588,10 +628,10 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     kl_h4  = _safe_get_klines(symbol, "4h", 600)
     kl_d   = _safe_get_klines(symbol, "1d", 400)
 
-    tf_d   = _detectar_tendencia(kl_d)
-    tf_h4  = _detectar_tendencia(kl_h4)
-    tf_h1  = _detectar_tendencia(kl_h1)
-    tf_m15 = _detectar_tendencia(kl_15m)
+    tf_d   = _detectar_tendencia(kl_d,   look=12)
+    tf_h4  = _detectar_tendencia(kl_h4,  look=12)
+    tf_h1  = _detectar_tendencia(kl_h1,  look=12)
+    tf_m15 = _detectar_tendencia(kl_15m, look=12)
 
     asian = _asian_range(kl_15m)
     pd    = _pdh_pdl(kl_15m)
