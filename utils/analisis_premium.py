@@ -948,6 +948,35 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         conclusion_final = "Estructura alcista confirmada: buscar compras tras mitigación en demanda."
     else:
         conclusion_final = concl
+        
+    # 🔹 POI TESLABTC por Fibo (61.8–88.6) en H4 y H1
+    poi_h4 = _poi_fibo_band(
+        tf_h4.get("estado"),
+        zonas.get("H4_HIGH"),
+        zonas.get("H4_LOW"),
+    )
+    if poi_h4:
+        zonas["POI_H4"] = f"{poi_h4[0]}–{poi_h4[1]}"
+
+    poi_h1 = _poi_fibo_band(
+        tf_h1.get("estado"),
+        zonas.get("H1_HIGH"),
+        zonas.get("H1_LOW"),
+    )
+    if poi_h1:
+        zonas["POI_H1"] = f"{poi_h1[0]}–{poi_h1[1]}"
+
+    # 🔍 DEBUG VISUAL
+    print("DEBUG_ZONAS_H1:",
+          "estado =", tf_h1.get("estado"),
+          "H1_LOW =", zonas.get("H1_LOW"),
+          "H1_HIGH =", zonas.get("H1_HIGH"),
+          "POI_H1 =", zonas.get("POI_H1"))
+    print("DEBUG_ZONAS_H4:",
+          "estado =", tf_h4.get("estado"),
+          "H4_LOW =", zonas.get("H4_LOW"),
+          "H4_HIGH =", zonas.get("H4_HIGH"),
+          "POI_H4 =", zonas.get("POI_H4"))
 
     # 🧠 Payload final
     payload = {
