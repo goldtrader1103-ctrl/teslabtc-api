@@ -160,10 +160,16 @@ def construir_mensaje_operativo(data):
         riesgo = esc.get("riesgo", "Medio")
         texto_base = esc.get("descripcion") or esc.get("texto") or ""
         contexto = esc.get("contexto") or ""
+        poi_h1 = zonas.get("POI_H1")
+        poi_h4 = zonas.get("POI_H4")
+        ob_h1  = zonas.get("OB_H1")
+        ob_h4  = zonas.get("OB_H4")
 
-        ob_h1 = zonas.get("OB_H1")
-        ob_h4 = zonas.get("OB_H4")
-        zona_ref = ob_h1 or ob_h4 or "zona institucional (OB/POI) relevante en H1/H4"
+        zona_ref = (
+            poi_h1 or poi_h4 or
+            ob_h1  or ob_h4  or
+            "zona institucional (POI/OB) relevante en H1/H4"
+        )
 
         pdh = zonas.get("PDH")
         pdl = zonas.get("PDL")

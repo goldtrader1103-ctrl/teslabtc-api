@@ -747,7 +747,9 @@ def _detectar_ob_poi_cercanos(
 
     return out
 
-
+# ============================================================
+# 🔹 FIBONACCI H1 (retroceso del último impulso operativo)
+# ============================================================
 def _fib_retracement_h1(
     precio: float,
     tf_h1: Dict[str, Any],
@@ -791,7 +793,7 @@ def _fib_retracement_h1(
     elif ratio < 0.618:
         texto = "➖ Retroceso Fibonacci H1 medio (38.2–61.8%) — aún agresivo."
     elif ratio < 0.786:
-        texto = "✅ Retroceso Fibonacci H1 óptimo (61.8–78.6%) — zona ideal de descuento."
+        texto = "✅ Retroceso Fibonacci H1 óptimo (61.8–78.6%) — zona ideal de descuento TESLABTC."
     elif ratio <= 0.886:
         texto = "✅ Retroceso Fibonacci H1 profundo (78.6–88.6%) — banda TESLABTC de alta probabilidad."
     else:
@@ -801,7 +803,40 @@ def _fib_retracement_h1(
 
 
 # ============================================================
-# 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3)
+# 🔹 POI FIBO TESLABTC (banda 61.8–88.6 del último impulso)
+# ============================================================
+def _poi_fibo_band(
+    estado: str,
+    hi: Optional[float],
+    lo: Optional[float],
+) -> Optional[Tuple[float, float]]:
+    """
+    POI estructural TESLABTC:
+    banda 61.8–88.6 del último impulso (H4/H1).
+
+    - En tendencia alcista: descuento sobre el tramo LOW→HIGH.
+    - En tendencia bajista: "premium" sobre el tramo HIGH→LOW.
+    """
+    if hi is None or lo is None or hi == lo:
+        return None
+    if estado not in ("alcista", "bajista"):
+        return None
+
+    if estado == "alcista":
+        base, top = lo, hi      # 0% en LOW, 100% en HIGH
+    else:
+        base, top = hi, lo      # 0% en HIGH, 100% en LOW
+
+    rango = top - base
+    lvl_618 = base + rango * 0.618
+    lvl_886 = base + rango * 0.886
+
+    poi_lo, poi_hi = sorted((lvl_618, lvl_886))
+    return round(poi_lo, 2), round(poi_hi, 2)
+
+
+# ============================================================
+# 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3 + FIBO)
 # ============================================================
 def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     now = datetime.now(TZ_COL)
@@ -827,11 +862,52 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     pd    = _pdh_pdl(kl_15m)
     sesion_txt, sesion_activa = _estado_sesion_ny()
 
-    # 🔹 Confirmaciones con contexto (base)
+    # 🔹 ZONAS (PDH/PDL, Asia, rangos ZigZag)
+    zonas = _fmt_zonas(asian, pd, kl_15m, kl_d, kl_h4, kl_h1)
+
+    # Inyectar rangos a cada temporalidad para el formatter
+    tf_d["RANGO_HIGH"]  = zonas.get("D_HIGH")
+    tf_d["RANGO_LOW"]   = zonas.get("D_LOW")
+    tf_h4["RANGO_HIGH"] = zonas.get("H4_HIGH")
+    tf_h4["RANGO_LOW"]  = zonas.get("H4_LOW")
+    tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
+    tf_h1["RANGO_LOW"]  = zonas.get("H1_LOW")
+
+    # 🔹 OB / POI cercanos filtrados por rango swing
+    ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
+    if ob_poi:
+        zonas.update(ob_poi)
+
+    zonas["OB_H4"] = _ob_en_rango(
+        zonas.get("OB_H4"),
+        zonas.get("H4_HIGH"),
+        zonas.get("H4_LOW"),
+    )
+    zonas["OB_H1"] = _ob_en_rango(
+        zonas.get("OB_H1"),
+        zonas.get("H1_HIGH"),
+        zonas.get("H1_LOW"),
+    )
+
+    if zonas.get("OB_H4") is None:
+        zonas.pop("OB_H4", None)
+    if zonas.get("OB_H1") is None:
+        zonas.pop("OB_H1", None)
+
+    # 🔹 Confirmaciones base (macro, intradía, PDH/PDL, Asia, OB)
     conf = _confirmaciones(
         precio if isinstance(precio, (int, float)) else math.nan,
         asian, pd, tf_d, tf_h1, sesion_activa
     )
+
+    # 🔹 Fibonacci TESLABTC (61.8–88.6) como confirmación extra
+    fib_ratio, fib_txt = _fib_retracement_h1(
+        precio if isinstance(precio, (int, float)) else math.nan,
+        tf_h1,
+        zonas,
+    )
+    if fib_txt:
+        conf["Fibonacci H1"] = fib_txt
 
     # 🔹 Dirección general (texto auxiliar)
     tendencia_d  = tf_d.get("estado", "—")
@@ -844,52 +920,10 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     )
     estructura_txt = f"D: {tendencia_d.upper()} | H4: {tendencia_h4.upper()} | H1: {tendencia_h1.upper()}"
 
-    # 🔹 Zonas (PDH/PDL, Asia, rangos) + OB/POI cercanos
-    zonas = _fmt_zonas(asian, pd, kl_15m, kl_d, kl_h4, kl_h1)
-
-    # Inyectar rangos a cada temporalidad para el formatter
-    tf_d["RANGO_HIGH"]  = zonas.get("D_HIGH")
-    tf_d["RANGO_LOW"]   = zonas.get("D_LOW")
-    tf_h4["RANGO_HIGH"] = zonas.get("H4_HIGH")
-    tf_h4["RANGO_LOW"]  = zonas.get("H4_LOW")
-    tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
-    tf_h1["RANGO_LOW"]  = zonas.get("H1_LOW")
-
-    ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
-    if ob_poi:
-        zonas.update(ob_poi)
-
-    # ✅ Filtrar OB por rango swing operativo
-    zonas["OB_H4"] = _ob_en_rango(
-        zonas.get("OB_H4"),
-        zonas.get("H4_HIGH"),
-        zonas.get("H4_LOW"),
-    )
-    zonas["OB_H1"] = _ob_en_rango(
-        zonas.get("OB_H1"),
-        zonas.get("H1_HIGH"),
-        zonas.get("H1_LOW"),
-    )
-
-    # Si quedan None, los eliminamos para no imprimir "None"
-    if zonas.get("OB_H4") is None:
-        zonas.pop("OB_H4", None)
-    if zonas.get("OB_H1") is None:
-        zonas.pop("OB_H1", None)
-
-    # 🔹 Fibonacci H1 sobre el último impulso operativo
-    fib_ratio, fib_text = _fib_retracement_h1(
-        precio if isinstance(precio, (int, float)) else math.nan,
-        tf_h1,
-        zonas
-    )
-    if fib_text:
-        conf["Fibonacci H1"] = fib_text
-
     # 🔹 Interpretación macro (para UI)
-    contexto = interpretar_contexto(tf_d, tf_h4, tf_h1, conf, asian or {})
+    contexto = interpretar_contexto(tf_d, tf_h4, tf_h1, conf, zonas or {})
 
-    # 🔹 Escenarios (continuidad y corrección)
+    # 🔹 Escenarios (continuidad y corrección) usando TODAS las confs (incluyendo Fibo)
     esc1, esc2, concl = _escenarios(
         precio if isinstance(precio, (int, float)) else math.nan,
         asian, pd, tf_d, tf_h4, tf_h1, conf
@@ -898,7 +932,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # 🔹 Setup activo M5
     setup_activo = _setup_activo_m5(symbol)
 
-    # 🔹 Reflexión (si el formatter no recibe una, él randomiza)
+    # 🔹 Reflexión
     reflexion = random.choice(REFLEXIONES)
     slogan = "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
 
@@ -928,9 +962,9 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "estructura_resumen": estructura_txt,
         "contexto_general": contexto,
         "zonas_detectadas": zonas,
-        "confirmaciones": conf,          # ✅ ahora incluye Fibonacci H1
-        "escenario_1": esc1,
-        "escenario_2": esc2,
+        "confirmaciones": conf,          # 👈 AHORA SÍ se envían las confirmaciones
+        "escenario_1": esc1,             # 👈 SIEMPRE lleva un dict con datos
+        "escenario_2": esc2,             # 👈 igual acá
         "setup_tesla": setup_activo,
         "conclusion_general": conclusion_final,
         "reflexion": reflexion,
@@ -948,6 +982,25 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         payload["mensaje_formateado"] = construir_mensaje_free(payload)
 
     return {"🧠 TESLABTC.KG": payload}
+
+    # ... después de _fmt_zonas y de inyectar RANGO_HIGH/LOW y OBs ...
+
+    # 🔹 POI TESLABTC por Fibo (61.8–88.6) en H4 y H1
+    poi_h4 = _poi_fibo_band(
+        tf_h4.get("estado"),
+        zonas.get("H4_HIGH"),
+        zonas.get("H4_LOW"),
+    )
+    if poi_h4:
+        zonas["POI_H4"] = f"{poi_h4[0]}–{poi_h4[1]}"
+
+    poi_h1 = _poi_fibo_band(
+        tf_h1.get("estado"),
+        zonas.get("H1_HIGH"),
+        zonas.get("H1_LOW"),
+    )
+    if poi_h1:
+        zonas["POI_H1"] = f"{poi_h1[0]}–{poi_h1[1]}"
 
 # ============================================================
 # 🔹 Interpretación contextual inteligente TESLABTC (v5.3)
