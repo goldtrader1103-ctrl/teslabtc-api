@@ -133,26 +133,6 @@ def construir_mensaje_operativo(data):
 
 
     zonas_final = "\n".join(zonas_txt) if zonas_txt else "—"
-
-    # --------------------------------------------------------
-    # ✅ CONFIRMACIONES CON CONTEXTO
-    #   Se mantienen como bloque general, pero también las usamos
-    #   para construir los escenarios (continuación / corrección).
-    # --------------------------------------------------------
-    conf_desc = {
-        "macro":       "Tendencia macro (D) a favor del contexto general.",
-        "intradía":    "Dirección intradía (H1/H4) coherente con la estructura actual.",
-        "ob_valido":   "OB válido y no mitigado dentro de la sesión.",
-        "barrida_pdh": "Barrida de liquidez superior detectada.",
-        "bajo_asia":   "Reacción en bajo asiático o zona inferior relevante."
-    }
-
-    conf_txt = []
-    for k, v in confs.items():
-        texto = conf_desc.get(k, k.replace("_", " ").capitalize())
-        conf_txt.append(f"• {texto}: {v}")
-    conf_final = "\n".join(conf_txt) if conf_txt else "—"
-
     # --------------------------------------------------------
     # ⚙️ SETUP TESLABTC
     # --------------------------------------------------------
@@ -160,90 +140,104 @@ def construir_mensaje_operativo(data):
         setup_txt = (
             f"{setup.get('nivel','SETUP ACTIVO')}\n"
             f"{setup.get('contexto','')}\n"
-            f"📈 Zona: {setup.get('zona_entrada','—')} | "
-            f"⛔ SL: {setup.get('sl','—')} | "
-            f"🎯 TP1: {setup.get('tp1','—')} | 🎯 TP2: {setup.get('tp2','—')}\n"
-            f"{setup.get('comentario','')}"
+            f"Zona de entrada: {setup.get('zona_entrada','—')}\n"
+            f"SL: {setup.get('sl','—')}\n"
+            f"TP1: {setup.get('tp1','—')} | TP2: {setup.get('tp2','—')}\n"
+            f"Comentario: {setup.get('comentario','')}"
         )
     else:
         setup_txt = "⏳ Sin setup activo — esperando confirmaciones estructurales (BOS + POI + Sesión NY)."
 
     # --------------------------------------------------------
-    # 📊 ESCENARIOS OPERATIVOS
-    #   - Si la API envía escenario_1 / escenario_2 → se usan.
-    #   - Si NO los envía → fallback inteligente basado en:
-    #       * tendencias D/H4/H1
-    #       * zonas PDH/PDL/Asia
-    #       * confirmaciones ✅ / ❌
+    # 📊 ESCENARIOS OPERATIVOS (con confirmaciones por escenario)
     # --------------------------------------------------------
-    escenarios_txt = []
+    def _detalle_escenario(esc, zonas, titulo, emoji):
+        if not esc:
+            return ""
 
-    def _extraer_ok_pendientes():
-        oks, pendientes = [], []
-        for clave, desc in conf_desc.items():
-            v = confs.get(clave)
-            if v == "✅":
-                oks.append(desc)
-            elif v == "❌":
-                pendientes.append(desc)
-        return oks, pendientes
+        tipo = esc.get("tipo", "Neutro")
+        prob = esc.get("probabilidad", "Media")
+        riesgo = esc.get("riesgo", "Medio")
+        texto_base = esc.get("descripcion") or esc.get("texto") or ""
+        contexto = esc.get("contexto") or ""
 
-    oks, pendientes = _extraer_ok_pendientes()
+        ob_h1 = zonas.get("OB_H1")
+        ob_h4 = zonas.get("OB_H4")
+        zona_ref = ob_h1 or ob_h4 or "zona institucional (OB/POI) relevante en H1/H4"
 
-    # Si la API ya manda escenarios, los respetamos
-    if esc1 or esc2:
-        if esc1:
-            desc1 = esc1.get("descripcion") or esc1.get("texto") or "Escenario de continuación a favor de tendencia."
-            escenarios_txt.append(f"🟢 Escenario de Continuación (bajo riesgo relativo):\n{desc1}")
-        if esc2:
-            desc2 = esc2.get("descripcion") or esc2.get("texto") or "Escenario de corrección / contra-tendencia."
-            escenarios_txt.append(f"🔴 Escenario de Corrección (mayor riesgo):\n{desc2}")
-    else:
-        # 🔁 Fallback dinámico
-        estado_h4 = str(h4.get("estado", "—")).lower()
-        estado_h1 = str(h1.get("estado", "—")).lower()
+        pdh = zonas.get("PDH")
+        pdl = zonas.get("PDL")
+        ah  = zonas.get("ASIAN_HIGH")
+        al  = zonas.get("ASIAN_LOW")
 
-        sesgo = "neutro"
-        if "bajista" in (estado_h4, estado_h1):
-            sesgo = "bajista"
-        elif "alcista" in (estado_h4, estado_h1):
-            sesgo = "alcista"
-
-        # Zonas para target
-        target_superior = []
-        target_inferior = []
-        if pdh:        target_superior.append(f"PDH: {pdh}")
-        if zonas.get("ASIAN_HIGH"): target_superior.append(f"ASIAN HIGH: {zonas['ASIAN_HIGH']}")
-        if pdl:        target_inferior.append(f"PDL: {pdl}")
-        if zonas.get("ASIAN_LOW"):  target_inferior.append(f"ASIAN LOW: {zonas['ASIAN_LOW']}")
-
-        if sesgo == "bajista":
-            # Continuación: ventas hacia liquidez inferior
-            cont_text = "Continuación bajista: priorizar ventas tras retrocesos a oferta/OB válido."
-            if target_inferior:
-                cont_text += " Objetivo en liquidez inferior → " + ", ".join(target_inferior) + "."
-            corr_text = "Corrección alcista: sólo compras en rebotes claros desde demanda fuerte, con gestión conservadora."
-            if target_superior:
-                corr_text += " Potenciales zonas de toma de parciales en liquidez superior → " + ", ".join(target_superior) + "."
-        elif sesgo == "alcista":
-            cont_text = "Continuación alcista: priorizar compras tras mitigación en demanda válida."
-            if target_superior:
-                cont_text += " Objetivo en liquidez superior → " + ", ".join(target_superior) + "."
-            corr_text = "Corrección bajista: ventas sólo si hay BOS claro contra tendencia y reacción fuerte en oferta."
-            if target_inferior:
-                corr_text += " Zonas probables de toma de beneficio en liquidez inferior → " + ", ".join(target_inferior) + "."
+        if tipo == "Compra":
+            targets = []
+            if pdh: targets.append(f"PDH: {pdh}")
+            if ah:  targets.append(f"ASIAN HIGH: {ah}")
+            target_txt = ", ".join(targets) if targets else "zonas de liquidez superior (máximos previos)"
+            idea_operativa = (
+                f"Buscar largos dentro de **{zona_ref}**, "
+                f"con objetivo principal en {target_txt}."
+            )
+            sl_txt = "SL por debajo del OB o del último mínimo relevante en H1."
+        elif tipo == "Venta":
+            targets = []
+            if pdl: targets.append(f"PDL: {pdl}")
+            if al:  targets.append(f"ASIAN LOW: {al}")
+            target_txt = ", ".join(targets) if targets else "zonas de liquidez inferior (mínimos previos)"
+            idea_operativa = (
+                f"Buscar cortos dentro de **{zona_ref}**, "
+                f"con objetivo principal en {target_txt}."
+            )
+            sl_txt = "SL por encima del OB o del último máximo relevante en H1."
         else:
-            cont_text = "Estructura en rango / transición: esperar BOS claro a favor de tendencia antes de operar."
-            corr_text = "Escenario de corrección: operar contra este contexto implica riesgo elevado, priorizar la espera."
+            idea_operativa = "Contexto neutro / en rango: esperar BOS claro en una zona institucional antes de operar."
+            sl_txt = "SL siempre fuera de la zona institucional usada para la entrada."
 
-        # Añadimos confirmaciones al texto
-        if oks:
-            cont_text += "\n   ✔️ Confirmaciones a favor: " + "; ".join(oks) + "."
-        if pendientes:
-            corr_text += "\n   ⚠️ Confirmaciones pendientes / no cumplidas: " + "; ".join(pendientes) + "."
+        confs_favor = esc.get("confs_favor", []) or []
+        confs_pend  = esc.get("confs_pendientes", []) or []
 
-        escenarios_txt.append(f"🟢 Escenario de Continuación (bajo riesgo relativo):\n{cont_text}")
-        escenarios_txt.append(f"🔴 Escenario de Corrección (mayor riesgo / contra-tendencia):\n{corr_text}")
+        lineas = [
+            f"{emoji} {titulo} ({tipo} | riesgo {riesgo}, probabilidad {prob})",
+        ]
+
+        if texto_base:
+            lineas.append(texto_base)
+        if contexto:
+            lineas.append(f"📌 Contexto: {contexto}")
+
+        lineas.extend([
+            f"📥 Zona de entrada orientativa: {zona_ref}",
+            f"⛔ Zona de invalidación (SL orientativo): {sl_txt}",
+            "🎯 Gestión sugerida: TP1 en 1:2 RRR | TP2 en 1:3 RRR si la estructura se mantiene a favor.",
+        ])
+
+        if confs_favor:
+            lineas.append("")
+            lineas.append("✅ Confirmaciones a favor del escenario:")
+            for c in confs_favor:
+                lineas.append(f"   • {c}")
+
+        if confs_pend:
+            lineas.append("")
+            lineas.append("⚠️ Confirmaciones que FALTAN antes de ejecutar con confianza:")
+            for c in confs_pend:
+                lineas.append(f"   • {c}")
+            lineas.append("")
+            lineas.append("📎 Recomendación: NO ejecutar mientras estas confirmaciones sigan pendientes en la zona de entrada.")
+
+        return "\n".join(lineas)
+
+    escenarios_txt = []
+    esc1_txt = _detalle_escenario(esc1, zonas, "Escenario de Continuación", "🟢")
+    esc2_txt = _detalle_escenario(esc2, zonas, "Escenario de Corrección / contra-tendencia", "🔴")
+
+    if esc1_txt:
+        escenarios_txt.append(esc1_txt)
+    if esc2_txt:
+        if escenarios_txt:
+            escenarios_txt.append("")
+        escenarios_txt.append(esc2_txt)
 
     escenarios_final = "\n\n".join(escenarios_txt) if escenarios_txt else "—"
 
@@ -276,10 +270,6 @@ def construir_mensaje_operativo(data):
 💎 **ZONAS DE LIQUIDEZ**
 ──────────────────────────────
 {zonas_final}
-
-✅ **CONFIRMACIONES CLAVE**
-──────────────────────────────
-{conf_final}
 
 ⚙️ **SETUP TESLABTC**
 ──────────────────────────────

@@ -624,6 +624,7 @@ def _ob_en_rango(
         return ob_txt
     except Exception:
         return ob_txt
+    
 def _detectar_tendencia_zigzag(
     kl: List[Dict[str, Any]],
     depth: int = 12,
@@ -631,95 +632,76 @@ def _detectar_tendencia_zigzag(
     backstep: int = 2
 ) -> Dict[str, Any]:
     """
-    Tendencia basada en el TRAMO OPERATIVO del ZigZag (el que contiene al precio actual):
-    - Si el tramo es LOW → HIGH → alcista.
-    - Si el tramo es HIGH → LOW → bajista.
-    - Si no hay cambio claro → lateral.
+    Tendencia estructural TESLABTC usando ZigZag:
+    - Usa los últimos 2 HIGH y 2 LOW del zigzag.
+    - Si el último HIGH > HIGH previo y el último LOW > LOW previo → ALCISTA (HH/HL).
+    - Si el último HIGH < HIGH previo y el último LOW < LOW previo → BAJISTA (LH/LL).
+    - En otro caso → LATERAL / transición.
+
+    Así evitamos cambiar de tendencia por un solo tramo agresivo en contra.
     """
     piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
-    if not kl or len(piv) < 2:
+    if not kl or len(piv) < 3:
         return {"estado": "lateral", "BOS": "—"}
 
-    precio_actual = float(kl[-1]["close"])
+    # Separar highs y lows
+    highs = [(i, p) for (i, t, p) in piv if t == "H"]
+    lows  = [(i, p) for (i, t, p) in piv if t == "L"]
 
-    # Buscar el tramo cuyo rango incluye al precio
-    idx_seg = None
-    for i in range(len(piv) - 2, -1, -1):
-        _, t1, p1 = piv[i]
-        _, t2, p2 = piv[i + 1]
-        lo, hi = min(p1, p2), max(p1, p2)
-        if lo <= precio_actual <= hi:
-            idx_seg = i
-            break
-
-    # Si no lo encontramos, usamos el último tramo
-    if idx_seg is None:
+    # Si no hay suficientes pivotes, fallback suave
+    if len(highs) < 2 or len(lows) < 2:
         idx_prev, tipo_prev, price_prev = piv[-2]
         idx_last, tipo_last, price_last = piv[-1]
+
+        if tipo_prev == "L" and tipo_last == "H":
+            estado = "alcista"
+        elif tipo_prev == "H" and tipo_last == "L":
+            estado = "bajista"
+        else:
+            estado = "lateral"
+
+        return {
+            "estado": estado,
+            "BOS": "—",
+            "ultimo_pivote": price_last,
+            "pivotes": [
+                (idx_prev, tipo_prev, price_prev),
+                (idx_last, tipo_last, price_last),
+            ],
+        }
+
+    # Últimos 2 highs y 2 lows (estructurales)
+    idx_h1, h1 = highs[-2]
+    idx_h2, h2 = highs[-1]
+    idx_l1, l1 = lows[-2]
+    idx_l2, l2 = lows[-1]
+
+    if h2 > h1 and l2 > l1:
+        estado = "alcista"
+        pair = "HH/HL"
+        bos = "✔️"
+    elif h2 < h1 and l2 < l1:
+        estado = "bajista"
+        pair = "LH/LL"
+        bos = "✔️"
     else:
-        idx_prev, tipo_prev, price_prev = piv[idx_seg]
-        idx_last, tipo_last, price_last = piv[idx_seg + 1]
+        estado = "lateral"
+        pair = "HH/LL"
+        bos = "—"
 
-    # LOW → HIGH => tramo alcista
-    if tipo_prev == "L" and tipo_last == "H":
-        return {
-            "estado": "alcista",
-            "BOS": "✔️",
-            "ultimo_pivote": price_last,
-            "pivotes": [
-                (idx_prev, tipo_prev, price_prev),
-                (idx_last, tipo_last, price_last),
-            ],
-        }
+    idx_last, tipo_last, price_last = piv[-1]
 
-    # HIGH → LOW => tramo bajista
-    if tipo_prev == "H" and tipo_last == "L":
-        return {
-            "estado": "bajista",
-            "BOS": "✔️",
-            "ultimo_pivote": price_last,
-            "pivotes": [
-                (idx_prev, tipo_prev, price_prev),
-                (idx_last, tipo_last, price_last),
-            ],
-        }
-
-    # Si el tipo no define claramente dirección → rango / transición
     return {
-        "estado": "lateral",
-        "BOS": "—",
+        "estado": estado,
+        "BOS": bos,
+        "HH": h2,
+        "LH": h1,
+        "LL": l2,
+        "HL": l1,
+        "pair": pair,
         "ultimo_pivote": price_last,
-        "pivotes": [
-            (idx_prev, tipo_prev, price_prev),
-            (idx_last, tipo_last, price_last),
-        ],
+        "pivotes": piv[-6:],  # últimos pivotes para referencia/debug
     }
-
-
-    # Último tramo HIGH → LOW → bajista
-    if tipo_prev == "H" and tipo_last == "L":
-        return {
-            "estado": "bajista",
-            "BOS": "✔️",
-            "ultimo_pivote": price_last,
-            "pivotes": [
-                (idx_prev, tipo_prev, price_prev),
-                (idx_last, tipo_last, price_last),
-            ],
-        }
-
-    # Si no hay estructura clara, lo dejamos como rango / transición
-    return {
-        "estado": "lateral",
-        "BOS": "—",
-        "ultimo_pivote": price_last,
-        "pivotes": [
-            (idx_prev, tipo_prev, price_prev),
-            (idx_last, tipo_last, price_last),
-        ],
-    }
-
-
 
 def _detectar_ob_poi_cercanos(
     kl_h4: List[Dict[str, Any]],
@@ -776,18 +758,17 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # 🔹 Precio
     precio, fuente = _safe_get_price(symbol)
     precio_txt = f"{precio:,.2f} USD" if isinstance(precio, (int, float)) else "—"
-
     # 🔹 Datos Multi-TF
     kl_15m = _safe_get_klines(symbol, "15m", 600)
     kl_h1  = _safe_get_klines(symbol, "1h", 600)
     kl_h4  = _safe_get_klines(symbol, "4h", 600)
     kl_d   = _safe_get_klines(symbol, "1d", 400)
 
-    tf_d   = _detectar_tendencia_zigzag(kl_d)
-    tf_h4  = _detectar_tendencia_zigzag(kl_h4)
-    tf_h1  = _detectar_tendencia_zigzag(kl_h1)
-    tf_m15 = _detectar_tendencia_zigzag(kl_15m)
-
+    # 🧭 Tendencias TESLABTC usando ZigZag estructural
+    tf_d   = _detectar_tendencia_zigzag(kl_d,  depth=12, deviation=5.0, backstep=2)
+    tf_h4  = _detectar_tendencia_zigzag(kl_h4, depth=12, deviation=5.0, backstep=2)
+    tf_h1  = _detectar_tendencia_zigzag(kl_h1, depth=12, deviation=5.0, backstep=2)
+    tf_m15 = _detectar_tendencia_zigzag(kl_15m, depth=12, deviation=5.0, backstep=2)
 
     asian = _asian_range(kl_15m)
     pd    = _pdh_pdl(kl_15m)
