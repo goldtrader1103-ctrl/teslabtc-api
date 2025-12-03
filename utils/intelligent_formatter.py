@@ -32,7 +32,9 @@ FRASES_TESLA = [
     "El trading recompensa a los que siguen reglas, no impulsos.",
     "Tu única competencia es tu versión de ayer.",
     "Sin registro no hay mejora.",
-    "El éxito llega cuando la disciplina se vuelve natural."
+    "El éxito llega cuando la disciplina se vuelve natural.",
+    "Un POI es la estación donde el precio recoge combustible para continuar su viaje. Si el tren no se detiene allí, tú tampoco te subes.",
+    "El bos siempre sera el mejor gatillo en el mercado"
 ]
 
 def frase_motivacional():
