@@ -530,7 +530,6 @@ def _calc_range_last_impulse_zigzag(
     lo = min(p_prev, p_last)
     return hi, lo
 
-
 def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
     zonas = {}
     if pd:
