@@ -426,9 +426,9 @@ def _setup_activo_m5(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     kl_m5  = _safe_get_klines(symbol, "5m",  200)
     if not kl_m15 or not kl_m5:
         return {"activo": False}
-
-    tf_m15 = _detectar_tendencia(kl_m15)
-    tf_m5  = _detectar_tendencia(kl_m5)
+    
+    tf_m15 = _detectar_tendencia_zigzag(kl_m15, depth=12, deviation=5.0, backstep=2)
+    tf_m5  = _detectar_tendencia_zigzag(kl_m5,  depth=12, deviation=5.0, backstep=2)
 
     if tf_m15["estado"] == tf_m5["estado"] and tf_m5["estado"] in ("alcista", "bajista"):
         ultimo = kl_m5[-1]
@@ -868,7 +868,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "estructura_resumen": estructura_txt,
         "contexto_general": contexto,
         "zonas_detectadas": zonas,
-        "confirmaciones": {},
+        "confirmaciones": conf,
         "escenario_1": esc1,
         "escenario_2": esc2,
         "setup_tesla": setup_activo,
