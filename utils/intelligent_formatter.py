@@ -4,8 +4,10 @@
 # - No modifica la lógica de la API, sólo el mensaje final.
 # - Dirección D muestra RANGO en vez de HH/LL teóricos.
 # - Zonas: PDH/PDL + Asia + OB/POI.
-# - Confirmaciones con contexto.
+# - Confirmaciones sólo dentro de cada ESCENARIO (no bloque aparte).
 # - Escenarios SIEMPRE: Continuación y Corrección (fallback).
+# - El SETUP TESLABTC aparece DEBAJO de los escenarios
+#   y sólo cuando hay entrada activa.
 # - Protección Markdown para Telegram.
 # ============================================================
 
@@ -13,7 +15,7 @@ import random, re
 from datetime import datetime
 
 # ============================================================
-# 🌟 FRASES MOTIVACIONALES TESLABTC (recortado a las más usadas)
+# 🌟 FRASES MOTIVACIONALES TESLABTC
 # ============================================================
 FRASES_TESLA = [
     "Tu mentalidad define tu rentabilidad.",
@@ -33,8 +35,6 @@ FRASES_TESLA = [
     "Tu única competencia es tu versión de ayer.",
     "Sin registro no hay mejora.",
     "El éxito llega cuando la disciplina se vuelve natural.",
-    "Un POI es la estación donde el precio recoge combustible para continuar su viaje. Si el tren no se detiene allí, tú tampoco te subes.",
-    "El bos siempre sera el mejor gatillo en el mercado"
 ]
 
 def frase_motivacional():
@@ -48,18 +48,19 @@ def construir_mensaje_operativo(data):
     activo = data.get("activo", "BTCUSDT")
     sesion = data.get("sesión", "—")
     precio = data.get("precio_actual", "—")
-    estructura = data.get("estructura_detectada", {})
-    zonas = data.get("zonas_detectadas", {})
-    confs = data.get("confirmaciones", {})
+    estructura = data.get("estructura_detectada", {}) or {}
+    zonas = data.get("zonas_detectadas", {}) or {}
     esc1 = data.get("escenario_1", {}) or {}
     esc2 = data.get("escenario_2", {}) or {}
     setup = data.get("setup_tesla", {}) or {}
     reflexion = data.get("reflexion") or frase_motivacional()
-    slogan = data.get("slogan", "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!")
+    slogan = data.get(
+        "slogan",
+        "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
+    )
 
     # --------------------------------------------------------
-    # 🧭 DIRECCIÓN GENERAL — RANGO REAL (v5.3.4)
-    #   D/H4/H1 muestran SOLO estado + BOS + rango actual.
+    # 🧭 DIRECCIÓN GENERAL — RANGO REAL
     # --------------------------------------------------------
     d  = estructura.get("D", {}) or {}
     h4 = estructura.get("H4", {}) or {}
@@ -73,9 +74,8 @@ def construir_mensaje_operativo(data):
     h4_bos = h4.get("BOS", "—")
     h1_bos = h1.get("BOS", "—")
 
-    # Rangos operativos:
-    # 1) Preferimos lo inyectado en estructura (RANGO_HIGH/LOW).
-    # 2) Si por alguna capa se pierden, hacemos fallback a zonas_detectadas.
+    # Rangos operativos: primero lo que viene en la estructura,
+    # si no, fallback a zonas_detectadas.
     d_hi  = d.get("RANGO_HIGH", zonas.get("D_HIGH"))
     d_lo  = d.get("RANGO_LOW",  zonas.get("D_LOW"))
     h4_hi = h4.get("RANGO_HIGH", zonas.get("H4_HIGH"))
@@ -83,19 +83,16 @@ def construir_mensaje_operativo(data):
     h1_hi = h1.get("RANGO_HIGH", zonas.get("H1_HIGH"))
     h1_lo = h1.get("RANGO_LOW",  zonas.get("H1_LOW"))
 
-
     d_line = (
         f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hi}–{d_lo}"
         if d_hi is not None and d_lo is not None
         else f"📈 D: {d_estado} ({d_bos})"
     )
-
     h4_line = (
         f"⚙️ H4: {h4_estado} ({h4_bos}) | RANGO: {h4_hi}–{h4_lo}"
         if h4_hi is not None and h4_lo is not None
         else f"⚙️ H4: {h4_estado} ({h4_bos})"
     )
-
     h1_line = (
         f"🔹 H1: {h1_estado} ({h1_bos}) | RANGO: {h1_hi}–{h1_lo}"
         if h1_hi is not None and h1_lo is not None
@@ -119,7 +116,9 @@ def construir_mensaje_operativo(data):
     if asia_high and asia_low:
         zonas_txt.append(f"• ASIAN HIGH: {asia_high} | • ASIAN LOW: {asia_low}")
     elif asia_high or asia_low:
-        zonas_txt.append(f"• ASIAN HIGH: {asia_high or '—'} | • ASIAN LOW: {asia_low or '—'}")
+        zonas_txt.append(
+            f"• ASIAN HIGH: {asia_high or '—'} | • ASIAN LOW: {asia_low or '—'}"
+        )
     else:
         zonas_txt.append("• Rango Asiático: — (sin datos)")
 
@@ -133,22 +132,32 @@ def construir_mensaje_operativo(data):
     if zonas.get("POI_H1"):
         zonas_txt.append(f"• POI H1: {zonas['POI_H1']}")
 
-
     zonas_final = "\n".join(zonas_txt) if zonas_txt else "—"
+
     # --------------------------------------------------------
-    # ⚙️ SETUP TESLABTC
+    # ⚙️ SETUP TESLABTC (sólo si hay entrada activa)
     # --------------------------------------------------------
     if setup.get("activo"):
         setup_txt = (
-            f"{setup.get('nivel','SETUP ACTIVO')}\n"
-            f"{setup.get('contexto','')}\n"
-            f"Zona de entrada: {setup.get('zona_entrada','—')}\n"
-            f"SL: {setup.get('sl','—')}\n"
-            f"TP1: {setup.get('tp1','—')} | TP2: {setup.get('tp2','—')}\n"
-            f"Comentario: {setup.get('comentario','')}"
+            f"{setup.get('nivel', 'SETUP ACTIVO')}\n"
+            f"{setup.get('contexto', '')}\n"
+            f"Zona de entrada: {setup.get('zona_entrada', '—')}\n"
+            f"SL: {setup.get('sl', '—')}\n"
+            f"TP1: {setup.get('tp1', '—')} | TP2: {setup.get('tp2', '—')}\n"
+            f"Comentario: {setup.get('comentario', '')}"
         )
     else:
-        setup_txt = "⏳ Sin setup activo — esperando confirmaciones estructurales (BOS + POI + Sesión NY)."
+        setup_txt = ""
+
+    # Este bloque se incrusta DESPUÉS de los escenarios
+    setup_block = ""
+    if setup_txt:
+        setup_block = f"""
+
+⚙️ **SETUP TESLABTC (M5 en POI H1)**
+──────────────────────────────
+{setup_txt}
+"""
 
     # --------------------------------------------------------
     # 📊 ESCENARIOS OPERATIVOS (con confirmaciones por escenario)
@@ -162,6 +171,8 @@ def construir_mensaje_operativo(data):
         riesgo = esc.get("riesgo", "Medio")
         texto_base = esc.get("descripcion") or esc.get("texto") or ""
         contexto = esc.get("contexto") or ""
+
+        # Prioridad para zona_ref: primero POI, luego OB
         poi_h1 = zonas.get("POI_H1")
         poi_h4 = zonas.get("POI_H4")
         ob_h1  = zonas.get("OB_H1")
@@ -182,24 +193,24 @@ def construir_mensaje_operativo(data):
             targets = []
             if pdh: targets.append(f"PDH: {pdh}")
             if ah:  targets.append(f"ASIAN HIGH: {ah}")
-            target_txt = ", ".join(targets) if targets else "zonas de liquidez superior (máximos previos)"
-            idea_operativa = (
-                f"Buscar largos dentro de **{zona_ref}**, "
-                f"con objetivo principal en {target_txt}."
+            target_txt = (
+                ", ".join(targets)
+                if targets else
+                "zonas de liquidez superior (máximos previos)"
             )
             sl_txt = "SL por debajo del OB o del último mínimo relevante en H1."
         elif tipo == "Venta":
             targets = []
             if pdl: targets.append(f"PDL: {pdl}")
             if al:  targets.append(f"ASIAN LOW: {al}")
-            target_txt = ", ".join(targets) if targets else "zonas de liquidez inferior (mínimos previos)"
-            idea_operativa = (
-                f"Buscar cortos dentro de **{zona_ref}**, "
-                f"con objetivo principal en {target_txt}."
+            target_txt = (
+                ", ".join(targets)
+                if targets else
+                "zonas de liquidez inferior (mínimos previos)"
             )
             sl_txt = "SL por encima del OB o del último máximo relevante en H1."
         else:
-            idea_operativa = "Contexto neutro / en rango: esperar BOS claro en una zona institucional antes de operar."
+            target_txt = "esperar definición clara de estructura."
             sl_txt = "SL siempre fuera de la zona institucional usada para la entrada."
 
         confs_favor = esc.get("confs_favor", []) or []
@@ -216,8 +227,9 @@ def construir_mensaje_operativo(data):
 
         lineas.extend([
             f"📥 Zona de entrada orientativa: {zona_ref}",
+            f"🎯 Objetivos principales: {target_txt}",
             f"⛔ Zona de invalidación (SL orientativo): {sl_txt}",
-            "🎯 Gestión sugerida: TP1 en 1:2 RRR | TP2 en 1:3 RRR si la estructura se mantiene a favor.",
+            "💼 Gestión sugerida: TP1 en 1:2 RRR | TP2 en 1:3 RRR si la estructura se mantiene a favor.",
         ])
 
         if confs_favor:
@@ -232,13 +244,18 @@ def construir_mensaje_operativo(data):
             for c in confs_pend:
                 lineas.append(f"   • {c}")
             lineas.append("")
-            lineas.append("📎 Recomendación: NO ejecutar mientras estas confirmaciones sigan pendientes en la zona de entrada.")
+            lineas.append(
+                "📎 Recomendación: NO ejecutar mientras estas confirmaciones "
+                "sigan pendientes en la zona de entrada."
+            )
 
         return "\n".join(lineas)
 
     escenarios_txt = []
     esc1_txt = _detalle_escenario(esc1, zonas, "Escenario de Continuación", "🟢")
-    esc2_txt = _detalle_escenario(esc2, zonas, "Escenario de Corrección / contra-tendencia", "🔴")
+    esc2_txt = _detalle_escenario(
+        esc2, zonas, "Escenario de Corrección / contra-tendencia", "🔴"
+    )
 
     if esc1_txt:
         escenarios_txt.append(esc1_txt)
@@ -279,13 +296,9 @@ def construir_mensaje_operativo(data):
 ──────────────────────────────
 {zonas_final}
 
-⚙️ **SETUP TESLABTC**
-──────────────────────────────
-{setup_txt}
-
 📊 **ESCENARIOS OPERATIVOS**
 ──────────────────────────────
-{escenarios_final}
+{escenarios_final}{setup_block}
 
 🧠 **CONCLUSIÓN OPERATIVA**
 ──────────────────────────────
@@ -304,17 +317,20 @@ def construir_mensaje_operativo(data):
 # 🌙 MODO FREE
 # ============================================================
 def construir_mensaje_free(data):
-    fecha = data.get("fecha","—")
-    activo = data.get("activo","BTCUSDT")
-    precio = data.get("precio_actual","—")
-    sesion = data.get("sesión","—")
-    estructura = data.get("estructura_detectada",{}) or {}
-    d  = estructura.get("D",{}) or {}
-    h4 = estructura.get("H4",{}) or {}
-    h1 = estructura.get("H1",{}) or {}
+    fecha = data.get("fecha", "—")
+    activo = data.get("activo", "BTCUSDT")
+    precio = data.get("precio_actual", "—")
+    sesion = data.get("sesión", "—")
+    estructura = data.get("estructura_detectada", {}) or {}
+    d  = estructura.get("D", {}) or {}
+    h4 = estructura.get("H4", {}) or {}
+    h1 = estructura.get("H1", {}) or {}
 
     reflex = frase_motivacional()
-    slogan = data.get("slogan","✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!")
+    slogan = data.get(
+        "slogan",
+        "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
+    )
 
     msg = f"""
 📋 **TESLABTC.KG — Análisis Gratuito**
@@ -330,7 +346,7 @@ def construir_mensaje_free(data):
 
 ⚠️ Accede a TESLABTC Premium para ver:
 • Confirmaciones estructurales
-• Zonas institucionales (PDH/PDL/Asia)
+• Zonas institucionales (PDH/PDL/Asia/OB/POI)
 • Setup activo y conclusiones dinámicas
 {slogan}
 """
@@ -343,11 +359,15 @@ def safe_markdown(text: str) -> str:
     if not text:
         return ""
     # asteriscos sueltos → ✱
-    text = re.sub(r'(?<!\*)\*(?!\*)', '✱', text)
+    text = re.sub(r"(?<!\*)\*(?!\*)", "✱", text)
     # guiones bajos sueltos → ‗
-    text = re.sub(r'(?<!_)_(?!_)', '‗', text)
+    text = re.sub(r"(?<!_)_(?!_)", "‗", text)
     # corchetes y paréntesis → variantes seguras
-    text = text.replace("[","〔").replace("]","〕").replace("(","（").replace(")","）")
+    text = (
+        text
+        .replace("[", "〔").replace("]", "〕")
+        .replace("(", "（").replace(")", "）")
+    )
     return text
 
 # ============================================================
