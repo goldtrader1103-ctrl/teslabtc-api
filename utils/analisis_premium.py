@@ -257,12 +257,32 @@ def _confirmaciones(
 # ------------------------------------------------------------
 def _probabilidad_por_confs(confs: Dict[str, str]) -> str:
     checks = sum(1 for v in confs.values() if v.startswith("✅"))
-    if checks >= 4: return "Alta"
-    if checks >= 2: return "Media"
+    if checks >= 4:
+        return "Alta"
+    if checks >= 2:
+        return "Media"
     return "Baja"
+
 
 def _riesgo(prob: str) -> str:
     return "Bajo" if prob == "Alta" else ("Medio" if prob == "Media" else "Alto")
+
+
+def _separar_confs(confs: Dict[str, str]) -> Tuple[List[str], List[str]]:
+    """
+    Separa nombres de confirmaciones:
+    - a_favor: las que empiezan por '✅'
+    - pendientes: el resto
+    """
+    a_favor: List[str] = []
+    pendientes: List[str] = []
+    for nombre, texto in confs.items():
+        if texto.startswith("✅"):
+            a_favor.append(nombre)
+        else:
+            pendientes.append(nombre)
+    return a_favor, pendientes
+
 
 def _escenarios(
     precio: float,
@@ -273,6 +293,7 @@ def _escenarios(
     tf_h1: Dict[str, Any],
     confs: Dict[str, str],
 ) -> Tuple[Dict[str, Any], Dict[str, Any], str]:
+
     t_h1 = tf_h1.get("estado")
     if t_h1 == "alcista":
         tipo_favor, tipo_contra = "Compra", "Venta"
@@ -282,28 +303,44 @@ def _escenarios(
         tipo_favor, tipo_contra = "Neutro", "Neutro"
 
     contexto: List[str] = []
+
+    # Contexto por barridas diarias
     if isinstance(precio, (int, float)) and pd:
         if pd.get("PDL") and precio < float(pd["PDL"]):
             contexto.append("🧲 Barrida del PDL → búsqueda de PDH.")
         if pd.get("PDH") and precio > float(pd["PDH"]):
             contexto.append("🧲 Barrida del PDH → búsqueda de PDL.")
+
+    # Contexto por rango asiático
     if isinstance(precio, (int, float)) and asian:
         if asian.get("ASIAN_LOW") and precio < float(asian["ASIAN_LOW"]):
             contexto.append("🧲 Barrida del Bajo Asiático → buscar Alto Asiático.")
         if asian.get("ASIAN_HIGH") and precio > float(asian["ASIAN_HIGH"]):
             contexto.append("🧲 Barrida del Alto Asiático → buscar Bajo Asiático.")
 
-    if t_h1 == "alcista": contexto.append("📈 H1 alcista (sesgo comprador).")
-    elif t_h1 == "bajista": contexto.append("📉 H1 bajista (sesgo vendedor).")
-    else: contexto.append("➖ H1 lateral: esperar BOS/CHoCH.")
+    # Sesgo de H1
+    if t_h1 == "alcista":
+        contexto.append("📈 H1 alcista (sesgo comprador).")
+    elif t_h1 == "bajista":
+        contexto.append("📉 H1 bajista (sesgo vendedor).")
+    else:
+        contexto.append("➖ H1 lateral: esperar BOS/CHoCH.")
 
     contexto_txt = " | ".join(contexto) if contexto else "Contexto neutro."
 
+    # Probabilidades según confirmaciones
     prob_favor = _probabilidad_por_confs(confs)
     prob_contra = "Media" if prob_favor == "Alta" else ("Baja" if prob_favor == "Media" else "Baja")
 
+    # Separar confirmaciones a favor / pendientes
+    confs_favor, confs_pendientes = _separar_confs(confs)
+
     def build_setup(prob: str, tipo: str) -> Tuple[str, Dict[str, str]]:
-        tiene_setup = (prob in ("Alta", "Media")) and tipo in ("Compra", "Venta") and t_h1 in ("alcista", "bajista")
+        tiene_setup = (
+            prob in ("Alta", "Media")
+            and tipo in ("Compra", "Venta")
+            and t_h1 in ("alcista", "bajista")
+        )
         if tiene_setup:
             return "✅ Setup candidato", {
                 "zona_entrada": "Esperar BOS en M15/M5 dentro del POI.",
@@ -332,11 +369,14 @@ def _escenarios(
         "probabilidad": prob_favor,
         "riesgo": _riesgo(prob_favor),
         "contexto": contexto_txt,
-        "confirmaciones": confs,
+        "confirmaciones": confs,               # compatibilidad con formatter actual
+        "confs_favor": confs_favor,            # ✅ sólo nombres de confirmaciones a favor
+        "confs_pendientes": confs_pendientes,  # ✅ nombres de confirmaciones pendientes
         "setup_estado": setup_estado_favor,
         "setup": setup_favor,
         "texto": texto_esc(tipo_favor),
     }
+
     # Escenario 2: Corrección (contra H1)
     escenario_2 = {
         "tipo": tipo_contra,
@@ -344,15 +384,18 @@ def _escenarios(
         "riesgo": _riesgo(prob_contra),
         "contexto": contexto_txt,
         "confirmaciones": confs,
+        "confs_favor": confs_favor,
+        "confs_pendientes": confs_pendientes,
         "setup_estado": setup_estado_contra,
         "setup": setup_contra,
         "texto": texto_esc(tipo_contra),
     }
 
     conclusion = (
-        "Operar sólo cuando *todas* las confirmaciones críticas se alineen (BOS + POI + Sesión NY). "
-        "Si el setup no es válido, vuelve a intentar en unos minutos."
+        "Operar sólo cuando *todas* las confirmaciones críticas se alineen "
+        "(BOS + POI + Sesión NY). Si el setup no es válido, vuelve a intentar en unos minutos."
     )
+
     return escenario_1, escenario_2, conclusion
 
 # ------------------------------------------------------------
@@ -844,7 +887,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "estructura_resumen": estructura_txt,
         "contexto_general": contexto,
         "zonas_detectadas": zonas,
-        "confirmaciones": conf,
+        "confirmaciones": {},
         "escenario_1": esc1,
         "escenario_2": esc2,
         "setup_tesla": setup_activo,

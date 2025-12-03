@@ -122,14 +122,14 @@ def construir_mensaje_operativo(data):
         zonas_txt.append("• Rango Asiático: — (sin datos)")
 
     if zonas.get("OB_H4"):
-        zonas_txt.append(f"• OB H4 Cercano: {zonas['OB_H4']}")
+        zonas_txt.append(f"• OB H4: {zonas['OB_H4']}")
     if zonas.get("POI_H4"):
-        zonas_txt.append(f"• POI H4 Cercano: {zonas['POI_H4']}")
+        zonas_txt.append(f"• POI H4: {zonas['POI_H4']}")
 
     if zonas.get("OB_H1"):
-        zonas_txt.append(f"• OB H1 Cercano: {zonas['OB_H1']}")
+        zonas_txt.append(f"• OB H1: {zonas['OB_H1']}")
     if zonas.get("POI_H1"):
-        zonas_txt.append(f"• POI H1 Cercano: {zonas['POI_H1']}")
+        zonas_txt.append(f"• POI H1: {zonas['POI_H1']}")
 
 
     zonas_final = "\n".join(zonas_txt) if zonas_txt else "—"
