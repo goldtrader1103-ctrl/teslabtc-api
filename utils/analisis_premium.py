@@ -748,6 +748,58 @@ def _detectar_ob_poi_cercanos(
     return out
 
 
+def _fib_retracement_h1(
+    precio: float,
+    tf_h1: Dict[str, Any],
+    zonas: Dict[str, Any]
+) -> Tuple[Optional[float], Optional[str]]:
+    """
+    Calcula el nivel de retroceso Fibonacci del precio actual dentro del
+    último impulso operativo H1 (ZigZag → H1_HIGH / H1_LOW).
+
+    Devuelve:
+    - ratio (0–1) o None
+    - texto descriptivo para confirmaciones
+    """
+    if not isinstance(precio, (int, float)):
+        return None, None
+
+    estado = tf_h1.get("estado")
+    hi = zonas.get("H1_HIGH")
+    lo = zonas.get("H1_LOW")
+
+    if hi is None or lo is None or hi == lo:
+        return None, None
+
+    # Normalizamos según tendencia H1
+    if estado == "alcista":
+        # 0% en el low, 100% en el high
+        ratio = (precio - lo) / (hi - lo)
+    elif estado == "bajista":
+        # 0% en el high, 100% en el low
+        ratio = (hi - precio) / (hi - lo)
+    else:
+        return None, None
+
+    # Fuera de rango impulso → no tiene sentido
+    if ratio < 0 or ratio > 1.2:
+        return None, None
+
+    # Clasificación TESLABTC
+    if ratio < 0.382:
+        texto = "➖ Retroceso Fibonacci H1 poco profundo (< 38.2%) — descuento limitado."
+    elif ratio < 0.618:
+        texto = "➖ Retroceso Fibonacci H1 medio (38.2–61.8%) — aún agresivo."
+    elif ratio < 0.786:
+        texto = "✅ Retroceso Fibonacci H1 óptimo (61.8–78.6%) — zona ideal de descuento."
+    elif ratio <= 0.886:
+        texto = "✅ Retroceso Fibonacci H1 profundo (78.6–88.6%) — banda TESLABTC de alta probabilidad."
+    else:
+        texto = "⚠️ Retroceso Fibonacci H1 extremo (> 88.6%) — riesgo de cambio de ciclo."
+
+    return ratio, texto
+
+
 # ============================================================
 # 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3)
 # ============================================================
@@ -758,6 +810,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # 🔹 Precio
     precio, fuente = _safe_get_price(symbol)
     precio_txt = f"{precio:,.2f} USD" if isinstance(precio, (int, float)) else "—"
+
     # 🔹 Datos Multi-TF
     kl_15m = _safe_get_klines(symbol, "15m", 600)
     kl_h1  = _safe_get_klines(symbol, "1h", 600)
@@ -774,7 +827,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     pd    = _pdh_pdl(kl_15m)
     sesion_txt, sesion_activa = _estado_sesion_ny()
 
-    # 🔹 Confirmaciones con contexto
+    # 🔹 Confirmaciones con contexto (base)
     conf = _confirmaciones(
         precio if isinstance(precio, (int, float)) else math.nan,
         asian, pd, tf_d, tf_h1, sesion_activa
@@ -790,18 +843,6 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         else "⚪ Lateral"
     )
     estructura_txt = f"D: {tendencia_d.upper()} | H4: {tendencia_h4.upper()} | H1: {tendencia_h1.upper()}"
-
-    # 🔹 Interpretación macro (para UI)
-    contexto = interpretar_contexto(tf_d, tf_h4, tf_h1, conf, asian or {})
-
-    # 🔹 Escenarios (continuidad y corrección)
-    esc1, esc2, concl = _escenarios(
-        precio if isinstance(precio, (int, float)) else math.nan,
-        asian, pd, tf_d, tf_h4, tf_h1, conf
-    )
-
-    # 🔹 Setup activo M5
-    setup_activo = _setup_activo_m5(symbol)
 
     # 🔹 Zonas (PDH/PDL, Asia, rangos) + OB/POI cercanos
     zonas = _fmt_zonas(asian, pd, kl_15m, kl_d, kl_h4, kl_h1)
@@ -836,10 +877,29 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     if zonas.get("OB_H1") is None:
         zonas.pop("OB_H1", None)
 
+    # 🔹 Fibonacci H1 sobre el último impulso operativo
+    fib_ratio, fib_text = _fib_retracement_h1(
+        precio if isinstance(precio, (int, float)) else math.nan,
+        tf_h1,
+        zonas
+    )
+    if fib_text:
+        conf["Fibonacci H1"] = fib_text
+
+    # 🔹 Interpretación macro (para UI)
+    contexto = interpretar_contexto(tf_d, tf_h4, tf_h1, conf, asian or {})
+
+    # 🔹 Escenarios (continuidad y corrección)
+    esc1, esc2, concl = _escenarios(
+        precio if isinstance(precio, (int, float)) else math.nan,
+        asian, pd, tf_d, tf_h4, tf_h1, conf
+    )
+
+    # 🔹 Setup activo M5
+    setup_activo = _setup_activo_m5(symbol)
 
     # 🔹 Reflexión (si el formatter no recibe una, él randomiza)
     reflexion = random.choice(REFLEXIONES)
-
     slogan = "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
 
     # 🔹 Conclusión operativa (separada del bloque Setup)
@@ -868,7 +928,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "estructura_resumen": estructura_txt,
         "contexto_general": contexto,
         "zonas_detectadas": zonas,
-        "confirmaciones": conf,
+        "confirmaciones": conf,          # ✅ ahora incluye Fibonacci H1
         "escenario_1": esc1,
         "escenario_2": esc2,
         "setup_tesla": setup_activo,
