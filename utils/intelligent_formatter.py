@@ -168,59 +168,63 @@ def construir_mensaje_operativo(data: dict) -> str:
     # --------------------------------------------------------
     # 📊 ESCENARIOS OPERATIVOS (con confirmaciones por escenario)
     # --------------------------------------------------------
-    def _detalle_escenario(esc: dict, zonas_locales: dict, titulo: str, emoji: str) -> str:
-        if not esc:
+    def _detalle_escenario(esc, zonas, titulo, emoji):
+        if not esc or not isinstance(esc, dict):
             return ""
 
-        tipo = esc.get("tipo", "Neutro")
+        tipo = esc.get("tipo") or "Neutro"
         prob = esc.get("probabilidad", "Media")
         riesgo = esc.get("riesgo", "Medio")
         texto_base = esc.get("descripcion") or esc.get("texto") or ""
         contexto = esc.get("contexto") or ""
 
+        # Si el tipo es neutro y no hay texto, ponemos explicación por defecto
+        if tipo == "Neutro" and not texto_base:
+            texto_base = (
+                "El mercado está en fase de transición. "
+                "Esperar que el precio llegue a un POI TESLABTC y forme un BOS claro "
+                "antes de ejecutar cualquier operación."
+            )
+
         # Prioridad para zona_ref: primero POI, luego OB
-        poi_h1 = zonas_locales.get("POI_H1")
-        poi_h4 = zonas_locales.get("POI_H4")
-        ob_h1 = zonas_locales.get("OB_H1")
-        ob_h4 = zonas_locales.get("OB_H4")
+        poi_h1 = zonas.get("POI_H1")
+        poi_h4 = zonas.get("POI_H4")
+        ob_h1  = zonas.get("OB_H1")
+        ob_h4  = zonas.get("OB_H4")
 
         zona_ref = (
-            poi_h1
-            or poi_h4
-            or ob_h1
-            or ob_h4
-            or "zona institucional (POI/OB) relevante en H1/H4"
+            poi_h1 or poi_h4 or
+            ob_h1  or ob_h4  or
+            "zona institucional (POI/OB) relevante en H1/H4"
         )
 
-        pdh_local = zonas_locales.get("PDH")
-        pdl_local = zonas_locales.get("PDL")
-        ah = zonas_locales.get("ASIAN_HIGH")
-        al = zonas_locales.get("ASIAN_LOW")
+        pdh = zonas.get("PDH")
+        pdl = zonas.get("PDL")
+        ah  = zonas.get("ASIAN_HIGH")
+        al  = zonas.get("ASIAN_LOW")
 
         if tipo == "Compra":
-            targets: list[str] = []
-            if pdh_local:
-                targets.append(f"PDH: {pdh_local}")
+            targets = []
+            if pdh:
+                targets.append(f"PDH: {pdh}")
             if ah:
                 targets.append(f"ASIAN HIGH: {ah}")
-
             target_txt = (
                 ", ".join(targets)
-                if targets
-                else "zonas de liquidez superior (máximos previos)"
+                if targets else
+                "zonas de liquidez superior (máximos previos)"
             )
             sl_txt = "SL por debajo del OB o del último mínimo relevante en H1."
         elif tipo == "Venta":
             targets = []
-            if pdl_local:
-                targets.append(f"PDL: {pdl_local}")
+            if pdl:
+                targets.append(f"PDL: {pdl}")
             if al:
                 targets.append(f"ASIAN LOW: {al}")
-
             target_txt = (
                 ", ".join(targets)
-                if targets
-                else "zonas de liquidez inferior (mínimos previos)"
+                if targets else
+                "zonas de liquidez inferior (mínimos previos)"
             )
             sl_txt = "SL por encima del OB o del último máximo relevante en H1."
         else:
@@ -228,9 +232,9 @@ def construir_mensaje_operativo(data: dict) -> str:
             sl_txt = "SL siempre fuera de la zona institucional usada para la entrada."
 
         confs_favor = esc.get("confs_favor", []) or []
-        confs_pend = esc.get("confs_pendientes", []) or []
+        confs_pend  = esc.get("confs_pendientes", []) or []
 
-        lineas: list[str] = [
+        lineas = [
             f"{emoji} {titulo} ({tipo} | riesgo {riesgo}, probabilidad {prob})",
         ]
 
@@ -239,17 +243,12 @@ def construir_mensaje_operativo(data: dict) -> str:
         if contexto:
             lineas.append(f"📌 Contexto: {contexto}")
 
-        lineas.extend(
-            [
-                f"📥 Zona de entrada orientativa: {zona_ref}",
-                f"🎯 Objetivos principales: {target_txt}",
-                f"⛔ Zona de invalidación (SL orientativo): {sl_txt}",
-                (
-                    "💼 Gestión sugerida: TP1 en 1:2 RRR | TP2 en 1:3 RRR "
-                    "si la estructura se mantiene a favor."
-                ),
-            ]
-        )
+        lineas.extend([
+            f"📥 Zona de entrada orientativa: {zona_ref}",
+            f"🎯 Objetivos principales: {target_txt}",
+            f"⛔ Zona de invalidación (SL orientativo): {sl_txt}",
+            "💼 Gestión sugerida: TP1 en 1:2 RRR | TP2 en 1:3 RRR si la estructura se mantiene a favor.",
+        ])
 
         if confs_favor:
             lineas.append("")
@@ -269,6 +268,7 @@ def construir_mensaje_operativo(data: dict) -> str:
             )
 
         return "\n".join(lineas)
+
 
     escenarios_txt: list[str] = []
 
