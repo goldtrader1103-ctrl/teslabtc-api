@@ -3,12 +3,15 @@ from main import VERSION_TESLA
 # 🧠 TESLABTC.KG — Análisis Premium (v5.3 PRO REAL MARKET)
 # ============================================================
 # Fuente: Binance (REST) — sin simulaciones
-# Estructura real multi-TF, PDH/PDL, Rango Asiático (COL), OB/POI cercanos,
-# escenarios de continuidad/corrección y SETUP ACTIVO “Level Entry M5”.
-# Compatible con utils/intelligent_formatter v5.3 PRO.
+# Estructura real multi-TF, PDH/PDL, Rango Asiático (COL),
+# OB/POI cercanos, escenarios de continuidad/corrección
+# y SETUP ACTIVO “Level Entry M5”.
+# Compatible con utils/intelligent_formatter v5.5 PRO.
 # ============================================================
 
-import requests, math, random
+import requests
+import math
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +22,7 @@ TZ_COL = timezone(timedelta(hours=-5))
 BINANCE_REST_BASE = "https://api.binance.com"
 UA = {"User-Agent": "teslabtc-kg/5.2"}
 
+
 # ------------------------------------------------------------
 # 🔹 Utilidades base (precio + klines)
 # ------------------------------------------------------------
@@ -27,7 +31,8 @@ def _safe_get_price(symbol: str = "BTCUSDT") -> Tuple[Optional[float], str]:
         r = requests.get(
             f"{BINANCE_REST_BASE}/api/v3/ticker/price",
             params={"symbol": symbol},
-            headers=UA, timeout=6
+            headers=UA,
+            timeout=6,
         )
         r.raise_for_status()
         data = r.json()
@@ -35,28 +40,37 @@ def _safe_get_price(symbol: str = "BTCUSDT") -> Tuple[Optional[float], str]:
     except Exception as e:
         return None, f"Error precio: {e}"
 
-def _safe_get_klines(symbol: str, interval: str = "15m", limit: int = 500) -> List[Dict[str, Any]]:
+
+def _safe_get_klines(
+    symbol: str,
+    interval: str = "15m",
+    limit: int = 500,
+) -> List[Dict[str, Any]]:
     try:
         r = requests.get(
             f"{BINANCE_REST_BASE}/api/v3/klines",
             params={"symbol": symbol, "interval": interval, "limit": limit},
-            headers=UA, timeout=8
+            headers=UA,
+            timeout=8,
         )
         r.raise_for_status()
         data = r.json()
         out: List[Dict[str, Any]] = []
         for k in data:
-            out.append({
-                "open_time": datetime.utcfromtimestamp(k[0] / 1000.0),
-                "open": float(k[1]),
-                "high": float(k[2]),
-                "low":  float(k[3]),
-                "close":float(k[4]),
-                "vol":  float(k[5]),
-            })
+            out.append(
+                {
+                    "open_time": datetime.utcfromtimestamp(k[0] / 1000.0),
+                    "open": float(k[1]),
+                    "high": float(k[2]),
+                    "low": float(k[3]),
+                    "close": float(k[4]),
+                    "vol": float(k[5]),
+                }
+            )
         return out
     except Exception:
         return []
+
 
 # ------------------------------------------------------------
 # 🔹 Pivotes y tendencia (HH/HL vs LH/LL coherente)
@@ -66,12 +80,18 @@ def _pivotes(kl: List[Dict[str, Any]], look: int = 2) -> Tuple[List[int], List[i
         return [], []
     hi_idx, lo_idx = [], []
     for i in range(look, len(kl) - look):
-        h = kl[i]["high"]; l = kl[i]["low"]
-        if all(h > kl[i-j]["high"] for j in range(1, look+1)) and all(h > kl[i+j]["high"] for j in range(1, look+1)):
+        h = kl[i]["high"]
+        l = kl[i]["low"]
+        if all(h > kl[i - j]["high"] for j in range(1, look + 1)) and all(
+            h > kl[i + j]["high"] for j in range(1, look + 1)
+        ):
             hi_idx.append(i)
-        if all(l < kl[i-j]["low"]  for j in range(1, look+1)) and all(l < kl[i+j]["low"]  for j in range(1, look+1)):
+        if all(l < kl[i - j]["low"] for j in range(1, look + 1)) and all(
+            l < kl[i + j]["low"] for j in range(1, look + 1)
+        ):
             lo_idx.append(i)
     return hi_idx, lo_idx
+
 
 def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, Any]:
     """
@@ -82,19 +102,17 @@ def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, A
     - HH/LH/LL/HL: últimos pivotes
     - pair: cuál par es coherente con la estructura
     """
-    # Necesitamos al menos un bloque razonable de datos
     if not kl or len(kl) < (look * 2 + 3):
         return {"estado": "lateral", "BOS": "—"}
 
     hi_idx, lo_idx = _pivotes(kl, look=look)
 
-    # Si casi no hay pivotes, devolvemos algo pero sin BOS
     if len(hi_idx) < 2 or len(lo_idx) < 2:
         try:
             last_hi = kl[hi_idx[-1]]["high"] if hi_idx else None
             prev_hi = kl[hi_idx[-2]]["high"] if len(hi_idx) > 1 else None
-            last_lo = kl[lo_idx[-1]]["low"]  if lo_idx else None
-            prev_lo = kl[lo_idx[-2]]["low"]  if len(lo_idx) > 1 else None
+            last_lo = kl[lo_idx[-1]]["low"] if lo_idx else None
+            prev_lo = kl[lo_idx[-2]]["low"] if len(lo_idx) > 1 else None
         except Exception:
             last_hi = prev_hi = last_lo = prev_lo = None
         return {
@@ -107,15 +125,12 @@ def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, A
             "pair": "HH/LL",
         }
 
-    # Últimos pivotes relevantes con esa profundidad
     hh = kl[hi_idx[-1]]["high"]
     lh = kl[hi_idx[-2]]["high"]
     ll = kl[lo_idx[-1]]["low"]
     hl = kl[lo_idx[-2]]["low"]
 
-    # Regla TESLA: tendencia por HH/HL vs LH/LL
     if hh > lh and ll > hl:
-        # estructura alcista (HH/HL)
         return {
             "estado": "alcista",
             "BOS": "✔️",
@@ -126,7 +141,6 @@ def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, A
             "pair": "HH/HL",
         }
     if hh < lh and ll < hl:
-        # estructura bajista (LH/LL)
         return {
             "estado": "bajista",
             "BOS": "✔️",
@@ -137,7 +151,6 @@ def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, A
             "pair": "LH/LL",
         }
 
-    # Si no encaja limpio → rango / transición
     return {
         "estado": "lateral",
         "BOS": "—",
@@ -148,50 +161,62 @@ def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, A
         "pair": "HH/LL",
     }
 
+
 # ------------------------------------------------------------
 # 🔹 Rangos reales por horario Colombia (PDH/PDL & Asia)
 # ------------------------------------------------------------
 import pytz
+
+
 def _pdh_pdl(kl_15m):
     """Día previo cerrado COL: 7PM anteayer → 7PM ayer (America/Bogota)"""
     if not kl_15m:
         return None
     tz_col = pytz.timezone("America/Bogota")
     ahora = datetime.now(tz_col)
-    fin_dia = (ahora.replace(hour=19, minute=0, second=0, microsecond=0)
-               if ahora.hour >= 19 else
-               (ahora - timedelta(days=1)).replace(hour=19, minute=0, second=0, microsecond=0))
+    fin_dia = (
+        ahora.replace(hour=19, minute=0, second=0, microsecond=0)
+        if ahora.hour >= 19
+        else (ahora - timedelta(days=1)).replace(
+            hour=19, minute=0, second=0, microsecond=0
+        )
+    )
     inicio_dia = fin_dia - timedelta(hours=24)
     hi, lo = None, None
     for k in kl_15m:
         t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(tz_col)
         if inicio_dia <= t_col < fin_dia:
-            h = float(k["high"]); l = float(k["low"])
+            h = float(k["high"])
+            l = float(k["low"])
             hi = h if hi is None else max(hi, h)
             lo = l if lo is None else min(lo, l)
     if hi is None or lo is None:
         return None
     return {"PDH": round(hi, 2), "PDL": round(lo, 2)}
 
+
 def _asian_range(kl_15m):
     """Última sesión asiática CERRADA COL: 5PM → 2AM usando 15m."""
     if not kl_15m:
         return None
 
-    from utils.time_utils import last_closed_asian_window_col, TZ_COL
+    from utils.time_utils import last_closed_asian_window_col, TZ_COL as TZ_COL_UTIL
+
     start, end = last_closed_asian_window_col()
 
     hi, lo = None, None
     for k in kl_15m:
-        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL)
+        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL_UTIL)
         if start <= t_col < end:
-            h = float(k["high"]); l = float(k["low"])
+            h = float(k["high"])
+            l = float(k["low"])
             hi = h if hi is None else max(hi, h)
             lo = l if lo is None else min(lo, l)
 
     if hi is None or lo is None:
         return None
     return {"ASIAN_HIGH": round(hi, 2), "ASIAN_LOW": round(lo, 2)}
+
 
 # ------------------------------------------------------------
 # 🔹 Confirmaciones (con contexto)
@@ -247,10 +272,12 @@ def _confirmaciones(
     # OB válido (interpretativo simple por estado H1)
     confs["OB válido H1/H15"] = (
         "✅ En zona relevante — posible confirmación."
-        if tf_h1.get("estado") in ("alcista", "bajista") else "➖ No confirmado."
+        if tf_h1.get("estado") in ("alcista", "bajista")
+        else "➖ No confirmado."
     )
 
     return confs
+
 
 # ------------------------------------------------------------
 # 🔹 Escenarios + Setup
@@ -293,7 +320,6 @@ def _escenarios(
     tf_h1: Dict[str, Any],
     confs: Dict[str, str],
 ) -> Tuple[Dict[str, Any], Dict[str, Any], str]:
-
     t_h1 = tf_h1.get("estado")
     if t_h1 == "alcista":
         tipo_favor, tipo_contra = "Compra", "Venta"
@@ -330,7 +356,9 @@ def _escenarios(
 
     # Probabilidades según confirmaciones
     prob_favor = _probabilidad_por_confs(confs)
-    prob_contra = "Media" if prob_favor == "Alta" else ("Baja" if prob_favor == "Media" else "Baja")
+    prob_contra = (
+        "Media" if prob_favor == "Alta" else ("Baja" if prob_favor == "Media" else "Baja")
+    )
 
     # Separar confirmaciones a favor / pendientes
     confs_favor, confs_pendientes = _separar_confs(confs)
@@ -363,21 +391,19 @@ def _escenarios(
             return "Continuación: objetivos en PDL / ASIAN LOW / LL. Entrada tras BOS bajista M15."
         return "Neutro: esperar BOS claro en zona marcada."
 
-    # Escenario 1: Continuidad (a favor de H1)
     escenario_1 = {
         "tipo": tipo_favor,
         "probabilidad": prob_favor,
         "riesgo": _riesgo(prob_favor),
         "contexto": contexto_txt,
-        "confirmaciones": confs,               # compatibilidad con formatter actual
-        "confs_favor": confs_favor,            # ✅ sólo nombres de confirmaciones a favor
-        "confs_pendientes": confs_pendientes,  # ✅ nombres de confirmaciones pendientes
+        "confirmaciones": confs,
+        "confs_favor": confs_favor,
+        "confs_pendientes": confs_pendientes,
         "setup_estado": setup_estado_favor,
         "setup": setup_favor,
         "texto": texto_esc(tipo_favor),
     }
 
-    # Escenario 2: Corrección (contra H1)
     escenario_2 = {
         "tipo": tipo_contra,
         "probabilidad": prob_contra,
@@ -398,15 +424,20 @@ def _escenarios(
 
     return escenario_1, escenario_2, conclusion
 
+
 # ------------------------------------------------------------
 # 🔹 Sesión NY + Reflexiones base (fallback)
 # ------------------------------------------------------------
 def _estado_sesion_ny() -> Tuple[str, bool]:
     ahora = datetime.now(TZ_COL)
     start = ahora.replace(hour=8, minute=30, second=0, microsecond=0)
-    end   = ahora.replace(hour=16, minute=0, second=0, microsecond=0)
+    end = ahora.replace(hour=16, minute=0, second=0, microsecond=0)
     activa = start <= ahora <= end
-    return ("✅ Activa (Sesión NY)" if activa else "❌ Cerrada (Fuera de NY)"), activa
+    return (
+        "✅ Activa (Sesión NY)" if activa else "❌ Cerrada (Fuera de NY)",
+        activa,
+    )
+
 
 REFLEXIONES = [
     "La gestión del riesgo es la columna vertebral del éxito en trading.",
@@ -418,37 +449,45 @@ REFLEXIONES = [
     "Tu disciplina define tu rentabilidad.",
 ]
 
+
 # ------------------------------------------------------------
 # 🔹 SETUP ACTIVO – Level Entry M5
 # ------------------------------------------------------------
 def _setup_activo_m5(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     kl_m15 = _safe_get_klines(symbol, "15m", 200)
-    kl_m5  = _safe_get_klines(symbol, "5m",  200)
+    kl_m5 = _safe_get_klines(symbol, "5m", 200)
     if not kl_m15 or not kl_m5:
         return {"activo": False}
-    
+
     tf_m15 = _detectar_tendencia_zigzag(kl_m15, depth=12, deviation=5.0, backstep=2)
-    tf_m5  = _detectar_tendencia_zigzag(kl_m5,  depth=12, deviation=5.0, backstep=2)
+    tf_m5 = _detectar_tendencia_zigzag(kl_m5, depth=12, deviation=5.0, backstep=2)
 
     if tf_m15["estado"] == tf_m5["estado"] and tf_m5["estado"] in ("alcista", "bajista"):
         ultimo = kl_m5[-1]
         vol_prom = sum(x["vol"] for x in kl_m5[-40:]) / max(1, len(kl_m5[-40:]))
+
         if ultimo["vol"] > vol_prom * 1.25:
             tipo = "Compra" if tf_m5["estado"] == "alcista" else "Venta"
             ce = ultimo["close"]
             zona_a = ce * (1 - 0.001) if tipo == "Compra" else ce * (1 + 0.001)
             zona_b = ce * (1 + 0.001) if tipo == "Compra" else ce * (1 - 0.001)
+
             return {
                 "activo": True,
                 "nivel": f"SETUP ACTIVO – M5 Level Entry ({tipo})",
-                "contexto": f"Confirmación BOS {tipo.lower()} M15 + M5 con volumen sobre promedio.",
+                "contexto": "Confirmación BOS "
+                f"{tipo.lower()} M15 + M5 con volumen sobre promedio.",
                 "zona_entrada": f"{min(zona_a, zona_b):,.2f}–{max(zona_a, zona_b):,.2f}",
                 "sl": f"{(ultimo['low'] if tipo=='Compra' else ultimo['high']):,.2f}",
-                "tp1": f"{(ce*1.01 if tipo=='Compra' else ce*0.99):,.2f} (1:2)",
-                "tp2": f"{(ce*1.02 if tipo=='Compra' else ce*0.98):,.2f} (1:3)",
-                "comentario": f"Cumple estructura TESLABTC: BOS + Mitigación + Confirmación ({tipo})."
+                "tp1": f"{(ce * 1.01 if tipo=='Compra' else ce * 0.99):,.2f} (1:2)",
+                "tp2": f"{(ce * 1.02 if tipo=='Compra' else ce * 0.98):,.2f} (1:3)",
+                "comentario": (
+                    "Cumple estructura TESLABTC: BOS + Mitigación + Confirmación "
+                    f"({tipo})."
+                ),
             }
     return {"activo": False}
+
 
 # ------------------------------------------------------------
 # 🔹 Zonas para mostrar (PDH/PDL, Asia, rangos TF) + OB/POI
@@ -457,30 +496,34 @@ def _calc_range_last_closed_candle(kl):
     """High/Low de la última vela CERRADA del TF."""
     if not kl or len(kl) < 2:
         return None, None
-    last_closed = kl[-2]  # la última (-1) suele estar abierta
+    last_closed = kl[-2]
     return last_closed["high"], last_closed["low"]
+
 
 def _calc_range_last_closed_daily_col(kl_15m):
     """Rango diario real según día operativo COL (7PM–7PM) usando 15m."""
     if not kl_15m:
         return None, None
 
-    from utils.time_utils import last_closed_daily_window_col, TZ_COL
+    from utils.time_utils import last_closed_daily_window_col, TZ_COL as TZ_COL_UTIL
+
     start, end = last_closed_daily_window_col()
 
     hi, lo = None, None
     for k in kl_15m:
-        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL)
+        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL_UTIL)
         if start <= t_col < end:
             h, l = float(k["high"]), float(k["low"])
             hi = h if hi is None else max(hi, h)
             lo = l if lo is None else min(lo, l)
     return hi, lo
+
+
 def _zigzag_pivots(
     kl: List[Dict[str, Any]],
     depth: int = 12,
     deviation: float = 5.0,
-    backstep: int = 2
+    backstep: int = 2,
 ) -> List[Tuple[int, str, float]]:
     """
     Replica ZigZag++ básico:
@@ -510,7 +553,6 @@ def _zigzag_pivots(
 
         li, lt, lp = pivots[-1]
 
-        # mismo tipo de pivote => aplicar backstep / reemplazo por más extremo
         if t == lt:
             if (i - li) <= backstep:
                 if (t == "H" and p > lp) or (t == "L" and p < lp):
@@ -520,7 +562,6 @@ def _zigzag_pivots(
                     pivots[-1] = (i, t, p)
             continue
 
-        # tipo opuesto => aplicar deviation mínima
         if lp != 0:
             move_pct = abs((p - lp) / lp) * 100.0
         else:
@@ -528,7 +569,6 @@ def _zigzag_pivots(
 
         if move_pct >= deviation:
             pivots.append((i, t, p))
-        # si no cumple deviation, se ignora
 
     return pivots
 
@@ -537,7 +577,7 @@ def _calc_range_last_impulse_zigzag(
     kl: List[Dict[str, Any]],
     depth: int = 12,
     deviation: float = 5.0,
-    backstep: int = 2
+    backstep: int = 2,
 ) -> Tuple[Optional[float], Optional[float]]:
     """
     Devuelve el rango del ÚLTIMO IMPULSO *operativo* del ZigZag:
@@ -548,10 +588,8 @@ def _calc_range_last_impulse_zigzag(
     if not kl or len(piv) < 2:
         return None, None
 
-    # Precio actual en ese TF (close de la última vela)
     precio_actual = float(kl[-1]["close"])
 
-    # Buscamos desde el final hacia atrás el tramo que contiene al precio
     idx_seg = None
     for i in range(len(piv) - 2, -1, -1):
         _, _, p1 = piv[i]
@@ -561,7 +599,6 @@ def _calc_range_last_impulse_zigzag(
             idx_seg = i
             break
 
-    # Si no se encontró ninguno que contenga al precio, usamos el último tramo
     if idx_seg is None:
         _, _, p_prev = piv[-2]
         _, _, p_last = piv[-1]
@@ -573,21 +610,30 @@ def _calc_range_last_impulse_zigzag(
     lo = min(p_prev, p_last)
     return hi, lo
 
+
 def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
-    zonas = {}
+    zonas: Dict[str, Any] = {}
+
     if pd:
         zonas["PDH"] = round(float(pd.get("PDH")), 2)
         zonas["PDL"] = round(float(pd.get("PDL")), 2)
     if asian:
         zonas["ASIAN_HIGH"] = round(float(asian.get("ASIAN_HIGH")), 2)
-        zonas["ASIAN_LOW"]  = round(float(asian.get("ASIAN_LOW")),  2)
+        zonas["ASIAN_LOW"] = round(float(asian.get("ASIAN_LOW")), 2)
 
-    # ======================================================
-    # Rangos por ÚLTIMO IMPULSO (ZigZag++: depth 12, dev 5, backstep 2)
-    # ======================================================
-    d_hi, d_lo   = _calc_range_last_impulse_zigzag(d_kl,  depth=12, deviation=5.0, backstep=2)
-    h4_hi, h4_lo = _calc_range_last_impulse_zigzag(h4_kl, depth=12, deviation=5.0, backstep=2)
-    h1_hi, h1_lo = _calc_range_last_impulse_zigzag(h1_kl, depth=12, deviation=5.0, backstep=2)
+    d_hi, d_lo = _calc_range_last_impulse_zigzag(d_kl, depth=12, deviation=5.0, backstep=2)
+    h4_hi, h4_lo = _calc_range_last_impulse_zigzag(
+        h4_kl,
+        depth=12,
+        deviation=5.0,
+        backstep=2,
+    )
+    h1_hi, h1_lo = _calc_range_last_impulse_zigzag(
+        h1_kl,
+        depth=12,
+        deviation=5.0,
+        backstep=2,
+    )
 
     if d_hi is not None and d_lo is not None:
         zonas["D_HIGH"], zonas["D_LOW"] = round(d_hi, 2), round(d_lo, 2)
@@ -597,10 +643,12 @@ def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
         zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi, 2), round(h1_lo, 2)
 
     return zonas or {"info": "Sin zonas detectadas"}
+
+
 def _ob_en_rango(
     ob_txt: Optional[str],
     hi: Optional[float],
-    lo: Optional[float]
+    lo: Optional[float],
 ) -> Optional[str]:
     """
     ob_txt viene como 'low–high'. Se valida contra [lo, hi].
@@ -610,45 +658,35 @@ def _ob_en_rango(
         return ob_txt
 
     try:
-        # Permitimos tanto '–' como '-'
         nums = [float(x.strip()) for x in ob_txt.replace("–", "-").split("-")]
         if len(nums) < 2:
             return ob_txt
         ob_lo, ob_hi = min(nums), max(nums)
 
-        # Si el OB está totalmente fuera del rango swing, lo descartamos
         if ob_hi < lo or ob_lo > hi:
             return None
 
-        # Si hay intersección con el rango swing, lo aceptamos
         return ob_txt
     except Exception:
         return ob_txt
-    
+
+
 def _detectar_tendencia_zigzag(
     kl: List[Dict[str, Any]],
     depth: int = 12,
     deviation: float = 5.0,
-    backstep: int = 2
+    backstep: int = 2,
 ) -> Dict[str, Any]:
     """
-    Tendencia estructural TESLABTC usando ZigZag:
-    - Usa los últimos 2 HIGH y 2 LOW del zigzag.
-    - Si el último HIGH > HIGH previo y el último LOW > LOW previo → ALCISTA (HH/HL).
-    - Si el último HIGH < HIGH previo y el último LOW < LOW previo → BAJISTA (LH/LL).
-    - En otro caso → LATERAL / transición.
-
-    Así evitamos cambiar de tendencia por un solo tramo agresivo en contra.
+    Tendencia estructural TESLABTC usando ZigZag.
     """
     piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
     if not kl or len(piv) < 3:
         return {"estado": "lateral", "BOS": "—"}
 
-    # Separar highs y lows
     highs = [(i, p) for (i, t, p) in piv if t == "H"]
-    lows  = [(i, p) for (i, t, p) in piv if t == "L"]
+    lows = [(i, p) for (i, t, p) in piv if t == "L"]
 
-    # Si no hay suficientes pivotes, fallback suave
     if len(highs) < 2 or len(lows) < 2:
         idx_prev, tipo_prev, price_prev = piv[-2]
         idx_last, tipo_last, price_last = piv[-1]
@@ -670,7 +708,6 @@ def _detectar_tendencia_zigzag(
             ],
         }
 
-    # Últimos 2 highs y 2 lows (estructurales)
     idx_h1, h1 = highs[-2]
     idx_h2, h2 = highs[-1]
     idx_l1, l1 = lows[-2]
@@ -700,8 +737,9 @@ def _detectar_tendencia_zigzag(
         "HL": l1,
         "pair": pair,
         "ultimo_pivote": price_last,
-        "pivotes": piv[-6:],  # últimos pivotes para referencia/debug
+        "pivotes": piv[-6:],
     }
+
 
 def _detectar_ob_poi_cercanos(
     kl_h4: List[Dict[str, Any]],
@@ -730,7 +768,6 @@ def _detectar_ob_poi_cercanos(
     dir_h4 = str(tf_h4.get("estado", "lateral")).lower()
     dir_h1 = str(tf_h1.get("estado", "lateral")).lower()
 
-    # Si no es claramente bajista, tratamos como alcista (oferta/demanda inverso)
     dir_h4_api = "bajista" if dir_h4 == "bajista" else "alcista"
     dir_h1_api = "bajista" if dir_h1 == "bajista" else "alcista"
 
@@ -747,21 +784,18 @@ def _detectar_ob_poi_cercanos(
 
     return out
 
+
 # ============================================================
 # 🔹 FIBONACCI H1 (retroceso del último impulso operativo)
 # ============================================================
 def _fib_retracement_h1(
     precio: float,
     tf_h1: Dict[str, Any],
-    zonas: Dict[str, Any]
+    zonas: Dict[str, Any],
 ) -> Tuple[Optional[float], Optional[str]]:
     """
     Calcula el nivel de retroceso Fibonacci del precio actual dentro del
     último impulso operativo H1 (ZigZag → H1_HIGH / H1_LOW).
-
-    Devuelve:
-    - ratio (0–1) o None
-    - texto descriptivo para confirmaciones
     """
     if not isinstance(precio, (int, float)):
         return None, None
@@ -776,29 +810,28 @@ def _fib_retracement_h1(
     hi = float(hi)
     lo = float(lo)
 
-    # Normalizamos según tendencia H1
     if estado == "alcista":
-        # 0% en el low, 100% en el high
         ratio = (precio - lo) / (hi - lo)
     elif estado == "bajista":
-        # 0% en el high, 100% en el low
         ratio = (hi - precio) / (hi - lo)
     else:
         return None, None
 
-    # Fuera de rango impulso → no tiene sentido
     if ratio < 0 or ratio > 1.2:
         return None, None
 
-    # Clasificación TESLABTC
     if ratio < 0.382:
         texto = "➖ Retroceso Fibonacci H1 poco profundo (< 38.2%) — descuento limitado."
     elif ratio < 0.618:
         texto = "➖ Retroceso Fibonacci H1 medio (38.2–61.8%) — aún agresivo."
     elif ratio < 0.786:
-        texto = "✅ Retroceso Fibonacci H1 óptimo (61.8–78.6%) — zona ideal de descuento TESLABTC."
+        texto = (
+            "✅ Retroceso Fibonacci H1 óptimo (61.8–78.6%) — zona ideal de descuento TESLABTC."
+        )
     elif ratio <= 0.886:
-        texto = "✅ Retroceso Fibonacci H1 profundo (78.6–88.6%) — banda TESLABTC de alta probabilidad."
+        texto = (
+            "✅ Retroceso Fibonacci H1 profundo (78.6–88.6%) — banda TESLABTC de alta probabilidad."
+        )
     else:
         texto = "⚠️ Retroceso Fibonacci H1 extremo (> 88.6%) — riesgo de cambio de ciclo."
 
@@ -836,10 +869,9 @@ def _poi_fibo_band(
         return None
 
     lvl_618 = base + 0.618 * amp
-    lvl_786 = base + 0.786 * amp
     lvl_886 = base + 0.886 * amp
 
-    banda_low  = min(lvl_618, lvl_886)
+    banda_low = min(lvl_618, lvl_886)
     banda_high = max(lvl_618, lvl_886)
     return round(banda_low, 2), round(banda_high, 2)
 
@@ -857,18 +889,18 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 
     # 🔹 Datos Multi-TF
     kl_15m = _safe_get_klines(symbol, "15m", 600)
-    kl_h1  = _safe_get_klines(symbol, "1h", 600)
-    kl_h4  = _safe_get_klines(symbol, "4h", 600)
-    kl_d   = _safe_get_klines(symbol, "1d", 400)
+    kl_h1 = _safe_get_klines(symbol, "1h", 600)
+    kl_h4 = _safe_get_klines(symbol, "4h", 600)
+    kl_d = _safe_get_klines(symbol, "1d", 400)
 
     # 🧭 Tendencias TESLABTC usando ZigZag estructural
-    tf_d   = _detectar_tendencia_zigzag(kl_d,  depth=12, deviation=5.0, backstep=2)
-    tf_h4  = _detectar_tendencia_zigzag(kl_h4, depth=12, deviation=5.0, backstep=2)
-    tf_h1  = _detectar_tendencia_zigzag(kl_h1, depth=12, deviation=5.0, backstep=2)
+    tf_d = _detectar_tendencia_zigzag(kl_d, depth=12, deviation=5.0, backstep=2)
+    tf_h4 = _detectar_tendencia_zigzag(kl_h4, depth=12, deviation=5.0, backstep=2)
+    tf_h1 = _detectar_tendencia_zigzag(kl_h1, depth=12, deviation=5.0, backstep=2)
     tf_m15 = _detectar_tendencia_zigzag(kl_15m, depth=12, deviation=5.0, backstep=2)
 
     asian = _asian_range(kl_15m)
-    pd    = _pdh_pdl(kl_15m)
+    pd = _pdh_pdl(kl_15m)
     sesion_txt, sesion_activa = _estado_sesion_ny()
 
     # 🔹 Zonas (PDH/PDL, Asia, rangos) base
@@ -892,12 +924,12 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         zonas["POI_H1"] = f"{poi_h1[0]:.2f}–{poi_h1[1]:.2f}"
 
     # Inyectar rangos a cada temporalidad para el formatter
-    tf_d["RANGO_HIGH"]  = zonas.get("D_HIGH")
-    tf_d["RANGO_LOW"]   = zonas.get("D_LOW")
+    tf_d["RANGO_HIGH"] = zonas.get("D_HIGH")
+    tf_d["RANGO_LOW"] = zonas.get("D_LOW")
     tf_h4["RANGO_HIGH"] = zonas.get("H4_HIGH")
-    tf_h4["RANGO_LOW"]  = zonas.get("H4_LOW")
+    tf_h4["RANGO_LOW"] = zonas.get("H4_LOW")
     tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
-    tf_h1["RANGO_LOW"]  = zonas.get("H1_LOW")
+    tf_h1["RANGO_LOW"] = zonas.get("H1_LOW")
 
     # 🔹 OB/POI por detector clásico + filtro por rango swing
     ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
@@ -915,7 +947,6 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         zonas.get("H1_LOW"),
     )
 
-    # Si quedan None, los eliminamos para no imprimir "None"
     if zonas.get("OB_H4") is None:
         zonas.pop("OB_H4", None)
     if zonas.get("OB_H1") is None:
@@ -924,7 +955,11 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # 🔹 Confirmaciones con contexto
     conf = _confirmaciones(
         precio if isinstance(precio, (int, float)) else math.nan,
-        asian, pd, tf_d, tf_h1, sesion_activa
+        asian,
+        pd,
+        tf_d,
+        tf_h1,
+        sesion_activa,
     )
 
     # Añadir confirmación Fibo H1 (61.8–88.6)
@@ -937,30 +972,41 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         conf["Fibo H1 (61.8–88.6)"] = fib_txt
 
     # 🔹 Dirección general (texto auxiliar)
-    tendencia_d  = tf_d.get("estado", "—")
+    tendencia_d = tf_d.get("estado", "—")
     tendencia_h4 = tf_h4.get("estado", "—")
     tendencia_h1 = tf_h1.get("estado", "—")
     direccion_general = (
-        "🟢 Alcista" if tendencia_h4 == "alcista"
-        else "🔴 Bajista" if tendencia_h4 == "bajista"
+        "🟢 Alcista"
+        if tendencia_h4 == "alcista"
+        else "🔴 Bajista"
+        if tendencia_h4 == "bajista"
         else "⚪ Lateral"
     )
-    estructura_txt = f"D: {tendencia_d.upper()} | H4: {tendencia_h4.upper()} | H1: {tendencia_h1.upper()}"
+    estructura_txt = (
+        f"D: {tendencia_d.upper()} | H4: {tendencia_h4.upper()} | H1: {tendencia_h1.upper()}"
+    )
 
     # 🔹 Interpretación macro (para UI)
     contexto = interpretar_contexto(tf_d, tf_h4, tf_h1, conf, zonas)
 
-    # 🔹 Escenarios (continuidad y corrección) usando TODAS las confirmaciones
+    # 🔹 Escenarios (continuidad y corrección)
     esc1, esc2, concl = _escenarios(
         precio if isinstance(precio, (int, float)) else math.nan,
-        asian, pd, tf_d, tf_h4, tf_h1, conf
+        asian,
+        pd,
+        tf_d,
+        tf_h4,
+        tf_h1,
+        conf,
     )
 
     # 🔹 Setup activo M5 (BOS + volumen)
     setup_activo = _setup_activo_m5(symbol)
 
     # Ajuste: sólo mantenemos setup ACTIVO si el precio está dentro del POI H1
-    if setup_activo.get("activo") and zonas.get("POI_H1") and isinstance(precio, (int, float)):
+    if setup_activo.get("activo") and zonas.get("POI_H1") and isinstance(
+        precio, (int, float)
+    ):
         try:
             lo_poi, hi_poi = [
                 float(x.strip())
@@ -972,14 +1018,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         except Exception:
             setup_activo = {"activo": False}
     else:
-        # Si no hay POI H1 o no se puede validar, no mostramos setup activo
         setup_activo = {"activo": False}
 
-    # 🔹 Reflexión (si el formatter no recibe una, él randomiza)
+    # 🔹 Reflexión
     reflexion = random.choice(REFLEXIONES)
     slogan = "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
 
-    # 🔹 Conclusión operativa (separada del bloque Setup)
+    # 🔹 Conclusión operativa
     if setup_activo.get("activo"):
         conclusion_final = (
             "Estructura y volumen alineados intradía en POI H1. "
@@ -987,9 +1032,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             "y mover a BE en 1:1 + 50%."
         )
     elif sesion_activa and tendencia_h4 == "bajista" and tendencia_h1 == "bajista":
-        conclusion_final = "Estructura bajista consolidada: priorizar ventas tras retrocesos a oferta válida."
+        conclusion_final = (
+            "Estructura bajista consolidada: priorizar ventas tras retrocesos a oferta válida."
+        )
     elif sesion_activa and tendencia_h4 == "alcista" and tendencia_h1 == "alcista":
-        conclusion_final = "Estructura alcista confirmada: buscar compras tras mitigación en demanda."
+        conclusion_final = (
+            "Estructura alcista confirmada: buscar compras tras mitigación en demanda."
+        )
     else:
         conclusion_final = concl
 
@@ -1018,7 +1067,11 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     }
 
     # 🔹 Formateo final (UI)
-    from utils.intelligent_formatter import construir_mensaje_operativo, construir_mensaje_free
+    from utils.intelligent_formatter import (
+        construir_mensaje_operativo,
+        construir_mensaje_free,
+    )
+
     nivel_usuario = payload.get("nivel_usuario", "Premium")
     if nivel_usuario.lower() == "premium":
         payload["mensaje_formateado"] = construir_mensaje_operativo(payload)
@@ -1027,24 +1080,6 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 
     return {"🧠 TESLABTC.KG": payload}
 
-    # ... después de _fmt_zonas y de inyectar RANGO_HIGH/LOW y OBs ...
-
-    # 🔹 POI TESLABTC por Fibo (61.8–88.6) en H4 y H1
-    poi_h4 = _poi_fibo_band(
-        tf_h4.get("estado"),
-        zonas.get("H4_HIGH"),
-        zonas.get("H4_LOW"),
-    )
-    if poi_h4:
-        zonas["POI_H4"] = f"{poi_h4[0]}–{poi_h4[1]}"
-
-    poi_h1 = _poi_fibo_band(
-        tf_h1.get("estado"),
-        zonas.get("H1_HIGH"),
-        zonas.get("H1_LOW"),
-    )
-    if poi_h1:
-        zonas["POI_H1"] = f"{poi_h1[0]}–{poi_h1[1]}"
 
 # ============================================================
 # 🔹 Interpretación contextual inteligente TESLABTC (v5.3)
@@ -1057,9 +1092,8 @@ def interpretar_contexto(tf_d, tf_h4, tf_h1, confs, zonas):
     bos_h4 = tf_h4.get("BOS", "—")
     bos_h1 = tf_h1.get("BOS", "—")
 
-    interpretacion = []
+    interpretacion: List[str] = []
 
-    # Coherencia entre temporalidades
     if d == "bajista" and h4 == "bajista":
         interpretacion.append("Estructura macro bajista en D y H4.")
         if h1 == "alcista":
@@ -1083,7 +1117,6 @@ def interpretar_contexto(tf_d, tf_h4, tf_h1, confs, zonas):
         elif h1 == "bajista":
             interpretacion.append("H1 busca barrer mínimos dentro del rango.")
 
-    # BOS
     if bos_h4 == "✔️" and bos_h1 == "✔️":
         interpretacion.append("BOS validado en H4 y H1.")
     elif bos_h1 == "✔️" and bos_h4 != "✔️":
@@ -1091,7 +1124,6 @@ def interpretar_contexto(tf_d, tf_h4, tf_h1, confs, zonas):
     elif bos_d == "✔️":
         interpretacion.append("BOS Diario señala cambio de ciclo relevante.")
 
-    # Liquidez
     if confs.get("Barrida PDH") or confs.get("Barrida Asia (HIGH)"):
         interpretacion.append("Liquidez superior tomada: riesgo de distribución.")
     if confs.get("Barrida PDL") or confs.get("Barrida Asia (LOW)"):
@@ -1099,7 +1131,6 @@ def interpretar_contexto(tf_d, tf_h4, tf_h1, confs, zonas):
     if confs.get("Sesión NY", "").startswith("✅"):
         interpretacion.append("Sesión NY activa: volatilidad elevada.")
 
-    # Rango D real (último impulso ZigZag) — NO confundir con PDH/PDL
     if isinstance(zonas, dict) and "D_HIGH" in zonas and "D_LOW" in zonas:
         interpretacion.append(
             f"Rango D (último impulso): {zonas['D_LOW']:,} → {zonas['D_HIGH']:,}."
