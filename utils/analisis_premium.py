@@ -320,12 +320,19 @@ def _escenarios(
     tf_h1: Dict[str, Any],
     confs: Dict[str, str],
 ) -> Tuple[Dict[str, Any], Dict[str, Any], str]:
+    """
+    Escenario 1: CONTINUACIÓN (a favor de H1) → riesgo BAJO
+    Escenario 2: CORRECCIÓN / contra-tendencia → riesgo ALTO
+    """
+
     t_h1 = tf_h1.get("estado")
+
     if t_h1 == "alcista":
-        tipo_favor, tipo_contra = "Compra", "Venta"
+        tipo_favor, tipo_contra = "Compra", "Venta"   # corrección bajista
     elif t_h1 == "bajista":
-        tipo_favor, tipo_contra = "Venta", "Compra"
+        tipo_favor, tipo_contra = "Venta", "Compra"   # corrección alcista
     else:
+        # H1 lateral → nada serio que operar, ambos escenarios serán "Neutro"
         tipo_favor, tipo_contra = "Neutro", "Neutro"
 
     contexto: List[str] = []
@@ -333,16 +340,16 @@ def _escenarios(
     # Contexto por barridas diarias
     if isinstance(precio, (int, float)) and pd:
         if pd.get("PDL") and precio < float(pd["PDL"]):
-            contexto.append("🧲 Barrida del PDL → búsqueda de PDH.")
+            contexto.append("🧲 Barrida del PDL → búsqueda de liquidez superior.")
         if pd.get("PDH") and precio > float(pd["PDH"]):
-            contexto.append("🧲 Barrida del PDH → búsqueda de PDL.")
+            contexto.append("🧲 Barrida del PDH → búsqueda de liquidez inferior.")
 
     # Contexto por rango asiático
     if isinstance(precio, (int, float)) and asian:
         if asian.get("ASIAN_LOW") and precio < float(asian["ASIAN_LOW"]):
-            contexto.append("🧲 Barrida del Bajo Asiático → buscar Alto Asiático.")
+            contexto.append("🧲 Barrida del Bajo Asiático.")
         if asian.get("ASIAN_HIGH") and precio > float(asian["ASIAN_HIGH"]):
-            contexto.append("🧲 Barrida del Alto Asiático → buscar Bajo Asiático.")
+            contexto.append("🧲 Barrida del Alto Asiático.")
 
     # Sesgo de H1
     if t_h1 == "alcista":
@@ -350,76 +357,89 @@ def _escenarios(
     elif t_h1 == "bajista":
         contexto.append("📉 H1 bajista (sesgo vendedor).")
     else:
-        contexto.append("➖ H1 lateral: esperar BOS/CHoCH.")
+        contexto.append("➖ H1 lateral: sólo observación, sin entradas agresivas.")
 
     contexto_txt = " | ".join(contexto) if contexto else "Contexto neutro."
 
-    # Probabilidades según confirmaciones
+    # Probabilidad según confirmaciones
     prob_favor = _probabilidad_por_confs(confs)
-    prob_contra = (
-        "Media" if prob_favor == "Alta" else ("Baja" if prob_favor == "Media" else "Baja")
-    )
+
+    # Para el contra-tendencia: siempre tratamos como probabilidad BAJA y riesgo ALTO
+    prob_contra = "Baja"
 
     # Separar confirmaciones a favor / pendientes
     confs_favor, confs_pendientes = _separar_confs(confs)
 
-    def build_setup(prob: str, tipo: str) -> Tuple[str, Dict[str, str]]:
-        tiene_setup = (
-            prob in ("Alta", "Media")
-            and tipo in ("Compra", "Venta")
-            and t_h1 in ("alcista", "bajista")
-        )
-        if tiene_setup:
-            return "✅ Setup candidato", {
-                "zona_entrada": "Esperar BOS en M15/M5 dentro del POI.",
-                "sl": "Alto/bajo anterior de la zona de entrada.",
-                "tp1": "1:1 (mueva a BE y tome parciales)",
-                "tp2": "1:2 (recoja sus ganancias)",
-                "tp3": "1:3+ (si la estructura lo respalda)",
-                "observacion": "Prioridad 1:2; TP3+ sólo con fortaleza clara.",
-            }
-        else:
-            return "⏳ Sin setup válido. Intenta en unos minutos.", {}
+    # Riesgos TESLABTC:
+    # - Continuación con tendencia clara → Bajo
+    # - Si H1 está lateral → Medio
+    riesgo_favor = "Bajo" if t_h1 in ("alcista", "bajista") and prob_favor != "Baja" else "Medio"
+    riesgo_contra = "Alto"
 
-    setup_estado_favor, setup_favor = build_setup(prob_favor, tipo_favor)
-    setup_estado_contra, setup_contra = build_setup(prob_contra, tipo_contra)
-
-    def texto_esc(tipo: str) -> str:
+    def texto_continuacion(tipo: str) -> str:
         if tipo == "Compra":
-            return "Continuación: objetivos en PDH / ASIAN HIGH / HH. Entrada tras BOS alcista M15."
+            return (
+                "Escenario de CONTINUACIÓN ALCISTA: compras a favor de la tendencia H1, "
+                "buscando mitigación en demanda válida y proyección hacia liquidez superior (PDH / ASIAN HIGH)."
+            )
         if tipo == "Venta":
-            return "Continuación: objetivos en PDL / ASIAN LOW / LL. Entrada tras BOS bajista M15."
-        return "Neutro: esperar BOS claro en zona marcada."
+            return (
+                "Escenario de CONTINUACIÓN BAJISTA: ventas a favor de la tendencia H1, "
+                "buscando retrocesos a oferta H1/H4 y proyección hacia liquidez inferior (PDL / ASIAN LOW)."
+            )
+        return (
+            "Escenario de CONTINUACIÓN NEUTRO: estructura lateral, sin dirección clara. "
+            "Sólo observar hasta que H1 rompa en BOS definido."
+        )
+
+    def texto_correccion(tipo: str) -> str:
+        if tipo == "Compra":
+            return (
+                "Escenario de CORRECCIÓN ALCISTA (contra-tendencia): compras contra la "
+                "tendencia principal bajista, aprovechando retrocesos profundos hacia POI TESLABTC. "
+                "Sólo para traders avanzados por su naturaleza de ALTO RIESGO."
+            )
+        if tipo == "Venta":
+            return (
+                "Escenario de CORRECCIÓN BAJISTA (contra-tendencia): ventas contra la "
+                "tendencia principal alcista, operando retrocesos hacia oferta. "
+                "Escenario de ALTO RIESGO: la corrección puede fallar en cualquier momento."
+            )
+        return (
+            "Escenario de CORRECCIÓN NEUTRO: sin sesgo direccional claro. "
+            "No se recomienda ejecutar operaciones hasta nueva estructura."
+        )
 
     escenario_1 = {
         "tipo": tipo_favor,
         "probabilidad": prob_favor,
-        "riesgo": _riesgo(prob_favor),
+        "riesgo": riesgo_favor,
         "contexto": contexto_txt,
         "confirmaciones": confs,
         "confs_favor": confs_favor,
         "confs_pendientes": confs_pendientes,
-        "setup_estado": setup_estado_favor,
-        "setup": setup_favor,
-        "texto": texto_esc(tipo_favor),
+        "setup_estado": "Pendiente de confirmación",
+        "setup": {},
+        "texto": texto_continuacion(tipo_favor),
     }
 
     escenario_2 = {
         "tipo": tipo_contra,
         "probabilidad": prob_contra,
-        "riesgo": _riesgo(prob_contra),
+        "riesgo": riesgo_contra,
         "contexto": contexto_txt,
         "confirmaciones": confs,
         "confs_favor": confs_favor,
         "confs_pendientes": confs_pendientes,
-        "setup_estado": setup_estado_contra,
-        "setup": setup_contra,
-        "texto": texto_esc(tipo_contra),
+        "setup_estado": "Sólo para traders avanzados (ALTO RIESGO)",
+        "texto": texto_correccion(tipo_contra),
+        "setup": {},
     }
 
     conclusion = (
-        "Operar sólo cuando *todas* las confirmaciones críticas se alineen "
-        "(BOS + POI + Sesión NY). Si el setup no es válido, vuelve a intentar en unos minutos."
+        "Operar sólo cuando ✱todas✱ las confirmaciones críticas se alineen "
+        "（BOS + POI + Sesión NY）. En escenarios de corrección, asume siempre "
+        "riesgo ALTO y reduce el tamaño de posición."
     )
 
     return escenario_1, escenario_2, conclusion
