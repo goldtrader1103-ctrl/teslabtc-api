@@ -196,102 +196,82 @@ def _detalle_escenario(esc, zonas, titulo_base, emoji):
 # ============================================================
 # 🧩 FORMATEADOR PREMIUM
 # ============================================================
-def construir_mensaje_operativo(data):
-    fecha = data.get("fecha", "—")
-    activo = data.get("activo", "BTCUSDT")
-    sesion = data.get("sesión", "—")
-    precio = data.get("precio_actual", "—")
-    estructura = data.get("estructura_detectada", {}) or {}
-    zonas = data.get("zonas_detectadas", {}) or {}
-    confs = data.get("confirmaciones", {}) or {}
+# Dentro de construir_mensaje_operativo(data):
 
-    # Estados para inferir la tendencia principal (H1)
-    h1 = estructura.get("H1", {}) or {}
-    h1_estado_raw = str(h1.get("estado", "—")).upper()
+estructura = data.get("estructura_detectada", {}) or {}
+tf_h1 = estructura.get("H1", {}) or {}
+h1_estado_raw = str(tf_h1.get("estado", "—")).upper()
 
-    if "ALCISTA" in h1_estado_raw:
-        tendencia_principal = "Alcista"
-    elif "BAJISTA" in h1_estado_raw:
-        tendencia_principal = "Bajista"
+if "ALCISTA" in h1_estado_raw:
+    tendencia_principal = "Alcista"
+elif "BAJISTA" in h1_estado_raw:
+    tendencia_principal = "Bajista"
+else:
+    tendencia_principal = "Rango"
+
+# ...
+
+def _fallback_escenario(nombre_visible, es_correccion: bool):
+    confs_favor = [k for k, v in confs.items() if str(v).startswith("✅")]
+    confs_pend = [k for k, v in confs.items() if not str(v).startswith("✅")]
+
+    # tipo según tendencia principal
+    if tendencia_principal == "Alcista":
+        tipo_cont = "Compra"
+        tipo_corr = "Venta"
+    elif tendencia_principal == "Bajista":
+        tipo_cont = "Venta"
+        tipo_corr = "Compra"
     else:
-        tendencia_principal = "Rango"
+        tipo_cont = tipo_corr = "Neutro"
 
-    # Escenarios que vienen desde la API (pueden venir vacíos o None)
-    esc1 = data.get("escenario_1")
-    esc2 = data.get("escenario_2")
-
-    setup = data.get("setup_tesla", {}) or {}
-    reflexion = data.get("reflexion") or frase_motivacional()
-    slogan = data.get(
-        "slogan",
-        "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
-    )
-
-    # --------------------------------------------------------
-    # Fallback de escenarios si la API no envía nada útil
-    # --------------------------------------------------------
-    def _fallback_escenario(nombre_visible, es_correccion: bool):
-        # Confirmaciones globales como base
-        confs_favor = [k for k, v in confs.items() if str(v).startswith("✅")]
-        confs_pend = [k for k, v in confs.items() if not str(v).startswith("✅")]
-
-        # Dirección y tipo según tendencia principal
-        if tendencia_principal == "Alcista":
-            tipo_cont = "Compra"
-            tipo_corr = "Venta"
-        elif tendencia_principal == "Bajista":
-            tipo_cont = "Venta"
-            tipo_corr = "Compra"
-        else:
-            tipo_cont = tipo_corr = "Neutro"
-
-        if es_correccion:
-            tipo = tipo_corr
-            riesgo = "Alto" if tendencia_principal != "Rango" else "Medio"
-            prob = "Media" if tendencia_principal != "Rango" else "Baja"
-            dir_txt = (
-                f"corrección {tendencia_principal.lower()} contra la estructura principal"
-                if tendencia_principal != "Rango"
-                else "escenario contra-tendencia en rango, sin claridad direccional"
-            )
-            texto = (
-                f"{nombre_visible}: operación de {dir_txt}. "
-                "Escenario de ALTO RIESGO: sólo considerar entradas en zonas extremas de liquidez, "
-                "con BOS muy claro en M15/M5 y gestión agresiva del SL."
-            )
-        else:
-            tipo = tipo_cont
-            riesgo = "Bajo" if tendencia_principal != "Rango" else "Medio"
-            prob = "Alta" if tendencia_principal != "Rango" else "Media"
-            dir_txt = (
-                f"continuación {tendencia_principal.lower()} a favor de la estructura principal"
-                if tendencia_principal != "Rango"
-                else "continuación en rango, sin tendencia clara"
-            )
-            texto = (
-                f"{nombre_visible}: operación de {dir_txt}. "
-                "Esperar que el precio regrese a una zona institucional TESLABTC "
-                "(POI/OB marcada por el sistema) y forme un BOS claro en M15/M5 antes de ejecutar."
-            )
-
-        return {
-            "tipo": tipo,
-            "probabilidad": prob,
-            "riesgo": riesgo,
-            "texto": texto,
-            "contexto": data.get("contexto_general", ""),
-            "confs_favor": confs_favor,
-            "confs_pendientes": confs_pend,
-        }
-
-    if not esc1 or not isinstance(esc1, dict):
-        esc1 = _fallback_escenario("Escenario de Continuación", es_correccion=False)
-
-    if not esc2 or not isinstance(esc2, dict):
-        esc2 = _fallback_escenario(
-            "Escenario de Corrección / contra-tendencia",
-            es_correccion=True,
+    if es_correccion:
+        tipo = tipo_corr
+        riesgo = "Alto" if tendencia_principal != "Rango" else "Medio"
+        prob = "Media" if tendencia_principal != "Rango" else "Baja"
+        dir_txt = (
+            f"corrección {tendencia_principal.lower()} contra la estructura principal"
+            if tendencia_principal != "Rango"
+            else "escenario contra-tendencia en rango, sin claridad direccional"
         )
+        texto = (
+            f"{nombre_visible}: operación de {dir_txt}. "
+            "Escenario de ALTO RIESGO: sólo considerar entradas en zonas extremas de liquidez, "
+            "con BOS muy claro en M15/M5 y gestión agresiva del SL."
+        )
+    else:
+        tipo = tipo_cont
+        riesgo = "Bajo" if tendencia_principal != "Rango" else "Medio"
+        prob = "Alta" if tendencia_principal != "Rango" else "Media"
+        dir_txt = (
+            f"continuación {tendencia_principal.lower()} a favor de la estructura principal"
+            if tendencia_principal != "Rango"
+            else "continuación en rango, sin tendencia clara"
+        )
+        texto = (
+            f"{nombre_visible}: operación de {dir_txt}. "
+            "Esperar que el precio regrese a una zona institucional TESLABTC "
+            "(POI/OB marcada por el sistema) y forme un BOS claro en M15/M5 antes de ejecutar."
+        )
+
+    return {
+        "tipo": tipo,
+        "probabilidad": prob,
+        "riesgo": riesgo,
+        "texto": texto,
+        "contexto": data.get("contexto_general", ""),
+        "confs_favor": confs_favor,
+        "confs_pendientes": confs_pend,
+    }
+
+if not esc1 or not isinstance(esc1, dict):
+    esc1 = _fallback_escenario("Escenario de Continuación", es_correccion=False)
+
+if not esc2 or not isinstance(esc2, dict):
+    esc2 = _fallback_escenario(
+        "Escenario de Corrección / contra-tendencia",
+        es_correccion=True,
+    )
 
     # ... aquí sigue el bloque de DIRECCIÓN GENERAL, ZONAS, SETUP, etc.
 
