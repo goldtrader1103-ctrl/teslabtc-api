@@ -193,106 +193,147 @@ def construir_mensaje_operativo(data):
     # --------------------------------------------------------
     # 📊 ESCENARIOS OPERATIVOS (con confirmaciones por escenario)
     # --------------------------------------------------------
-    def _detalle_escenario(esc, zonas, titulo, emoji):
-        if not esc or not isinstance(esc, dict):
-            return ""
+def _detalle_escenario(esc, zonas, titulo_base, emoji):
+    if not esc:
+        return ""
 
-        tipo = esc.get("tipo") or "Neutro"
-        prob = esc.get("probabilidad", "Media")
-        riesgo = esc.get("riesgo", "Medio")
-        texto_base = esc.get("descripcion") or esc.get("texto") or ""
-        contexto = esc.get("contexto") or ""
+    tipo = esc.get("tipo", "Neutro")
+    prob = esc.get("probabilidad", "Media")
+    riesgo = esc.get("riesgo", "Medio")
+    texto_base = esc.get("descripcion") or esc.get("texto") or ""
+    contexto = esc.get("contexto") or ""
 
-        # Si el tipo es neutro y no hay texto, ponemos explicación por defecto
-        if tipo == "Neutro" and not texto_base:
-            texto_base = (
-                "El mercado está en fase de transición TESLABTC. "
-                "Esperar que el precio llegue a un POI (banda 61.8–88.6) "
-                "y forme un BOS claro en M15/M5 antes de ejecutar."
+    # Dirección textual según el tipo
+    if tipo == "Compra":
+        dir_txt = "Alcista"
+        sign = +1
+    elif tipo == "Venta":
+        dir_txt = "Bajista"
+        sign = -1
+    else:
+        dir_txt = "Neutro"
+        sign = 0
+
+    titulo = titulo_base
+    if dir_txt != "Neutro":
+        titulo = f"{titulo_base} {dir_txt}"
+
+    # POI/OB prioritario para la zona de entrada
+    poi_h1 = zonas.get("POI_H1")
+    poi_h4 = zonas.get("POI_H4")
+    ob_h1  = zonas.get("OB_H1")
+    ob_h4  = zonas.get("OB_H4")
+
+    zona_txt = poi_h1 or poi_h4 or ob_h1 or ob_h4
+
+    entry_low = entry_high = sl_price = None
+
+    if isinstance(zona_txt, str):
+        try:
+            norm = (
+                zona_txt.replace("–", "-")
+                        .replace("—", "-")
+                        .replace("−", "-")
             )
+            nums = [float(x.strip()) for x in norm.split("-") if x.strip()]
+            if len(nums) >= 2:
+                entry_low, entry_high = min(nums), max(nums)
+                # SL según tipo
+                if tipo == "Compra":
+                    sl_price = entry_low
+                elif tipo == "Venta":
+                    sl_price = entry_high
+        except Exception:
+            pass
 
-        # Prioridad para zona_ref: primero POI, luego OB
-        poi_h1 = zonas.get("POI_H1")
-        poi_h4 = zonas.get("POI_H4")
-        ob_h1  = zonas.get("OB_H1")
-        ob_h4  = zonas.get("OB_H4")
+    # TP1 / TP2 por múltiplos de R
+    tp1 = tp2 = tp3 = None
+    entry_price = None
 
-        zona_ref = (
-            poi_h1 or poi_h4 or
-            ob_h1  or ob_h4  or
-            "zona institucional (POI/OB) relevante en H1/H4"
+    if entry_low is not None and entry_high is not None and sl_price is not None and sign != 0:
+        entry_price = (entry_low + entry_high) / 2.0
+        r = abs(entry_price - sl_price)
+        if r > 0:
+            tp1 = entry_price + sign * r
+            tp2 = entry_price + sign * 2 * r
+
+    # TP3 por zona de liquidez
+    pdh = zonas.get("PDH")
+    pdl = zonas.get("PDL")
+    ah  = zonas.get("ASIAN_HIGH")
+    al  = zonas.get("ASIAN_LOW")
+
+    if sign > 0:  # Compras → liquidez superior
+        candidatos = [x for x in (pdh, ah) if isinstance(x, (int, float, float))]
+        if candidatos:
+            tp3 = max(candidatos)
+    elif sign < 0:  # Ventas → liquidez inferior
+        candidatos = [x for x in (pdl, al) if isinstance(x, (int, float, float))]
+        if candidatos:
+            tp3 = min(candidatos)
+
+    lineas: List[str] = [
+        f"{emoji} {titulo} ({tipo} | riesgo {riesgo}, probabilidad {prob})",
+    ]
+
+    if texto_base:
+        lineas.append(texto_base)
+    if contexto:
+        lineas.append(f"📌 Contexto: {contexto}")
+
+    # Zona de entrada + SL/TP en PRECIOS
+    if entry_low is not None and entry_high is not None:
+        lineas.append(
+            f"📥 Zona de entrada orientativa: {entry_low:,.2f}–{entry_high:,.2f}"
+        )
+    else:
+        linea_zona = zona_txt or "zona institucional TESLABTC en H1/H4"
+        lineas.append(f"📥 Zona de entrada orientativa: {linea_zona}")
+
+    if sl_price is not None:
+        lineas.append(f"⛔ Zona de invalidación (SL orientativo): {sl_price:,.2f}")
+    else:
+        lineas.append("⛔ Zona de invalidación (SL): último alto/bajo estructural en H1.")
+
+    # TPs
+    tp_lines = []
+    if tp1 is not None:
+        tp_lines.append(f"TP1: {tp1:,.2f} (≈ 1:1)")
+    if tp2 is not None:
+        tp_lines.append(f"TP2: {tp2:,.2f} (≈ 1:2)")
+    if tp3 is not None:
+        tp_lines.append(f"TP3: {tp3:,.2f} (siguiente zona de liquidez)")
+
+    if tp_lines:
+        lineas.append("🎯 Objetivos principales: " + " | ".join(tp_lines))
+    else:
+        lineas.append("🎯 Objetivos principales: esperar definición clara de estructura.")
+
+    # Gestión estándar TESLABTC
+    lineas.append(
+        "💼 Gestión sugerida: mover a BE en TP1 y asegurar 50%; dejar correr hacia TP2/TP3 sólo si la estructura se mantiene a favor."
+    )
+
+    confs_favor = esc.get("confs_favor", []) or []
+    confs_pend  = esc.get("confs_pendientes", []) or []
+
+    if confs_favor:
+        lineas.append("")
+        lineas.append("✅ Confirmaciones a favor del escenario:")
+        for c in confs_favor:
+            lineas.append(f"   • {c}")
+
+    if confs_pend:
+        lineas.append("")
+        lineas.append("⚠️ Confirmaciones que FALTAN antes de ejecutar con confianza:")
+        for c in confs_pend:
+            lineas.append(f"   • {c}")
+        lineas.append("")
+        lineas.append(
+            "📎 Recomendación: NO ejecutar mientras estas confirmaciones sigan pendientes en la zona de entrada."
         )
 
-        pdh_local = zonas.get("PDH")
-        pdl_local = zonas.get("PDL")
-        ah  = zonas.get("ASIAN_HIGH")
-        al  = zonas.get("ASIAN_LOW")
-
-        if tipo == "Compra":
-            targets = []
-            if pdh_local:
-                targets.append(f"PDH: {pdh_local}")
-            if ah:
-                targets.append(f"ASIAN HIGH: {ah}")
-            target_txt = (
-                ", ".join(targets)
-                if targets else
-                "zonas de liquidez superior (máximos previos)"
-            )
-            sl_txt = "SL por debajo del OB o del último mínimo relevante en H1."
-        elif tipo == "Venta":
-            targets = []
-            if pdl_local:
-                targets.append(f"PDL: {pdl_local}")
-            if al:
-                targets.append(f"ASIAN LOW: {al}")
-            target_txt = (
-                ", ".join(targets)
-                if targets else
-                "zonas de liquidez inferior (mínimos previos)"
-            )
-            sl_txt = "SL por encima del OB o del último máximo relevante en H1."
-        else:
-            target_txt = "esperar definición clara de estructura."
-            sl_txt = "SL siempre fuera de la zona institucional usada para la entrada."
-
-        confs_favor = esc.get("confs_favor", []) or []
-        confs_pend  = esc.get("confs_pendientes", []) or []
-
-        lineas = [
-            f"{emoji} {titulo} ({tipo} | riesgo {riesgo}, probabilidad {prob})",
-        ]
-
-        if texto_base:
-            lineas.append(texto_base)
-        if contexto:
-            lineas.append(f"📌 Contexto: {contexto}")
-
-        lineas.extend([
-            f"📥 Zona de entrada orientativa: {zona_ref}",
-            f"🎯 Objetivos principales: {target_txt}",
-            f"⛔ Zona de invalidación (SL orientativo): {sl_txt}",
-            "💼 Gestión sugerida: TP1 en 1:2 RRR | TP2 en 1:3 RRR si la estructura se mantiene a favor.",
-        ])
-
-        if confs_favor:
-            lineas.append("")
-            lineas.append("✅ Confirmaciones a favor del escenario:")
-            for c in confs_favor:
-                lineas.append(f"   • {c}")
-
-        if confs_pend:
-            lineas.append("")
-            lineas.append("⚠️ Confirmaciones que FALTAN antes de ejecutar con confianza:")
-            for c in confs_pend:
-                lineas.append(f"   • {c}")
-            lineas.append("")
-            lineas.append(
-                "📎 Recomendación: NO ejecutar mientras estas confirmaciones "
-                "sigan pendientes en la zona de entrada."
-            )
-
-        return "\n".join(lineas)
+    return "\n".join(lineas)
 
     escenarios_txt = []
     esc1_txt = _detalle_escenario(esc1, zonas, "Escenario de Continuación", "🟢")
