@@ -15,6 +15,9 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import pytz
+
+
 # ------------------------------
 # 🌎 Config base
 # ------------------------------
@@ -165,10 +168,7 @@ def _detectar_tendencia(kl: List[Dict[str, Any]], look: int = 12) -> Dict[str, A
 # ------------------------------------------------------------
 # 🔹 Rangos reales por horario Colombia (PDH/PDL & Asia)
 # ------------------------------------------------------------
-import pytz
-
-
-def _pdh_pdl(kl_15m):
+def _pdh_pdl(kl_15m: List[Dict[str, Any]]) -> Optional[Dict[str, float]]:
     """Día previo cerrado COL: 7PM anteayer → 7PM ayer (America/Bogota)"""
     if not kl_15m:
         return None
@@ -195,7 +195,7 @@ def _pdh_pdl(kl_15m):
     return {"PDH": round(hi, 2), "PDL": round(lo, 2)}
 
 
-def _asian_range(kl_15m):
+def _asian_range(kl_15m: List[Dict[str, Any]]) -> Optional[Dict[str, float]]:
     """Última sesión asiática CERRADA COL: 5PM → 2AM usando 15m."""
     if not kl_15m:
         return None
@@ -453,72 +453,6 @@ REFLEXIONES = [
 # ------------------------------------------------------------
 # 🔹 SETUP ACTIVO – Level Entry M5
 # ------------------------------------------------------------
-def _setup_activo_m5(symbol: str = "BTCUSDT") -> Dict[str, Any]:
-    kl_m15 = _safe_get_klines(symbol, "15m", 200)
-    kl_m5 = _safe_get_klines(symbol, "5m", 200)
-    if not kl_m15 or not kl_m5:
-        return {"activo": False}
-
-    tf_m15 = _detectar_tendencia_zigzag(kl_m15, depth=12, deviation=5.0, backstep=2)
-    tf_m5 = _detectar_tendencia_zigzag(kl_m5, depth=12, deviation=5.0, backstep=2)
-
-    if tf_m15["estado"] == tf_m5["estado"] and tf_m5["estado"] in ("alcista", "bajista"):
-        ultimo = kl_m5[-1]
-        vol_prom = sum(x["vol"] for x in kl_m5[-40:]) / max(1, len(kl_m5[-40:]))
-
-        if ultimo["vol"] > vol_prom * 1.25:
-            tipo = "Compra" if tf_m5["estado"] == "alcista" else "Venta"
-            ce = ultimo["close"]
-            zona_a = ce * (1 - 0.001) if tipo == "Compra" else ce * (1 + 0.001)
-            zona_b = ce * (1 + 0.001) if tipo == "Compra" else ce * (1 - 0.001)
-
-            return {
-                "activo": True,
-                "nivel": f"SETUP ACTIVO – M5 Level Entry ({tipo})",
-                "contexto": "Confirmación BOS "
-                f"{tipo.lower()} M15 + M5 con volumen sobre promedio.",
-                "zona_entrada": f"{min(zona_a, zona_b):,.2f}–{max(zona_a, zona_b):,.2f}",
-                "sl": f"{(ultimo['low'] if tipo=='Compra' else ultimo['high']):,.2f}",
-                "tp1": f"{(ce * 1.01 if tipo=='Compra' else ce * 0.99):,.2f} (1:2)",
-                "tp2": f"{(ce * 1.02 if tipo=='Compra' else ce * 0.98):,.2f} (1:3)",
-                "comentario": (
-                    "Cumple estructura TESLABTC: BOS + Mitigación + Confirmación "
-                    f"({tipo})."
-                ),
-            }
-    return {"activo": False}
-
-
-# ------------------------------------------------------------
-# 🔹 Zonas para mostrar (PDH/PDL, Asia, rangos TF) + OB/POI
-# ------------------------------------------------------------
-def _calc_range_last_closed_candle(kl):
-    """High/Low de la última vela CERRADA del TF."""
-    if not kl or len(kl) < 2:
-        return None, None
-    last_closed = kl[-2]
-    return last_closed["high"], last_closed["low"]
-
-
-def _calc_range_last_closed_daily_col(kl_15m):
-    """Rango diario real según día operativo COL (7PM–7PM) usando 15m."""
-    if not kl_15m:
-        return None, None
-
-    from utils.time_utils import last_closed_daily_window_col, TZ_COL as TZ_COL_UTIL
-
-    start, end = last_closed_daily_window_col()
-
-    hi, lo = None, None
-    for k in kl_15m:
-        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL_UTIL)
-        if start <= t_col < end:
-            h, l = float(k["high"]), float(k["low"])
-            hi = h if hi is None else max(hi, h)
-            lo = l if lo is None else min(lo, l)
-    return hi, lo
-
-
 def _zigzag_pivots(
     kl: List[Dict[str, Any]],
     depth: int = 12,
@@ -553,6 +487,7 @@ def _zigzag_pivots(
 
         li, lt, lp = pivots[-1]
 
+        # mismo tipo de pivote => aplicar backstep / reemplazo por más extremo
         if t == lt:
             if (i - li) <= backstep:
                 if (t == "H" and p > lp) or (t == "L" and p < lp):
@@ -562,6 +497,7 @@ def _zigzag_pivots(
                     pivots[-1] = (i, t, p)
             continue
 
+        # tipo opuesto => aplicar deviation mínima
         if lp != 0:
             move_pct = abs((p - lp) / lp) * 100.0
         else:
@@ -571,104 +507,6 @@ def _zigzag_pivots(
             pivots.append((i, t, p))
 
     return pivots
-
-
-def _calc_range_last_impulse_zigzag(
-    kl: List[Dict[str, Any]],
-    depth: int = 12,
-    deviation: float = 5.0,
-    backstep: int = 2,
-) -> Tuple[Optional[float], Optional[float]]:
-    """
-    Devuelve el rango del ÚLTIMO IMPULSO *operativo* del ZigZag:
-    - Se busca el ÚLTIMO tramo cuyo rango [low, high] CONTIENE el precio actual.
-    - Si ninguno contiene el precio, se usa el último tramo ZigZag.
-    """
-    piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
-    if not kl or len(piv) < 2:
-        return None, None
-
-    precio_actual = float(kl[-1]["close"])
-
-    idx_seg = None
-    for i in range(len(piv) - 2, -1, -1):
-        _, _, p1 = piv[i]
-        _, _, p2 = piv[i + 1]
-        lo, hi = min(p1, p2), max(p1, p2)
-        if lo <= precio_actual <= hi:
-            idx_seg = i
-            break
-
-    if idx_seg is None:
-        _, _, p_prev = piv[-2]
-        _, _, p_last = piv[-1]
-    else:
-        _, _, p_prev = piv[idx_seg]
-        _, _, p_last = piv[idx_seg + 1]
-
-    hi = max(p_prev, p_last)
-    lo = min(p_prev, p_last)
-    return hi, lo
-
-
-def _fmt_zonas(asian, pd, kl_15m, d_kl, h4_kl, h1_kl):
-    zonas: Dict[str, Any] = {}
-
-    if pd:
-        zonas["PDH"] = round(float(pd.get("PDH")), 2)
-        zonas["PDL"] = round(float(pd.get("PDL")), 2)
-    if asian:
-        zonas["ASIAN_HIGH"] = round(float(asian.get("ASIAN_HIGH")), 2)
-        zonas["ASIAN_LOW"] = round(float(asian.get("ASIAN_LOW")), 2)
-
-    d_hi, d_lo = _calc_range_last_impulse_zigzag(d_kl, depth=12, deviation=5.0, backstep=2)
-    h4_hi, h4_lo = _calc_range_last_impulse_zigzag(
-        h4_kl,
-        depth=12,
-        deviation=5.0,
-        backstep=2,
-    )
-    h1_hi, h1_lo = _calc_range_last_impulse_zigzag(
-        h1_kl,
-        depth=12,
-        deviation=5.0,
-        backstep=2,
-    )
-
-    if d_hi is not None and d_lo is not None:
-        zonas["D_HIGH"], zonas["D_LOW"] = round(d_hi, 2), round(d_lo, 2)
-    if h4_hi is not None and h4_lo is not None:
-        zonas["H4_HIGH"], zonas["H4_LOW"] = round(h4_hi, 2), round(h4_lo, 2)
-    if h1_hi is not None and h1_lo is not None:
-        zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi, 2), round(h1_lo, 2)
-
-    return zonas or {"info": "Sin zonas detectadas"}
-
-
-def _ob_en_rango(
-    ob_txt: Optional[str],
-    hi: Optional[float],
-    lo: Optional[float],
-) -> Optional[str]:
-    """
-    ob_txt viene como 'low–high'. Se valida contra [lo, hi].
-    Si no cae dentro, se elimina.
-    """
-    if not ob_txt or hi is None or lo is None:
-        return ob_txt
-
-    try:
-        nums = [float(x.strip()) for x in ob_txt.replace("–", "-").split("-")]
-        if len(nums) < 2:
-            return ob_txt
-        ob_lo, ob_hi = min(nums), max(nums)
-
-        if ob_hi < lo or ob_lo > hi:
-            return None
-
-        return ob_txt
-    except Exception:
-        return ob_txt
 
 
 def _detectar_tendencia_zigzag(
@@ -739,6 +577,193 @@ def _detectar_tendencia_zigzag(
         "ultimo_pivote": price_last,
         "pivotes": piv[-6:],
     }
+
+
+def _setup_activo_m5(symbol: str = "BTCUSDT") -> Dict[str, Any]:
+    kl_m15 = _safe_get_klines(symbol, "15m", 200)
+    kl_m5 = _safe_get_klines(symbol, "5m", 200)
+    if not kl_m15 or not kl_m5:
+        return {"activo": False}
+
+    tf_m15 = _detectar_tendencia_zigzag(kl_m15, depth=12, deviation=5.0, backstep=2)
+    tf_m5 = _detectar_tendencia_zigzag(kl_m5, depth=12, deviation=5.0, backstep=2)
+
+    if tf_m15["estado"] == tf_m5["estado"] and tf_m5["estado"] in ("alcista", "bajista"):
+        ultimo = kl_m5[-1]
+        vol_prom = sum(x["vol"] for x in kl_m5[-40:]) / max(1, len(kl_m5[-40:]))
+
+        if ultimo["vol"] > vol_prom * 1.25:
+            tipo = "Compra" if tf_m5["estado"] == "alcista" else "Venta"
+            ce = ultimo["close"]
+            zona_a = ce * (1 - 0.001) if tipo == "Compra" else ce * (1 + 0.001)
+            zona_b = ce * (1 + 0.001) if tipo == "Compra" else ce * (1 - 0.001)
+
+            return {
+                "activo": True,
+                "nivel": f"SETUP ACTIVO – M5 Level Entry ({tipo})",
+                "contexto": (
+                    "Confirmación BOS "
+                    f"{tipo.lower()} M15 + M5 con volumen sobre promedio."
+                ),
+                "zona_entrada": f"{min(zona_a, zona_b):,.2f}–{max(zona_a, zona_b):,.2f}",
+                "sl": f"{(ultimo['low'] if tipo=='Compra' else ultimo['high']):,.2f}",
+                "tp1": f"{(ce * 1.01 if tipo=='Compra' else ce * 0.99):,.2f} (1:2)",
+                "tp2": f"{(ce * 1.02 if tipo=='Compra' else ce * 0.98):,.2f} (1:3)",
+                "comentario": (
+                    "Cumple estructura TESLABTC: BOS + Mitigación + Confirmación "
+                    f"({tipo})."
+                ),
+            }
+    return {"activo": False}
+
+
+# ------------------------------------------------------------
+# 🔹 Zonas para mostrar (PDH/PDL, Asia, rangos TF) + OB/POI
+# ------------------------------------------------------------
+def _calc_range_last_closed_candle(
+    kl: List[Dict[str, Any]],
+) -> Tuple[Optional[float], Optional[float]]:
+    """High/Low de la última vela CERRADA del TF."""
+    if not kl or len(kl) < 2:
+        return None, None
+    last_closed = kl[-2]
+    return last_closed["high"], last_closed["low"]
+
+
+def _calc_range_last_closed_daily_col(
+    kl_15m: List[Dict[str, Any]],
+) -> Tuple[Optional[float], Optional[float]]:
+    """Rango diario real según día operativo COL (7PM–7PM) usando 15m."""
+    if not kl_15m:
+        return None, None
+
+    from utils.time_utils import last_closed_daily_window_col, TZ_COL as TZ_COL_UTIL
+
+    start, end = last_closed_daily_window_col()
+
+    hi, lo = None, None
+    for k in kl_15m:
+        t_col = k["open_time"].replace(tzinfo=timezone.utc).astimezone(TZ_COL_UTIL)
+        if start <= t_col < end:
+            h, l = float(k["high"]), float(k["low"])
+            hi = h if hi is None else max(hi, h)
+            lo = l if lo is None else min(lo, l)
+    return hi, lo
+
+
+def _calc_range_last_impulse_zigzag(
+    kl: List[Dict[str, Any]],
+    depth: int = 12,
+    deviation: float = 5.0,
+    backstep: int = 2,
+) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Devuelve el rango del ÚLTIMO IMPULSO *operativo* del ZigZag:
+    - Se busca el ÚLTIMO tramo cuyo rango [low, high] CONTIENE el precio actual.
+    - Si ninguno contiene el precio, se usa el último tramo ZigZag.
+    """
+    piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
+    if not kl or len(piv) < 2:
+        return None, None
+
+    precio_actual = float(kl[-1]["close"])
+
+    idx_seg = None
+    for i in range(len(piv) - 2, -1, -1):
+        _, _, p1 = piv[i]
+        _, _, p2 = piv[i + 1]
+        lo, hi = min(p1, p2), max(p1, p2)
+        if lo <= precio_actual <= hi:
+            idx_seg = i
+            break
+
+    if idx_seg is None:
+        _, _, p_prev = piv[-2]
+        _, _, p_last = piv[-1]
+    else:
+        _, _, p_prev = piv[idx_seg]
+        _, _, p_last = piv[idx_seg + 1]
+
+    hi = max(p_prev, p_last)
+    lo = min(p_prev, p_last)
+    return hi, lo
+
+
+def _fmt_zonas(
+    asian: Optional[Dict[str, float]],
+    pd: Optional[Dict[str, float]],
+    kl_15m: List[Dict[str, Any]],
+    d_kl: List[Dict[str, Any]],
+    h4_kl: List[Dict[str, Any]],
+    h1_kl: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    zonas: Dict[str, Any] = {}
+
+    if pd:
+        zonas["PDH"] = round(float(pd.get("PDH")), 2)
+        zonas["PDL"] = round(float(pd.get("PDL")), 2)
+    if asian:
+        zonas["ASIAN_HIGH"] = round(float(asian.get("ASIAN_HIGH")), 2)
+        zonas["ASIAN_LOW"] = round(float(asian.get("ASIAN_LOW")), 2)
+
+    d_hi, d_lo = _calc_range_last_impulse_zigzag(d_kl, depth=12, deviation=5.0, backstep=2)
+    h4_hi, h4_lo = _calc_range_last_impulse_zigzag(
+        h4_kl,
+        depth=12,
+        deviation=5.0,
+        backstep=2,
+    )
+    h1_hi, h1_lo = _calc_range_last_impulse_zigzag(
+        h1_kl,
+        depth=12,
+        deviation=5.0,
+        backstep=2,
+    )
+
+    if d_hi is not None and d_lo is not None:
+        zonas["D_HIGH"], zonas["D_LOW"] = round(d_hi, 2), round(d_lo, 2)
+    if h4_hi is not None and h4_lo is not None:
+        zonas["H4_HIGH"], zonas["H4_LOW"] = round(h4_hi, 2), round(h4_lo, 2)
+    if h1_hi is not None and h1_lo is not None:
+        zonas["H1_HIGH"], zonas["H1_LOW"] = round(h1_hi, 2), round(h1_lo, 2)
+
+    return zonas or {"info": "Sin zonas detectadas"}
+
+
+def _ob_en_rango(
+    ob_txt: Optional[str],
+    hi: Optional[float],
+    lo: Optional[float],
+) -> Optional[str]:
+    """
+    ob_txt viene como 'low–high'. Se valida contra [lo, hi].
+    Si no cae dentro, se elimina.
+    """
+    if not ob_txt or hi is None or lo is None:
+        return ob_txt
+
+    try:
+        ob_norm = (
+            str(ob_txt)
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("−", "-")
+        )
+        nums = [float(x.strip()) for x in ob_norm.split("-") if x.strip()]
+
+        if len(nums) < 2:
+            return ob_txt
+
+        ob_lo, ob_hi = min(nums), max(nums)
+
+        # Si el OB está totalmente fuera del rango swing, lo descartamos
+        if ob_hi < lo or ob_lo > hi:
+            return None
+
+        # Hay intersección con el rango swing → lo aceptamos
+        return ob_txt
+    except Exception:
+        return ob_txt
 
 
 def _detectar_ob_poi_cercanos(
@@ -963,7 +988,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     )
 
     # Añadir confirmación Fibo H1 (61.8–88.6)
-    fib_ratio, fib_txt = _fib_retracement_h1(
+    _, fib_txt = _fib_retracement_h1(
         precio if isinstance(precio, (int, float)) else math.nan,
         tf_h1,
         zonas,
@@ -1043,7 +1068,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         conclusion_final = concl
 
     # 🧠 Payload final
-    payload = {
+    payload: Dict[str, Any] = {
         "fecha": fecha_txt,
         "nivel_usuario": "Premium",
         "sesión": sesion_txt,
@@ -1084,7 +1109,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 # ============================================================
 # 🔹 Interpretación contextual inteligente TESLABTC (v5.3)
 # ============================================================
-def interpretar_contexto(tf_d, tf_h4, tf_h1, confs, zonas):
+def interpretar_contexto(
+    tf_d: Dict[str, Any],
+    tf_h4: Dict[str, Any],
+    tf_h1: Dict[str, Any],
+    confs: Dict[str, str],
+    zonas: Dict[str, Any],
+) -> str:
     d = tf_d.get("estado", "—")
     h4 = tf_h4.get("estado", "—")
     h1 = tf_h1.get("estado", "—")
