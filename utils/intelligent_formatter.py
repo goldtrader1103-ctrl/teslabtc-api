@@ -209,3 +209,15 @@ def safe_markdown(text: str) -> str:
     text = text.replace("[", "〔").replace("]", "〕")
     text = text.replace("(", "（").replace(")", "）")
     return text
+# ============================================================
+# 🧩 Alias retrocompatible TESLABTC.KG v5.7
+# ============================================================
+import re
+
+def limpiar_texto(texto: str) -> str:
+    if not texto:
+        return ""
+    texto = texto.lower()
+    texto = re.sub(r"[^\w\s]", "", texto)
+    texto = re.sub(r"\s+", " ", texto).strip()
+    return texto
