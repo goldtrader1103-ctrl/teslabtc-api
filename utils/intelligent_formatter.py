@@ -43,19 +43,22 @@ def frase_motivacional():
 # 📊 DETALLE DE ESCENARIO (FIX COMPLETO)
 # ============================================================
 
-def _detalle_escenario(esc: dict, zonas: dict, titulo_base: str, emoji: str) -> str:
-    if not isinstance(esc, dict):
-        return f"{emoji} {titulo_base}: datos no disponibles."
+def _detalle_escenario(esc, zonas, titulo_base, emoji):
+    if not esc or not isinstance(esc, dict):
+        return ""
 
-    tipo = esc.get("tipo", "Neutro")
+    tipo = esc.get("tipo", "Neutro")   # Compra o Venta
     prob = esc.get("probabilidad", "Media")
     riesgo = esc.get("riesgo", "Medio")
-    texto_base = esc.get("descripcion") or esc.get("texto") or "Escenario generado automáticamente por el sistema."
-    contexto = esc.get("contexto") or "Contexto no especificado."
+    texto_base = esc.get("descripcion") or esc.get("texto") or ""
+    contexto = esc.get("contexto") or ""
 
+    # ---------------------------------------------------------------------
+    # Dirección según tipo (NO NEUTROS AMBIGUOS)
+    # ---------------------------------------------------------------------
     if tipo == "Compra":
         dir_txt = "Alcista"
-        sign = 1
+        sign = +1
     elif tipo == "Venta":
         dir_txt = "Bajista"
         sign = -1
@@ -65,76 +68,127 @@ def _detalle_escenario(esc: dict, zonas: dict, titulo_base: str, emoji: str) -> 
 
     titulo = f"{titulo_base} {dir_txt}" if dir_txt != "Neutro" else titulo_base
 
+    # ---------------------------------------------------------------------
+    # ✅ POI SIEMPRE A FAVOR DE LA TENDENCIA (H1 MANDA LA EJECUCIÓN)
+    # ---------------------------------------------------------------------
     poi_h1 = zonas.get("POI_H1")
     poi_h4 = zonas.get("POI_H4")
-    ob_h1 = zonas.get("OB_H1")
-    ob_h4 = zonas.get("OB_H4")
 
-    zona_txt = poi_h1 or poi_h4 or ob_h1 or ob_h4
+    # Prioridad: POI de H1, luego H4
+    zona_txt = poi_h1 or poi_h4
 
     entry_low = entry_high = sl_price = None
 
-    if isinstance(zona_txt, str) and "-" in zona_txt:
+    if isinstance(zona_txt, str):
         try:
-            nums = [float(x.strip()) for x in zona_txt.replace("–", "-").split("-")]
-            entry_low, entry_high = min(nums), max(nums)
-            sl_price = entry_low if tipo == "Compra" else entry_high
+            norm = zona_txt.replace("–", "-").replace("—", "-").replace("−", "-")
+            nums = [float(x.strip()) for x in norm.split("-") if x.strip()]
+            if len(nums) >= 2:
+                entry_low, entry_high = min(nums), max(nums)
+
+                # ✅ SL SIEMPRE EN EXTREMO ESTRUCTURAL
+                if tipo == "Compra":
+                    sl_price = entry_low
+                elif tipo == "Venta":
+                    sl_price = entry_high
         except Exception:
             pass
 
+    # ---------------------------------------------------------------------
+    # 🎯 TPs REALES DESDE EL RGO
+    # ---------------------------------------------------------------------
     tp1 = tp2 = tp3 = None
+    entry_price = None
 
-    if entry_low and entry_high and sl_price and sign != 0:
-        entry_price = (entry_low + entry_high) / 2
+    if (
+        entry_low is not None
+        and entry_high is not None
+        and sl_price is not None
+        and sign != 0
+    ):
+        entry_price = (entry_low + entry_high) / 2.0
         r = abs(entry_price - sl_price)
-        tp1 = entry_price + sign * r
-        tp2 = entry_price + sign * 2 * r
 
+        if r > 0:
+            tp1 = entry_price + sign * r        # 1:1
+            tp2 = entry_price + sign * 2 * r    # 1:2
+
+    # ---------------------------------------------------------------------
+    # TP3: SIGUIENTE ZONA DE LIQUIDEZ
+    # ---------------------------------------------------------------------
     pdh = zonas.get("PDH")
     pdl = zonas.get("PDL")
     ah = zonas.get("ASIAN_HIGH")
     al = zonas.get("ASIAN_LOW")
 
     if sign > 0:
-        tp3 = max(x for x in [pdh, ah] if isinstance(x, (int, float))) if any(isinstance(x, (int, float)) for x in [pdh, ah]) else None
+        candidatos = [x for x in (pdh, ah) if isinstance(x, (int, float))]
+        if candidatos:
+            tp3 = max(candidatos)
     elif sign < 0:
-        tp3 = min(x for x in [pdl, al] if isinstance(x, (int, float))) if any(isinstance(x, (int, float)) for x in [pdl, al]) else None
+        candidatos = [x for x in (pdl, al) if isinstance(x, (int, float))]
+        if candidatos:
+            tp3 = min(candidatos)
 
-    lineas: List[str] = []
+    # ---------------------------------------------------------------------
+    # 🧾 CONSTRUCCIÓN DEL TEXTO FINAL
+    # ---------------------------------------------------------------------
+    lineas = [
+        f"{emoji} {titulo} ({tipo} | riesgo {riesgo}, probabilidad {prob})"
+    ]
 
-    lineas.append(f"{emoji} {titulo} ({tipo} | riesgo {riesgo}, probabilidad {prob})")
-    lineas.append(texto_base)
-    lineas.append(f"📌 Contexto: {contexto}")
+    if texto_base:
+        lineas.append(texto_base)
 
-    if entry_low and entry_high:
-        lineas.append(f"📥 Zona de entrada: {entry_low:,.2f}–{entry_high:,.2f}")
-    elif zona_txt:
-        lineas.append(f"📥 Zona de entrada: {zona_txt}")
+    if contexto:
+        lineas.append(f"📌 Contexto: {contexto}")
+
+    # ---------------------------------------------------------------------
+    # 📥 ZONA DE ENTRADA (REAL)
+    # ---------------------------------------------------------------------
+    if entry_low is not None and entry_high is not None:
+        lineas.append(
+            f"📥 Zona de entrada (POI a favor): {entry_low:,.2f}–{entry_high:,.2f}"
+        )
     else:
-        lineas.append("📥 Zona de entrada: esperar estructura en POI válido.")
+        lineas.append("📥 Zona de entrada: esperar POI válido.")
 
-    if sl_price:
-        lineas.append(f"⛔ SL: {sl_price:,.2f}")
+    # ---------------------------------------------------------------------
+    # ⛔ SL REAL
+    # ---------------------------------------------------------------------
+    if sl_price is not None:
+        lineas.append(f"⛔ Stop Loss estructural: {sl_price:,.2f}")
     else:
-        lineas.append("⛔ SL: último alto/bajo estructural.")
+        lineas.append("⛔ Stop Loss: último alto/bajo estructural.")
 
+    # ---------------------------------------------------------------------
+    # 🎯 OBJETIVOS REALES
+    # ---------------------------------------------------------------------
     tp_lines = []
-    if tp1:
-        tp_lines.append(f"TP1: {tp1:,.2f} (1:1)")
-    if tp2:
-        tp_lines.append(f"TP2: {tp2:,.2f} (1:2)")
-    if tp3:
-        tp_lines.append(f"TP3: {tp3:,.2f} (Liquidez)")
+    if tp1 is not None:
+        tp_lines.append(f"TP1: {tp1:,.2f} (1:1 → mover a BE + parcial)")
+    if tp2 is not None:
+        tp_lines.append(f"TP2: {tp2:,.2f} (1:2 → objetivo principal)")
+    if tp3 is not None:
+        tp_lines.append(f"TP3: {tp3:,.2f} (zona de liquidez)")
 
     if tp_lines:
         lineas.append("🎯 Objetivos: " + " | ".join(tp_lines))
     else:
-        lineas.append("🎯 Objetivos: pendientes por estructura.")
+        lineas.append("🎯 Objetivos: definidos solo tras BOS.")
 
-    lineas.append("💼 Gestión: mover BE en TP1 y asegurar 50%.")
+    # ---------------------------------------------------------------------
+    # 💼 GESTIÓN TESLABTC REAL
+    # ---------------------------------------------------------------------
+    lineas.append(
+        "💼 Gestión: BE en 1:1 + 50%, dejar correr solo si la estructura se mantiene."
+    )
 
-    confs_favor = esc.get("confs_favor", [])
-    confs_pend = esc.get("confs_pendientes", [])
+    # ---------------------------------------------------------------------
+    # ✅ CONFIRMACIONES
+    # ---------------------------------------------------------------------
+    confs_favor = esc.get("confs_favor", []) or []
+    confs_pend = esc.get("confs_pendientes", []) or []
 
     if confs_favor:
         lineas.append("")
@@ -144,12 +198,15 @@ def _detalle_escenario(esc: dict, zonas: dict, titulo_base: str, emoji: str) -> 
 
     if confs_pend:
         lineas.append("")
-        lineas.append("⚠️ Pendientes antes de ejecutar:")
+        lineas.append("⚠️ Confirmaciones pendientes:")
         for c in confs_pend:
             lineas.append(f"   • {c}")
+        lineas.append("")
+        lineas.append(
+            "📎 Recomendación: NO ejecutar hasta que todas se alineen en la zona POI."
+        )
 
     return "\n".join(lineas)
-
 
 # ============================================================
 # 🧩 FORMATEADOR PREMIUM FINAL
