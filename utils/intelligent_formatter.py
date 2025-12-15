@@ -276,3 +276,19 @@ M15 (reacción): {m15}
 💭 Accede al modo *Premium* para ver zonas, confirmaciones y setups activos.
 """
     return safe_markdown(msg.strip())
+# ============================================================
+# 🧩 COMPATIBILIDAD LEGACY — construir_mensaje_free
+# ============================================================
+
+def construir_mensaje_free(data: dict) -> str:
+    """
+    Versión simplificada para modo Free (dummy fallback).
+    Se usa solo para evitar errores de importación en main.py.
+    """
+    return (
+        "📋 TESLABTC Free Mode\n"
+        "──────────────────────────────\n"
+        "Este análisis pertenece a la versión gratuita del bot.\n"
+        "Para ver estructuras, escenarios y zonas completas,\n"
+        "activa tu cuenta Premium TESLABTC.\n"
+    )
