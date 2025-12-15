@@ -1207,6 +1207,18 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "temporalidades": ["D", "H4", "H1", "M15", "M5"],
     }
 
+    # 🧩 Fallback si zonas vino vacío — asegurar que el payload tenga rangos válidos
+    if not zonas or len(zonas) < 3:
+        zonas.update({
+            "D_HIGH": tf_d.get("RANGO_HIGH"),
+            "D_LOW": tf_d.get("RANGO_LOW"),
+            "H4_HIGH": tf_h4.get("RANGO_HIGH"),
+            "H4_LOW": tf_h4.get("RANGO_LOW"),
+            "H1_HIGH": tf_h1.get("RANGO_HIGH"),
+            "H1_LOW": tf_h1.get("RANGO_LOW"),
+        })
+        payload["zonas_detectadas"] = zonas
+
     # 🔹 Formateo final (UI)
     from utils.intelligent_formatter import (
         construir_mensaje_operativo,
