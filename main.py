@@ -121,6 +121,38 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             # ⚙️ Análisis Premium base
             ap_full = generar_analisis_premium(simbolo)
             ap = ap_full.get("🧠 TESLABTC.KG", ap_full)
+            
+            # 🔍 Detección de estado “PRE-BOS” si no hay setup activo ni BOS confirmado
+            setup_data = ap.get("setup_tesla", {})
+            estructura_detectada = ap.get("estructura_detectada", {})
+            h1_state = estructura_detectada.get("H1", {}).get("estado", "—")
+            m15_state = estructura_detectada.get("M15", {}).get("estado", "—")
+
+            # Si no hay setup activo pero estructura válida → mostrar PRE-BOS
+            if not setup_data.get("activo", False) and h1_state in ("alcista", "bajista"):
+                pre_bos_body = {
+                    "fecha": ap.get("fecha", fecha),
+                    "nivel_usuario": "Premium",
+                    "sesión": ap.get("sesion", sesion),
+                    "activo": ap.get("activo", simbolo),
+                    "precio_actual": ap.get("precio_actual", precio_str),
+                    "fuente_precio": fuente,
+                    "estructura_detectada": estructura_detectada,
+                    "zonas_detectadas": ap.get("zonas_detectadas", {}),
+                    "confirmaciones": ap.get("confirmaciones", {}),
+                    "estado_operativo": "🕐 PRE-BOS (esperando confirmación M5)",
+                    "escenario_principal": (
+                        "continuación" if h1_state == "bajista" else "corrección"
+                    ),
+                    "comentario": "Estructura clara pero sin ruptura M5 confirmada. Esperar gatillo BOS.",
+                    "conexion_binance": BINANCE_STATUS,
+                }
+
+                # Añadir mensaje visual coherente
+                from utils.intelligent_formatter import construir_mensaje_operativo
+                pre_bos_body["mensaje_formateado"] = construir_mensaje_operativo(pre_bos_body)
+
+                return {"🧠 TESLABTC.KG": pre_bos_body}
 
             # 🔁 INTEGRAR ESTRUCTURA REAL MULTI-TF
             from utils.analisis_estructura import analizar_estructura_general
@@ -150,17 +182,28 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
             return {"🧠 TESLABTC.KG": premium_body}
 
         except Exception as e:
-            return {
-                "🧠 TESLABTC.KG": {
-                    "fecha": fecha,
-                    "nivel_usuario": "Premium",
-                    "sesión": sesion,
-                    "precio_actual": precio_str,
-                    "fuente_precio": fuente,
-                    "mensaje": f"⚠️ Error en análisis Premium TESLABTC: {str(e)}",
-                    "conexion_binance": BINANCE_STATUS,
-                }
+            print(f"⚠️ Error en análisis Premium TESLABTC: {e}")
+
+            # 🔧 Estructura fallback para evitar respuesta vacía
+            default_body = {
+                "fecha": fecha,
+                "nivel_usuario": "Premium",
+                "sesión": sesion,
+                "precio_actual": precio_str,
+                "fuente_precio": fuente,
+                "mensaje": f"⚙️ No se pudo generar análisis completo — {str(e)}",
+                "estructura_detectada": estructura,
+                "conexion_binance": BINANCE_STATUS,
+                "estado_operativo": "🕐 PRE-BOS (esperando confirmación M5)",
+                "escenario_principal": "continuación" if e_h1.get("tendencia") == "bajista" else "corrección",
+                "comentario": "Mostrar estructura base. Esperar ruptura M5 para validar entrada."
             }
+
+            # 🧩 Añadir mensaje formateado
+            from utils.intelligent_formatter import construir_mensaje_operativo
+            default_body["mensaje_formateado"] = construir_mensaje_operativo(default_body)
+
+            return {"🧠 TESLABTC.KG": default_body}
 
 # ============================================================
 # 🔍 FUNCIÓN AUXILIAR PARA BUSCAR CONCEPTOS

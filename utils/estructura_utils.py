@@ -81,7 +81,21 @@ def evaluar_estructura(klines):
     else:
         estado = "sin_datos"
 
-    return {"estado": estado, "high": hi, "low": lo}
+    # ============================================================
+    # 🔹 DETECCIÓN DE ESTADO PRE-BOS (nuevo bloque TESLABTC.KG)
+    # ============================================================
+    resultado = {"estado": estado, "high": hi, "low": lo}
+
+    # Si hay estructura válida pero sin ruptura confirmada
+    if estado in ("alcista", "bajista") and hi and lo:
+        resultado["estado_operativo"] = "🕐 PRE-BOS (esperando confirmación M5)"
+        resultado["comentario"] = (
+            "Estructura detectada sin ruptura confirmada. "
+            "Esperar BOS M5 para validar entrada."
+        )
+
+    return resultado
+
 
 
 def definir_escenarios(estados):

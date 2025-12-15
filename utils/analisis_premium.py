@@ -1056,6 +1056,14 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         )
     else:
         conclusion_final = concl
+    # ============================================================
+    # 🔁 Verificación de retorno válido
+    # ============================================================
+    if not locals().get("resultado") and not locals().get("analisis"):
+        return {"🧠 TESLABTC.KG": {
+            "error": "sin_datos",
+            "detalle": "No se obtuvo respuesta de estructura o conexión fallida."
+        }}
 
     # 🧠 Payload final
     payload = {
@@ -1093,8 +1101,16 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     else:
         payload["mensaje_formateado"] = construir_mensaje_free(payload)
 
-    return {"🧠 TESLABTC.KG": payload}
+    # ============================================================
+    # 🔁 Verificación de retorno válido (ubicación correcta)
+    # ============================================================
+    if not payload or "estructura_detectada" not in payload:
+        return {"🧠 TESLABTC.KG": {
+            "error": "sin_datos",
+            "detalle": "No se obtuvo respuesta de estructura o conexión fallida (payload vacío)."
+        }}
 
+    return {"🧠 TESLABTC.KG": payload}
 
 # ============================================================
 # 🔹 Interpretación contextual inteligente TESLABTC (v5.3)
