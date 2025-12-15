@@ -1132,6 +1132,34 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         tf_h1,
         conf,
     )
+    # ============================================================
+    # 🔹 Enriquecer escenarios TESLABTC antes del retorno
+    # ============================================================
+    def _enriquecer_escenario(e, tipo_default, riesgo_default):
+        if not isinstance(e, dict):
+            e = {}
+
+        return {
+            "tipo": e.get("tipo", tipo_default),
+            "riesgo": e.get("riesgo", riesgo_default),
+            "contexto": e.get("contexto", "Transición estructural TESLABTC."),
+            "setup_estado": e.get("setup_estado", "⏳ Sin setup válido — esperando confirmaciones."),
+            "setup": e.get("setup", {
+                "zona_entrada": zonas.get("POI_H1", "—"),
+                "tp1": zonas.get("PDL", "—"),
+                "tp2": zonas.get("ASIAN_LOW", "—"),
+                "tp3": zonas.get("ASIAN_HIGH", "—"),
+                "sl": zonas.get("PDH", "—"),
+                "observacion": "Esperar ruptura BOS M5 antes de ejecutar entrada institucional."
+            }),
+            "confs_favor": e.get("confs_favor", list(conf.keys())[:2] if conf else []),
+            "confs_pendientes": e.get("confs_pendientes", list(conf.keys())[2:4] if conf else []),
+            "texto": e.get("texto", f"Escenario de {tipo_default}: precio en fase de {'retroceso' if tipo_default == 'Venta' else 'transición'}, "
+                                     "esperar confirmación estructural en M15/M5.")
+        }
+
+    esc1 = _enriquecer_escenario(esc1, "Venta", "Medio")
+    esc2 = _enriquecer_escenario(esc2, "Compra", "Alto")
 
     # 🔹 Setup activo M5 (BOS + volumen)
     setup_activo = _setup_activo_m5(symbol)
@@ -1174,6 +1202,8 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         )
     else:
         conclusion_final = concl
+
+        
     # ============================================================
     # 🔁 Verificación de retorno válido
     # ============================================================
