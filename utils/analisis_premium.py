@@ -1244,6 +1244,47 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 
     esc1 = _normalize_escenario(esc1, "Venta", "Medio")
     esc2 = _normalize_escenario(esc2, "Compra", "Alto")
+    # ============================================================
+    # 🔍 Detección contextual POI multi-temporal (TESLABTC Logic)
+    # ============================================================
+    contexto_operativo = ""
+    tipo_operacion = "—"
+    riesgo = "—"
+
+    try:
+        if zonas.get("POI_H4"):
+            poi_h4_min, poi_h4_max = [float(x) for x in str(zonas["POI_H4"]).replace("–", "-").split("-")]
+            if poi_h4_min <= float(precio) <= poi_h4_max:
+                contexto_operativo = (
+                    "El precio se encuentra dentro del POI H4 (zona de demanda/oferta). "
+                    "Esperar reacción en M15/M5 (BOS, vela envolvente o confirmación de volumen)."
+                )
+                tipo_operacion = "Compra" if tendencia_h4 == "alcista" else "Venta"
+                riesgo = "Bajo"
+        elif zonas.get("POI_H1"):
+            poi_h1_min, poi_h1_max = [float(x) for x in str(zonas["POI_H1"]).replace("–", "-").split("-")]
+            if poi_h1_min <= float(precio) <= poi_h1_max:
+                contexto_operativo = (
+                    "El precio está reaccionando dentro del POI H1. "
+                    "Esperar confirmaciones estructurales (BOS M5 o ruptura local)."
+                )
+                tipo_operacion = "Compra" if tendencia_h1 == "alcista" else "Venta"
+                riesgo = "Medio"
+        else:
+            contexto_operativo = "El precio no se encuentra dentro de ningún POI relevante."
+            tipo_operacion = "—"
+            riesgo = "Alto"
+    except Exception as e:
+        contexto_operativo = f"Error al evaluar POI: {e}"
+        tipo_operacion = "—"
+        riesgo = "—"
+
+    # Añadir esta información contextual al payload
+    payload_contextual = {
+        "contexto_operativo": contexto_operativo,
+        "tipo_operacion_sugerida": tipo_operacion,
+        "riesgo_operativo": riesgo
+    }
 
     # ============================================================
     # 🧠 Payload final enriquecido
@@ -1269,6 +1310,10 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "slogan": slogan,
         "simbolo": symbol,
         "temporalidades": ["D", "H4", "H1", "M15", "M5"],
+        "contexto_operativo": payload_contextual.get("contexto_operativo"),
+        "tipo_operacion_sugerida": payload_contextual.get("tipo_operacion_sugerida"),
+        "riesgo_operativo": payload_contextual.get("riesgo_operativo"),
+       
     }
 
     # 🧩 Fallback si zonas vino vacío — asegurar que el payload tenga rangos válidos
