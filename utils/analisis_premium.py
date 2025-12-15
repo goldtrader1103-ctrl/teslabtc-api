@@ -882,6 +882,44 @@ def _poi_fibo_band(
     banda_low = min(lvl_618, lvl_886)
     banda_high = max(lvl_618, lvl_886)
     return round(banda_low, 2), round(banda_high, 2)
+# ------------------------------------------------------------
+# 🔹 Detector simple de OB/POI cercanos (fallback TESLABTC)
+# ------------------------------------------------------------
+def _detectar_ob_poi_cercanos(
+    kl_h4: List[Dict[str, Any]],
+    kl_h1: List[Dict[str, Any]],
+    tf_h4: Dict[str, Any],
+    tf_h1: Dict[str, Any],
+) -> Dict[str, str]:
+    """
+    Detecta OB/POI simples basados en las últimas 2 velas impulsivas
+    de cada temporalidad. Fallback para mantener visual del informe.
+    """
+    zonas: Dict[str, str] = {}
+
+    try:
+        # H4
+        if len(kl_h4) >= 2:
+            last = kl_h4[-1]
+            prev = kl_h4[-2]
+            if tf_h4.get("estado") == "alcista":
+                zonas["OB_H4"] = f"{prev['low']:.2f}–{last['low']:.2f}"
+            elif tf_h4.get("estado") == "bajista":
+                zonas["OB_H4"] = f"{last['high']:.2f}–{prev['high']:.2f}"
+
+        # H1
+        if len(kl_h1) >= 2:
+            last = kl_h1[-1]
+            prev = kl_h1[-2]
+            if tf_h1.get("estado") == "alcista":
+                zonas["OB_H1"] = f"{prev['low']:.2f}–{last['low']:.2f}"
+            elif tf_h1.get("estado") == "bajista":
+                zonas["OB_H1"] = f"{last['high']:.2f}–{prev['high']:.2f}"
+
+    except Exception as e:
+        print(f"⚠️ Error en _detectar_ob_poi_cercanos: {e}")
+
+    return zonas
 
 
 # ============================================================
