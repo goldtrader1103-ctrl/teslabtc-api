@@ -1213,7 +1213,41 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             "detalle": "No se obtuvo respuesta de estructura o conexión fallida."
         }}
 
-    # 🧠 Payload final
+    # ============================================================
+    # 🔹 Reforzar escenarios antes del payload final
+    # ============================================================
+
+    if not isinstance(esc1, dict):
+        esc1 = {}
+    if not isinstance(esc2, dict):
+        esc2 = {}
+
+    # Si algún campo viene vacío, asignar valores por defecto
+    def _normalize_escenario(e, tipo, riesgo):
+        return {
+            "tipo": e.get("tipo", tipo),
+            "riesgo": e.get("riesgo", riesgo),
+            "contexto": e.get("contexto", contexto or "Estructura neutral."),
+            "setup_estado": e.get("setup_estado", "⏳ Sin setup válido — esperando confirmaciones."),
+            "setup": e.get("setup", {
+                "zona_entrada": zonas.get("POI_H1", "—"),
+                "tp1": zonas.get("PDL", "—"),
+                "tp2": zonas.get("ASIAN_LOW", "—"),
+                "tp3": zonas.get("ASIAN_HIGH", "—"),
+                "sl": zonas.get("PDH", "—"),
+                "observacion": "Esperar ruptura BOS M5 antes de ejecutar entrada institucional."
+            }),
+            "confs_favor": e.get("confs_favor", list(conf.keys())[:2] if conf else []),
+            "confs_pendientes": e.get("confs_pendientes", list(conf.keys())[2:4] if conf else []),
+            "texto": e.get("texto", f"Escenario de {tipo}: precio en fase operativa, esperar confirmación estructural en M15/M5."),
+        }
+
+    esc1 = _normalize_escenario(esc1, "Venta", "Medio")
+    esc2 = _normalize_escenario(esc2, "Compra", "Alto")
+
+    # ============================================================
+    # 🧠 Payload final enriquecido
+    # ============================================================
     payload = {
         "fecha": fecha_txt,
         "nivel_usuario": "Premium",
@@ -1227,8 +1261,8 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "contexto_general": contexto,
         "zonas_detectadas": zonas,
         "confirmaciones": conf,
-        "escenario_1": esc1,
-        "escenario_2": esc2,
+        "escenario_1": esc1,  # 🔹 ahora con datos completos
+        "escenario_2": esc2,  # 🔹 ahora con datos completos
         "setup_tesla": setup_activo,
         "conclusion_general": conclusion_final,
         "reflexion": reflexion,
