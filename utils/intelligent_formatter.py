@@ -239,3 +239,40 @@ def limpiar_texto(text: str) -> str:
         return ""
 
     return text.replace("  ", " ").strip()
+# ============================================================
+# 🧩 FORMATEADOR FREE (para usuarios sin token Premium)
+# ============================================================
+
+def construir_mensaje_free(data):
+    """
+    Formateador básico para usuarios Free.
+    Muestra estructura, precio y sesión sin detalles Premium.
+    """
+    fecha = data.get("fecha", "—")
+    sesion = data.get("sesión", "—")
+    precio = data.get("precio_actual", "—")
+    fuente = data.get("fuente_precio", "—")
+    estructura = data.get("estructura_detectada", {})
+
+    h4 = estructura.get("H4 (macro)", {}).get("estado", "—")
+    h1 = estructura.get("H1 (intradía)", {}).get("estado", "—")
+    m15 = estructura.get("M15 (reacción)", {}).get("estado", "—")
+
+    msg = f"""
+📋 **TESLABTC Free — Vista General**
+──────────────────────────────
+📅 Fecha: {fecha}
+💵 Precio actual: {precio}
+🕒 Sesión: {sesion}
+
+🧭 **Estructura Detectada**
+──────────────────────────────
+H4 (macro): {h4}
+H1 (intradía): {h1}
+M15 (reacción): {m15}
+
+⚙️ Fuente de datos: {fuente}
+──────────────────────────────
+💭 Accede al modo *Premium* para ver zonas, confirmaciones y setups activos.
+"""
+    return safe_markdown(msg.strip())
