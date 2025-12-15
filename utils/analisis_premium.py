@@ -883,7 +883,7 @@ def _poi_fibo_band(
     banda_high = max(lvl_618, lvl_886)
     return round(banda_low, 2), round(banda_high, 2)
 # ------------------------------------------------------------
-# 🔹 Detector simple de OB/POI cercanos (fallback TESLABTC)
+# 🔹 Detector institucional — OB, FVG y POI cercanos TESLABTC
 # ------------------------------------------------------------
 def _detectar_ob_poi_cercanos(
     kl_h4: List[Dict[str, Any]],
@@ -891,30 +891,78 @@ def _detectar_ob_poi_cercanos(
     tf_h4: Dict[str, Any],
     tf_h1: Dict[str, Any],
 ) -> Dict[str, str]:
-    """
-    Detecta OB/POI simples basados en las últimas 2 velas impulsivas
-    de cada temporalidad. Fallback para mantener visual del informe.
-    """
     zonas: Dict[str, str] = {}
 
     try:
-        # H4
-        if len(kl_h4) >= 2:
-            last = kl_h4[-1]
-            prev = kl_h4[-2]
-            if tf_h4.get("estado") == "alcista":
-                zonas["OB_H4"] = f"{prev['low']:.2f}–{last['low']:.2f}"
-            elif tf_h4.get("estado") == "bajista":
-                zonas["OB_H4"] = f"{last['high']:.2f}–{prev['high']:.2f}"
+        # -------------------------------
+        # 🔸 ORDER BLOCK H4
+        # -------------------------------
+        if len(kl_h4) >= 3:
+            ult = kl_h4[-1]
+            ant = kl_h4[-2]
+            estado = tf_h4.get("estado")
 
-        # H1
-        if len(kl_h1) >= 2:
-            last = kl_h1[-1]
-            prev = kl_h1[-2]
-            if tf_h1.get("estado") == "alcista":
-                zonas["OB_H1"] = f"{prev['low']:.2f}–{last['low']:.2f}"
-            elif tf_h1.get("estado") == "bajista":
-                zonas["OB_H1"] = f"{last['high']:.2f}–{prev['high']:.2f}"
+            if estado == "alcista" and ult["low"] > ant["low"]:
+                zonas["OB_H4"] = f"{ant['low']:.2f}–{ult['low']:.2f}"
+                zonas["OB_H4_TIPO"] = "Demanda"
+            elif estado == "bajista" and ult["high"] < ant["high"]:
+                zonas["OB_H4"] = f"{ult['high']:.2f}–{ant['high']:.2f}"
+                zonas["OB_H4_TIPO"] = "Oferta"
+
+        # -------------------------------
+        # 🔹 ORDER BLOCK H1
+        # -------------------------------
+        if len(kl_h1) >= 3:
+            ult = kl_h1[-1]
+            ant = kl_h1[-2]
+            estado = tf_h1.get("estado")
+
+            if estado == "alcista" and ult["low"] > ant["low"]:
+                zonas["OB_H1"] = f"{ant['low']:.2f}–{ult['low']:.2f}"
+                zonas["OB_H1_TIPO"] = "Demanda"
+            elif estado == "bajista" and ult["high"] < ant["high"]:
+                zonas["OB_H1"] = f"{ult['high']:.2f}–{ant['high']:.2f}"
+                zonas["OB_H1_TIPO"] = "Oferta"
+
+        # -------------------------------
+        # ⚙️ FAIR VALUE GAP H1 (últimas 3 velas)
+        # -------------------------------
+        if len(kl_h1) >= 3:
+            v1, v2, v3 = kl_h1[-3], kl_h1[-2], kl_h1[-1]
+            if v2["low"] > v1["high"]:
+                zonas["FVG_H1"] = f"{v1['high']:.2f}–{v2['low']:.2f}"
+            elif v2["high"] < v1["low"]:
+                zonas["FVG_H1"] = f"{v2['high']:.2f}–{v1['low']:.2f}"
+
+        # -------------------------------
+        # ⚙️ POI por retroceso Fibo profundo (61.8–88.6)
+        # -------------------------------
+        def _fibo_band(low, high, estado):
+            if not low or not high or low == high:
+                return None
+            hi, lo = float(high), float(low)
+            if estado == "alcista":
+                base, tope = lo, hi
+            elif estado == "bajista":
+                base, tope = hi, lo
+            else:
+                return None
+            amp = tope - base
+            lvl_618 = base + 0.618 * amp
+            lvl_886 = base + 0.886 * amp
+            return round(min(lvl_618, lvl_886), 2), round(max(lvl_618, lvl_886), 2)
+
+        if tf_h4.get("estado") in ("alcista", "bajista"):
+            h4_hi, h4_lo = tf_h4.get("HH") or tf_h4.get("RANGO_HIGH"), tf_h4.get("LL") or tf_h4.get("RANGO_LOW")
+            poi_h4 = _fibo_band(h4_lo, h4_hi, tf_h4["estado"])
+            if poi_h4:
+                zonas["POI_H4"] = f"{poi_h4[0]}–{poi_h4[1]}"
+
+        if tf_h1.get("estado") in ("alcista", "bajista"):
+            h1_hi, h1_lo = tf_h1.get("HH") or tf_h1.get("RANGO_HIGH"), tf_h1.get("LL") or tf_h1.get("RANGO_LOW")
+            poi_h1 = _fibo_band(h1_lo, h1_hi, tf_h1["estado"])
+            if poi_h1:
+                zonas["POI_H1"] = f"{poi_h1[0]}–{poi_h1[1]}"
 
     except Exception as e:
         print(f"⚠️ Error en _detectar_ob_poi_cercanos: {e}")
@@ -983,6 +1031,28 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     tf_h4["RANGO_LOW"] = zonas.get("H4_LOW")
     tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
     tf_h1["RANGO_LOW"] = zonas.get("H1_LOW")
+    
+# 🛠️ Fallback: si algún rango viene vacío, usar high/low promedio de las últimas velas
+def _fallback_range(kl: List[Dict[str, Any]], n: int = 40) -> Tuple[float, float]:
+    try:
+        data = kl[-n:]
+        highs = [float(k["high"]) for k in data]
+        lows = [float(k["low"]) for k in data]
+        return round(max(highs), 2), round(min(lows), 2)
+    except Exception:
+        return None, None
+
+if tf_d.get("RANGO_HIGH") is None or tf_d.get("RANGO_LOW") is None:
+    hi, lo = _fallback_range(kl_d, 60)
+    tf_d["RANGO_HIGH"], tf_d["RANGO_LOW"] = hi, lo
+
+if tf_h4.get("RANGO_HIGH") is None or tf_h4.get("RANGO_LOW") is None:
+    hi, lo = _fallback_range(kl_h4, 40)
+    tf_h4["RANGO_HIGH"], tf_h4["RANGO_LOW"] = hi, lo
+
+if tf_h1.get("RANGO_HIGH") is None or tf_h1.get("RANGO_LOW") is None:
+    hi, lo = _fallback_range(kl_h1, 40)
+    tf_h1["RANGO_HIGH"], tf_h1["RANGO_LOW"] = hi, lo
 
     # 🔹 OB/POI por detector clásico + filtro por rango swing
     ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
