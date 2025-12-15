@@ -1214,42 +1214,56 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         }}
 
     # ============================================================
-    # 🔹 Reforzar escenarios antes del payload final
+    # 🔹 Fusión y enriquecimiento de escenarios TESLABTC
     # ============================================================
 
-    if not isinstance(esc1, dict):
-        esc1 = {}
-    if not isinstance(esc2, dict):
-        esc2 = {}
+    def _merge_escenario(base, tipo_default, riesgo_default, contexto_extra):
+        """
+        Combina los datos reales del escenario con los contextuales del POI.
+        No sobreescribe campos válidos.
+        """
+        if not isinstance(base, dict):
+            base = {}
 
-    # Si algún campo viene vacío, asignar valores por defecto
-    def _normalize_escenario(e, tipo, riesgo):
-        return {
-            "tipo": e.get("tipo", tipo),
-            "riesgo": e.get("riesgo", riesgo),
-            "contexto": e.get("contexto", contexto or "Estructura neutral."),
-            "setup_estado": e.get("setup_estado", "⏳ Sin setup válido — esperando confirmaciones."),
-            "setup": e.get("setup", {
-                "zona_entrada": zonas.get("POI_H1", "—"),
-                "tp1": zonas.get("PDL", "—"),
-                "tp2": zonas.get("ASIAN_LOW", "—"),
-                "tp3": zonas.get("ASIAN_HIGH", "—"),
-                "sl": zonas.get("PDH", "—"),
-                "observacion": "Esperar ruptura BOS M5 antes de ejecutar entrada institucional."
-            }),
-            "confs_favor": e.get("confs_favor", list(conf.keys())[:2] if conf else []),
-            "confs_pendientes": e.get("confs_pendientes", list(conf.keys())[2:4] if conf else []),
-            "texto": e.get("texto", f"Escenario de {tipo}: precio en fase operativa, esperar confirmación estructural en M15/M5."),
+        merged = {
+            "tipo": base.get("tipo", tipo_default),
+            "riesgo": base.get("riesgo", riesgo_default),
+            "contexto": (
+                base.get("contexto")
+                or contexto_extra
+                or "Transición estructural TESLABTC — sin POI activo."
+            ),
+            "setup_estado": base.get(
+                "setup_estado",
+                "⏳ Sin setup válido — esperando confirmaciones (BOS + POI + Sesión).",
+            ),
+            "setup": base.get(
+                "setup",
+                {
+                    "zona_entrada": zonas.get("POI_H1", "—"),
+                    "tp1": zonas.get("PDL", "—"),
+                    "tp2": zonas.get("ASIAN_LOW", "—"),
+                    "tp3": zonas.get("ASIAN_HIGH", "—"),
+                    "sl": zonas.get("PDH", "—"),
+                    "observacion": "Esperar ruptura BOS M5 antes de ejecutar entrada institucional.",
+                },
+            ),
+            "confs_favor": base.get("confs_favor", list(conf.keys())[:2] if conf else []),
+            "confs_pendientes": base.get("confs_pendientes", list(conf.keys())[2:4] if conf else []),
+            "texto": base.get(
+                "texto",
+                f"Escenario de {tipo_default}: esperar confirmación estructural (BOS, volumen o vela envolvente) "
+                "para validar entrada institucional.",
+            ),
         }
+        return merged
 
-    esc1 = _normalize_escenario(esc1, "Venta", "Medio")
-    esc2 = _normalize_escenario(esc2, "Compra", "Alto")
     # ============================================================
     # 🔍 Detección contextual POI multi-temporal (TESLABTC Logic)
     # ============================================================
     contexto_operativo = ""
     tipo_operacion = "—"
-    riesgo = "—"
+    riesgo_operativo = "—"
 
     try:
         if zonas.get("POI_H4"):
@@ -1260,7 +1274,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     "Esperar reacción en M15/M5 (BOS, vela envolvente o confirmación de volumen)."
                 )
                 tipo_operacion = "Compra" if tendencia_h4 == "alcista" else "Venta"
-                riesgo = "Bajo"
+                riesgo_operativo = "Bajo"
         elif zonas.get("POI_H1"):
             poi_h1_min, poi_h1_max = [float(x) for x in str(zonas["POI_H1"]).replace("–", "-").split("-")]
             if poi_h1_min <= float(precio) <= poi_h1_max:
@@ -1269,21 +1283,29 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     "Esperar confirmaciones estructurales (BOS M5 o ruptura local)."
                 )
                 tipo_operacion = "Compra" if tendencia_h1 == "alcista" else "Venta"
-                riesgo = "Medio"
+                riesgo_operativo = "Medio"
         else:
             contexto_operativo = "El precio no se encuentra dentro de ningún POI relevante."
             tipo_operacion = "—"
-            riesgo = "Alto"
+            riesgo_operativo = "Alto"
     except Exception as e:
         contexto_operativo = f"Error al evaluar POI: {e}"
         tipo_operacion = "—"
-        riesgo = "—"
+        riesgo_operativo = "—"
 
-    # Añadir esta información contextual al payload
+    # 🔹 Fusión final de escenarios
+    esc1 = _merge_escenario(esc1, tipo_operacion, riesgo_operativo, contexto_operativo)
+    esc2 = _merge_escenario(
+        esc2,
+        "Compra" if tipo_operacion == "Venta" else "Venta",
+        "Alto" if riesgo_operativo == "Bajo" else "Medio",
+        "Escenario alterno (corrección estructural TESLABTC).",
+    )
+
     payload_contextual = {
         "contexto_operativo": contexto_operativo,
         "tipo_operacion_sugerida": tipo_operacion,
-        "riesgo_operativo": riesgo
+        "riesgo_operativo": riesgo_operativo,
     }
 
     # ============================================================

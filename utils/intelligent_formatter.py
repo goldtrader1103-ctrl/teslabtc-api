@@ -226,21 +226,32 @@ def limpiar_texto(text: str) -> str:
     return text.replace("  ", " ").strip()
 
 # ============================================================
-# 🔹 Escenarios Operativos (Continuación / Corrección)
+# 🔹 Escenarios Operativos TESLABTC (Continuación / Corrección)
 # ============================================================
 def _fmt_escenarios_operativos(payload: Dict[str, Any]) -> str:
     e1 = payload.get("escenario_1", {})
     e2 = payload.get("escenario_2", {})
 
+    # Contexto general del análisis
+    contexto_operativo = payload.get("contexto_operativo", "—")
+    tipo_sugerido = payload.get("tipo_operacion_sugerida", "—")
+    riesgo_operativo = payload.get("riesgo_operativo", "—")
+
     def _esc_txt(e, titulo, color):
-        tipo = e.get("tipo", "—")
-        riesgo = e.get("riesgo", "—")
-        contexto = e.get("contexto", "—")
-        setup_estado = e.get("setup_estado", "—")
+        tipo = e.get("tipo", tipo_sugerido)
+        riesgo = e.get("riesgo", riesgo_operativo)
+        contexto = e.get("contexto", contexto_operativo)
+        setup_estado = e.get("setup_estado", "⏳ Sin setup activo — esperando confirmaciones.")
         setup = e.get("setup", {})
         confs_favor = e.get("confs_favor", [])
         confs_pend = e.get("confs_pendientes", [])
         texto = e.get("texto", "—")
+
+        # Fallback: asegurar que siempre haya contenido visible
+        if not contexto or contexto == "—":
+            contexto = contexto_operativo or "Sin contexto operativo."
+        if not riesgo or riesgo == "—":
+            riesgo = riesgo_operativo or "Medio"
 
         return (
 f"{color} {titulo}\n"
@@ -263,6 +274,15 @@ f"⚠️ Confirmaciones faltantes: {', '.join(confs_pend) if confs_pend else '�
     msg = "📊 ESCENARIOS OPERATIVOS\n──────────────────────────────\n"
     msg += _esc_txt(e1, "Escenario de Continuación", "🟢") + "\n"
     msg += _esc_txt(e2, "Escenario de Corrección / Contra-tendencia", "🔴")
+
+    # Agregar una línea contextual final (macro resumen)
+    if contexto_operativo and contexto_operativo != "—":
+        msg += (
+            "\n──────────────────────────────\n"
+            f"🧠 Contexto operativo global TESLABTC:\n{contexto_operativo}\n"
+            f"📊 Operación sugerida: {tipo_sugerido} ({riesgo_operativo} riesgo)\n"
+        )
+
     return msg
 
 # ============================================================
