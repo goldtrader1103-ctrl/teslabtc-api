@@ -1031,28 +1031,28 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     tf_h4["RANGO_LOW"] = zonas.get("H4_LOW")
     tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
     tf_h1["RANGO_LOW"] = zonas.get("H1_LOW")
-    
-# 🛠️ Fallback: si algún rango viene vacío, usar high/low promedio de las últimas velas
-def _fallback_range(kl: List[Dict[str, Any]], n: int = 40) -> Tuple[float, float]:
-    try:
-        data = kl[-n:]
-        highs = [float(k["high"]) for k in data]
-        lows = [float(k["low"]) for k in data]
-        return round(max(highs), 2), round(min(lows), 2)
-    except Exception:
-        return None, None
 
-if tf_d.get("RANGO_HIGH") is None or tf_d.get("RANGO_LOW") is None:
-    hi, lo = _fallback_range(kl_d, 60)
-    tf_d["RANGO_HIGH"], tf_d["RANGO_LOW"] = hi, lo
+    # 🛠️ Fallback: si algún rango viene vacío, usar high/low promedio de las últimas velas
+    def _fallback_range(kl: List[Dict[str, Any]], n: int = 40) -> Tuple[float, float]:
+        try:
+            data = kl[-n:]
+            highs = [float(k["high"]) for k in data]
+            lows = [float(k["low"]) for k in data]
+            return round(max(highs), 2), round(min(lows), 2)
+        except Exception:
+            return None, None
 
-if tf_h4.get("RANGO_HIGH") is None or tf_h4.get("RANGO_LOW") is None:
-    hi, lo = _fallback_range(kl_h4, 40)
-    tf_h4["RANGO_HIGH"], tf_h4["RANGO_LOW"] = hi, lo
+    if tf_d.get("RANGO_HIGH") is None or tf_d.get("RANGO_LOW") is None:
+        hi, lo = _fallback_range(kl_d, 60)
+        tf_d["RANGO_HIGH"], tf_d["RANGO_LOW"] = hi, lo
 
-if tf_h1.get("RANGO_HIGH") is None or tf_h1.get("RANGO_LOW") is None:
-    hi, lo = _fallback_range(kl_h1, 40)
-    tf_h1["RANGO_HIGH"], tf_h1["RANGO_LOW"] = hi, lo
+    if tf_h4.get("RANGO_HIGH") is None or tf_h4.get("RANGO_LOW") is None:
+        hi, lo = _fallback_range(kl_h4, 40)
+        tf_h4["RANGO_HIGH"], tf_h4["RANGO_LOW"] = hi, lo
+
+    if tf_h1.get("RANGO_HIGH") is None or tf_h1.get("RANGO_LOW") is None:
+        hi, lo = _fallback_range(kl_h1, 40)
+        tf_h1["RANGO_HIGH"], tf_h1["RANGO_LOW"] = hi, lo
 
     # 🔹 OB/POI por detector clásico + filtro por rango swing
     ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
