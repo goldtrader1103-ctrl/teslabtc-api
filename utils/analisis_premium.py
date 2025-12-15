@@ -1,12 +1,13 @@
 from main import VERSION_TESLA
 # ============================================================
-# 🧠 TESLABTC.KG — Análisis Premium (v5.3 PRO REAL MARKET)
+# 🧠 TESLABTC.KG — Análisis Premium (v5.3.1 PRO REAL MARKET)
 # ============================================================
-# Fuente: Binance (REST) — sin simulaciones
-# Estructura real multi-TF, PDH/PDL, Rango Asiático (COL),
-# OB/POI cercanos, escenarios de continuidad/corrección
-# y SETUP ACTIVO “Level Entry M5”.
-# Compatible con utils/intelligent_formatter v5.5 PRO.
+# Fuente: Binance (REST) — Multi-TF (D, H4, H1, M15, M5)
+# - Estructura real con ZigZag estructural
+# - Zonas PDH/PDL + Asia + POI/OB
+# - Escenarios Continuación y Corrección
+# - SETUP ACTIVO M5 dinámico con BOS + Volumen
+# - Totalmente compatible con utils/intelligent_formatter v5.8 PRO
 # ============================================================
 
 import requests
@@ -14,7 +15,6 @@ import math
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
-
 import pytz
 
 # ------------------------------
@@ -22,8 +22,7 @@ import pytz
 # ------------------------------
 TZ_COL = timezone(timedelta(hours=-5))
 BINANCE_REST_BASE = "https://api.binance.com"
-UA = {"User-Agent": "teslabtc-kg/5.2"}
-
+UA = {"User-Agent": "teslabtc-kg/5.3.1"}
 
 # ------------------------------------------------------------
 # 🔹 Utilidades base (precio + klines)
@@ -43,11 +42,7 @@ def _safe_get_price(symbol: str = "BTCUSDT") -> Tuple[Optional[float], str]:
         return None, f"Error precio: {e}"
 
 
-def _safe_get_klines(
-    symbol: str,
-    interval: str = "15m",
-    limit: int = 500,
-) -> List[Dict[str, Any]]:
+def _safe_get_klines(symbol: str, interval: str = "15m", limit: int = 500) -> List[Dict[str, Any]]:
     try:
         r = requests.get(
             f"{BINANCE_REST_BASE}/api/v3/klines",
@@ -57,19 +52,17 @@ def _safe_get_klines(
         )
         r.raise_for_status()
         data = r.json()
-        out: List[Dict[str, Any]] = []
-        for k in data:
-            out.append(
-                {
-                    "open_time": datetime.utcfromtimestamp(k[0] / 1000.0),
-                    "open": float(k[1]),
-                    "high": float(k[2]),
-                    "low": float(k[3]),
-                    "close": float(k[4]),
-                    "vol": float(k[5]),
-                }
-            )
-        return out
+        return [
+            {
+                "open_time": datetime.utcfromtimestamp(k[0] / 1000.0),
+                "open": float(k[1]),
+                "high": float(k[2]),
+                "low": float(k[3]),
+                "close": float(k[4]),
+                "vol": float(k[5]),
+            }
+            for k in data
+        ]
     except Exception:
         return []
 
@@ -1163,6 +1156,10 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 
     # 🔹 Setup activo M5 (BOS + volumen)
     setup_activo = _setup_activo_m5(symbol)
+# 🔸 Añadir tipo de setup (para el encabezado dinámico del formatter)
+if setup_activo.get("activo"):
+    tf_h1_estado = tf_h1.get("estado")
+    setup_activo["tipo"] = "Compra" if tf_h1_estado == "alcista" else "Venta"
 
     # Ajuste: sólo mantenemos setup ACTIVO si el precio está dentro del POI H1
     if setup_activo.get("activo") and zonas.get("POI_H1") and isinstance(
@@ -1306,6 +1303,22 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "contexto_operativo": contexto_operativo,
         "tipo_operacion_sugerida": tipo_operacion,
         "riesgo_operativo": riesgo_operativo,
+    }
+# 🧩 Asegurar que zonas_detectadas tenga estructura mínima
+if not zonas or len(zonas) < 2:
+    zonas = {
+        "PDH": "—",
+        "PDL": "—",
+        "ASIAN_HIGH": "—",
+        "ASIAN_LOW": "—",
+        "POI_H4": "—",
+        "POI_H1": "—",
+        "H1_HIGH": tf_h1.get("RANGO_HIGH"),
+        "H1_LOW": tf_h1.get("RANGO_LOW"),
+        "H4_HIGH": tf_h4.get("RANGO_HIGH"),
+        "H4_LOW": tf_h4.get("RANGO_LOW"),
+        "D_HIGH": tf_d.get("RANGO_HIGH"),
+        "D_LOW": tf_d.get("RANGO_LOW"),
     }
 
     # ============================================================
