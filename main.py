@@ -1,279 +1,166 @@
+# ============================================================
+# 🚀 TESLABTC.KG — main.py (v5.3.1 PRO REAL MARKET)
+# ============================================================
+# Integración total con utils/analisis_premium v5.3.1
+# Compatible con intelligent_formatter v5.8 PRO FINAL
+# ============================================================
 
-# ============================================================
-# 🚀 TESLABTC.KG — main.py (integrado con token_utils persistente)
-# ============================================================
-# ============================================================
-# 🧠 Versión del sistema TESLABTC.KG
-# ============================================================
-VERSION_TESLA = "v5.2 REAL MARKET (última compilación activa)"
+VERSION_TESLA = "v5.3.1 PRO REAL MARKET"
 
 print(f"🧠 TESLABTC.KG — {VERSION_TESLA}")
 
 import asyncio
+import random
+from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from datetime import datetime, timedelta, timezone
-import random
 
+# ============================================================
+# 🧩 Imports Core
+# ============================================================
 from utils.price_utils import (
     obtener_precio,
     obtener_klines_binance,
     sesion_ny_activa,
-    obtener_datos_sesion_colombia,
-    BINANCE_STATUS
+    BINANCE_STATUS,
+)
+from utils.estructura_utils import evaluar_estructura
+from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
+from utils.token_utils import (
+    generar_token,
+    validar_token,
+    liberar_token,
+    listar_tokens,
 )
 
-from utils.estructura_utils import evaluar_estructura, definir_escenarios
-from utils.live_monitor import live_monitor_loop, stop_monitor, get_alerts
+# Nuevo analizador premium (v5.3.1)
 from utils.analisis_premium import generar_analisis_premium
-from utils.token_utils import generar_token, validar_token, verificar_vencimientos, liberar_token, listar_tokens
+
+# Formatter unificado
 from utils.intelligent_formatter import (
     construir_mensaje_operativo,
     construir_mensaje_free,
-    limpiar_texto
 )
 
 # ============================================================
-app = FastAPI(title="TESLABTC.KG", description="API TESLABTC.KG", version="4.3")
+# ⚙️ CONFIGURACIÓN FASTAPI
+# ============================================================
+app = FastAPI(title="TESLABTC.KG", description="API TESLABTC.KG", version="5.3.1")
 app.add_middleware(GZipMiddleware, minimum_size=600)
 TZ_COL = timezone(timedelta(hours=-5))
 
-# Reflexiones aleatorias (puedes ampliar la lista)
+# ============================================================
+# ✨ FRASES MOTIVACIONALES (REFLEXIONES)
+# ============================================================
 REFLEXIONES = [
     "La gestión del riesgo es la columna vertebral del éxito en trading.",
-    "La paciencia en la zona de demanda puede transformar pérdidas en ganancias.",
-    "Entrar con menor tamaño y mayor convicción es preferible a lo contrario.",
-    "La disciplina al cortar pérdidas conserva el capital para las buenas oportunidades.",
-    "La confirmación en múltiples marcos temporales aumenta la probabilidad de éxito.",
-    "Un buen plan no garantiza ganancias, pero la ausencia de plan garantiza pérdidas.",
-    "La recompensa real del trading es el proceso, no el resultado inmediato.",
-    "Observa la estructura primero — las velas contarán la historia después.",
-    "No confundas movimiento con tendencia; el contexto lo determina.",
-    "La paciencia y la gestión convierten probabilidades en rendimiento."
+    "La paciencia en la zona convierte el caos en oportunidad.",
+    "El mercado premia la confirmación, no la anticipación.",
+    "Tu disciplina define tu rentabilidad.",
+    "Ser constante supera al talento. Siempre.",
+    "El trader exitoso no predice, se adapta.",
 ]
 
 # ============================================================
-# 🧠 ENDPOINT PRINCIPAL DE ANÁLISIS — TESLABTC.KG (formato unificado)
+# 🧠 ENDPOINT PRINCIPAL — /analyze
 # ============================================================
-@app.get("/analyze", tags=["Análisis TESLABTC"])
+@app.get("/analyze", tags=["TESLABTC Premium"])
 async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
     fecha = datetime.now(TZ_COL).strftime("%d/%m/%Y %H:%M:%S")
 
-    # 🧩 Importar los formateadores
-    from utils.intelligent_formatter import (
-        construir_mensaje_free,
-        construir_mensaje_operativo,
+    # 🔐 Validar token
+    auth = validar_token(token) if token else None
+    nivel_usuario = (
+        auth.get("nivel", "Free") if auth and auth.get("estado") == "✅" else "Free"
     )
 
-    # 🔐 Validación de token
-    auth = validar_token(token) if token else None
-    nivel_usuario = auth.get("nivel", "Free") if auth and auth.get("estado") == "✅" else "Free"
-
-    # 💰 Precio y sesión
+    # 💰 Obtener precio
     precio_data = obtener_precio(simbolo)
     precio = precio_data.get("precio", 0)
     fuente = precio_data.get("fuente", "Desconocida")
     precio_str = f"{precio:,.2f} USD" if precio else "⚙️ No disponible"
     sesion = "✅ Activa (Sesión NY)" if sesion_ny_activa() else "❌ Cerrada (Fuera de NY)"
 
-    # ==============================================
-    # 🧩 Estructura Base (seguridad por si falla)
-    # ==============================================
-    try:
-        h4 = obtener_klines_binance(simbolo, "4h", 120)
-        h1 = obtener_klines_binance(simbolo, "1h", 120)
-        m15 = obtener_klines_binance(simbolo, "15m", 120)
-        e_h4 = evaluar_estructura(h4)
-        e_h1 = evaluar_estructura(h1)
-        e_m15 = evaluar_estructura(m15)
-    except Exception as e:
-        print(f"⚠️ Error analizando estructura: {e}")
-        e_h4 = e_h1 = e_m15 = {"estado": "sin_datos"}
-
-    estructura = {
-        "H4 (macro)": e_h4,
-        "H1 (intradía)": e_h1,
-        "M15 (reacción)": e_m15
-    }
-
     # ============================================================
-    # FREE — versión resumida
+    # 🧩 FREE VERSION — estructura resumida
     # ============================================================
     if nivel_usuario.lower() == "free":
-        body_free = {
-            "fecha": fecha,
-            "nivel_usuario": "Free",
-            "sesión": sesion,
-            "precio_actual": precio_str,
-            "fuente_precio": fuente,
-            "estructura_detectada": estructura,
-            "conexion_binance": BINANCE_STATUS,
-        }
-
-        body_free["mensaje_formateado"] = construir_mensaje_free(body_free)
-        return {"🧠 TESLABTC.KG": body_free}
-
-    # ============================================================
-    # PREMIUM — versión completa
-    # ============================================================
-    else:
         try:
-            # ⚙️ Análisis Premium base
-            ap_full = generar_analisis_premium(simbolo)
-            ap = ap_full.get("🧠 TESLABTC.KG", ap_full)
-            
-            # 🔍 Detección de estado “PRE-BOS” si no hay setup activo ni BOS confirmado
-            setup_data = ap.get("setup_tesla", {})
-            estructura_detectada = ap.get("estructura_detectada", {})
-            h1_state = estructura_detectada.get("H1", {}).get("estado", "—")
-            m15_state = estructura_detectada.get("M15", {}).get("estado", "—")
+            h4 = obtener_klines_binance(simbolo, "4h", 120)
+            h1 = obtener_klines_binance(simbolo, "1h", 120)
+            m15 = obtener_klines_binance(simbolo, "15m", 120)
 
-            # Si no hay setup activo pero estructura válida → mostrar PRE-BOS
-            if not setup_data.get("activo", False) and h1_state in ("alcista", "bajista"):
-                pre_bos_body = {
-                    "fecha": ap.get("fecha", fecha),
-                    "nivel_usuario": "Premium",
-                    "sesión": ap.get("sesion", sesion),
-                    "activo": ap.get("activo", simbolo),
-                    "precio_actual": ap.get("precio_actual", precio_str),
-                    "fuente_precio": fuente,
-                    "estructura_detectada": estructura_detectada,
-                    "zonas_detectadas": ap.get("zonas_detectadas", {}),
-                    "confirmaciones": ap.get("confirmaciones", {}),
-                    "estado_operativo": "🕐 PRE-BOS (esperando confirmación M5)",
-                    "escenario_principal": (
-                        "continuación" if h1_state == "bajista" else "corrección"
-                    ),
-                    "comentario": "Estructura clara pero sin ruptura M5 confirmada. Esperar gatillo BOS.",
-                    "conexion_binance": BINANCE_STATUS,
-                }
-
-                # Añadir mensaje visual coherente
-                from utils.intelligent_formatter import construir_mensaje_operativo
-                pre_bos_body["mensaje_formateado"] = construir_mensaje_operativo(pre_bos_body)
-
-                return {"🧠 TESLABTC.KG": pre_bos_body}
-
-            # 🔁 INTEGRAR ESTRUCTURA REAL MULTI-TF
-            from utils.analisis_estructura import analizar_estructura_general
-            estructura_real = analizar_estructura_general(simbolo)
-            ap.update(estructura_real)
-
-            # 🧩 Estructura Premium completa
-            premium_body = {
-                "fecha": ap.get("fecha", fecha),
-                "nivel_usuario": "Premium",
-                "sesión": ap.get("sesion", sesion),
-                "activo": ap.get("activo", simbolo),
-                "precio_actual": ap.get("precio_actual", precio_str),
-                "fuente_precio": fuente,
-                "estructura_detectada": ap.get("estructura_detectada", {}),
-                "zonas_detectadas": ap.get("zonas_detectadas", {}),
-                "confirmaciones": ap.get("confirmaciones", {}),
-                "probabilidad": ap.get("probabilidad", "—"),
-                "setup_tesla": ap.get("setup_tesla", {}),
-                "conclusion_general": ap.get("conclusion_general", "—"),
-                "contexto_general": ap.get("contexto_general", "—"),
-                "conexion_binance": BINANCE_STATUS,
+            estructura = {
+                "H4 (macro)": evaluar_estructura(h4),
+                "H1 (intradía)": evaluar_estructura(h1),
+                "M15 (reacción)": evaluar_estructura(m15),
             }
 
-            # 🧠 Integración con el formateador inteligente
-            premium_body["mensaje_formateado"] = construir_mensaje_operativo(premium_body)
-            return {"🧠 TESLABTC.KG": premium_body}
-
-        except Exception as e:
-            print(f"⚠️ Error en análisis Premium TESLABTC: {e}")
-
-            # 🔧 Estructura fallback para evitar respuesta vacía
-            default_body = {
+            body_free = {
                 "fecha": fecha,
-                "nivel_usuario": "Premium",
+                "nivel_usuario": "Free",
                 "sesión": sesion,
+                "activo": simbolo,
                 "precio_actual": precio_str,
                 "fuente_precio": fuente,
-                "mensaje": f"⚙️ No se pudo generar análisis completo — {str(e)}",
                 "estructura_detectada": estructura,
                 "conexion_binance": BINANCE_STATUS,
-                "estado_operativo": "🕐 PRE-BOS (esperando confirmación M5)",
-                "escenario_principal": "continuación" if e_h1.get("tendencia") == "bajista" else "corrección",
-                "comentario": "Mostrar estructura base. Esperar ruptura M5 para validar entrada."
             }
 
-            # 🧩 Añadir mensaje formateado
-            from utils.intelligent_formatter import construir_mensaje_operativo
-            default_body["mensaje_formateado"] = construir_mensaje_operativo(default_body)
+            body_free["mensaje_formateado"] = construir_mensaje_free(body_free)
+            return {"🧠 TESLABTC.KG": body_free}
 
-            return {"🧠 TESLABTC.KG": default_body}
+        except Exception as e:
+            return {"error": f"❌ Error Free: {e}"}
 
-# ============================================================
-# 🔍 FUNCIÓN AUXILIAR PARA BUSCAR CONCEPTOS
-# ============================================================
-def obtener_concepto(nombre: str):
-    from utils.conceptos_tesla import CONCEPTOS
-    for clave, valor in CONCEPTOS.items():
-        if clave.lower() == nombre.lower():
-            return valor
-    return {
-        "titulo": "❌ No encontrado",
-        "definicion": "El concepto solicitado no está disponible en la base actual.",
-        "ejemplo": ""
-    }
-
-# ============================================================
-# 📘 ENDPOINT EDUCATIVO — CONCEPTOS TESLA
-# ============================================================
-@app.get("/concepto")
-def get_concepto(nombre: str):
-    """
-    Devuelve la definición de un concepto individual o la lista completa.
-    Ejemplo:
-      /concepto?nombre=bos
-      /concepto?nombre=todos
-    """
+    # ============================================================
+    # 🧩 PREMIUM VERSION — análisis completo
+    # ============================================================
     try:
-        from utils.conceptos_tesla import CONCEPTOS
+        analisis_premium = generar_analisis_premium(simbolo)
+        data = analisis_premium.get("🧠 TESLABTC.KG", analisis_premium)
 
-        # ✅ Si es una lista (como en tu JSON actual)
-        if isinstance(CONCEPTOS, list):
-            conceptos_lista = CONCEPTOS
-        else:
-            conceptos_lista = list(CONCEPTOS.values())
+        # Si no devuelve nada útil
+        if not data or "estructura_detectada" not in data:
+            raise ValueError("Análisis vacío o incompleto.")
 
-        # ✅ Mostrar todos
-        if nombre.lower() == "todos":
-            return {"TESLABTC.KG - Concepto": conceptos_lista}
+        # 🧠 Mensaje formateado (según versión Premium)
+        if not data.get("mensaje_formateado"):
+            data["mensaje_formateado"] = construir_mensaje_operativo(data)
 
-        # ✅ Buscar por nombre
-        for c in conceptos_lista:
-            if c.get("nombre", "").lower() == nombre.lower():
-                return {"TESLABTC.KG - Concepto": c}
-
-        # ❌ No encontrado
-        return {
-            "TESLABTC.KG - Concepto": {
-                "titulo": "No encontrado",
-                "definicion": "El concepto solicitado no está registrado.",
-                "ejemplo": ""
-            }
-        }
+        return {"🧠 TESLABTC.KG": data}
 
     except Exception as e:
-        return {"error": f"❌ Error en /concepto: {str(e)}"}
+        # 🔧 fallback si falla la estructura premium
+        fallback_body = {
+            "fecha": fecha,
+            "nivel_usuario": "Premium",
+            "sesión": sesion,
+            "activo": simbolo,
+            "precio_actual": precio_str,
+            "fuente_precio": fuente,
+            "mensaje": f"⚙️ No se pudo generar análisis premium: {e}",
+            "estructura_detectada": {},
+            "estado_operativo": "🕐 PRE-BOS (esperando confirmación M5)",
+            "comentario": "Esperar ruptura estructural M5 para validar entrada.",
+        }
+
+        fallback_body["mensaje_formateado"] = construir_mensaje_operativo(fallback_body)
+        return {"🧠 TESLABTC.KG": fallback_body}
 
 # ============================================================
-# Validación del bot (opcional) - expone la lógica de validación
+# 🧩 OTROS ENDPOINTS (tokens, health, monitor)
 # ============================================================
+
 @app.post("/validate", tags=["Bot"])
-async def validate_token(request: Request):
+async def validate_token_route(request: Request):
     data = await request.json()
     token = data.get("token")
     if not token:
         return {"estado": "❌", "mensaje": "Falta token"}
     return validar_token(token)
 
-# ============================================================
-# Admin: crear/renovar token (mantiene mismo token por usuario)
-# ============================================================
+
 @app.post("/admin/create_token", tags=["Admin"])
 async def admin_create_token(data: dict):
     token_admin = data.get("token_admin")
@@ -282,13 +169,10 @@ async def admin_create_token(data: dict):
 
     nivel = data.get("nivel", "Premium")
     usuario = str(data.get("telegram_id", "usuario_desconocido"))
-    # generar o renovar token para el usuario
     res = generar_token(usuario, dias_premium=30, dias_free=10)
     return res
 
-# ============================================================
-# Endpoint para liberar token manualmente
-# ============================================================
+
 @app.post("/admin/liberar_token", tags=["Admin"])
 async def admin_liberar_token(data: dict):
     token_admin = data.get("token_admin")
@@ -297,25 +181,6 @@ async def admin_liberar_token(data: dict):
         return {"estado": "⛔", "mensaje": "Token administrativo inválido"}
     return liberar_token(token)
 
-# ============================================================
-# Monitor y health
-# ============================================================
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(live_monitor_loop())
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    stop_monitor()
-
-@app.get("/monitor/status", tags=["Monitor"])
-async def monitor_status():
-    return get_alerts()
-
-@app.get("/monitor/stop", tags=["Monitor"])
-async def monitor_stop():
-    stop_monitor()
-    return {"estado": "🔴 Monitor detenido"}
 
 @app.get("/health", tags=["Estado"])
 async def health_check():
@@ -326,74 +191,48 @@ async def health_check():
         "timestamp": datetime.now(TZ_COL).strftime("%Y-%m-%d %H:%M:%S"),
     }
 
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(live_monitor_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    stop_monitor()
+
+
+@app.get("/monitor/status", tags=["Monitor"])
+async def monitor_status():
+    return get_alerts()
+
+
+@app.get("/monitor/stop", tags=["Monitor"])
+async def monitor_stop():
+    stop_monitor()
+    return {"estado": "🔴 Monitor detenido"}
+
+
 @app.get("/", tags=["Home"])
 async def home():
-    return {"status": "✅ Servicio operativo", "version": "4.3 PRO STABLE"}
+    return {"status": "✅ Servicio operativo", "version": VERSION_TESLA}
+
 
 # ============================================================
-# 🧩 DEBUG ROUTER INTEGRADO — para sincronización con el BOT
-# ============================================================
-import json, os
-from fastapi import APIRouter
-
-@app.get("/debug/tokens", tags=["Debug"])
-async def obtener_tokens_debug():
-    """Devuelve la lista de tokens activos para sincronización con el BOT."""
-    try:
-        if not os.path.exists("tokens.json"):
-            return {"tokens": [], "mensaje": "Archivo tokens.json no encontrado"}
-
-        with open("tokens.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        return {"tokens": data, "mensaje": "Tokens cargados correctamente"}
-    except Exception as e:
-        return {"tokens": [], "error": str(e)}
-
-# ============================================================
-# Incluir routers adicionales (al final del archivo)
-# ============================================================
-from routers.admin_extra import router as admin_extra_router
-from routers.auth_extra import router as auth_extra_router
-from routers.analizar_router import router as analizar_router
-
-app.include_router(admin_extra_router)
-app.include_router(auth_extra_router)
-app.include_router(analizar_router)  # <- sin prefix, ya lo tiene internamente
-
-# ============================================================
-# 🔁 ALIAS DE COMPATIBILIDAD — Endpoint antiguo del BOT
+# 🔁 ALIAS COMPATIBILIDAD (para BOT antiguo)
 # ============================================================
 @app.get("/analisis/premium", tags=["Compatibilidad"])
 async def analisis_premium_alias():
-    """
-    Mantiene compatibilidad con el BOT TESLABTC que llama al endpoint /analisis/premium.
-    Internamente redirige al mismo análisis Premium de /analyze.
-    """
     try:
-        from utils.analisis_premium import generar_analisis_premium
-
-        # ✅ Ejecutar análisis premium normal usando símbolo
         analisis = generar_analisis_premium("BTCUSDT")
-
         return {"🧠 TESLABTC.KG": analisis}
-
     except Exception as e:
-        return {
-            "🧠 TESLABTC.KG": {
-                "estado": "❌",
-                "mensaje": f"Error en alias /analisis/premium: {str(e)}"
-            }
-        }
+        return {"error": f"❌ Error en alias /analisis/premium: {e}"}
+
 
 # ============================================================
-# 🚀 ENTRYPOINT — EJECUCIÓN LOCAL
+# 🚀 ENTRYPOINT LOCAL
 # ============================================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8080,
-        reload=True
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)

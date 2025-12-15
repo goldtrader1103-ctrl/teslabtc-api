@@ -1156,33 +1156,31 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 
     # 🔹 Setup activo M5 (BOS + volumen)
     setup_activo = _setup_activo_m5(symbol)
-# 🔸 Añadir tipo de setup (para el encabezado dinámico del formatter)
-if setup_activo.get("activo"):
-    tf_h1_estado = tf_h1.get("estado")
-    setup_activo["tipo"] = "Compra" if tf_h1_estado == "alcista" else "Venta"
 
-    # Ajuste: sólo mantenemos setup ACTIVO si el precio está dentro del POI H1
-    if setup_activo.get("activo") and zonas.get("POI_H1") and isinstance(
-        precio, (int, float)
-    ):
-        try:
-            lo_poi, hi_poi = [
-                float(x.strip())
-                for x in str(zonas["POI_H1"]).replace("–", "-").split("-")
-            ]
-            lo_poi, hi_poi = min(lo_poi, hi_poi), max(lo_poi, hi_poi)
-            if not (lo_poi <= float(precio) <= hi_poi):
+    # 🔸 Añadir tipo de setup (para el encabezado dinámico del formatter)
+    if setup_activo.get("activo"):
+        tf_h1_estado = tf_h1.get("estado")
+        setup_activo["tipo"] = "Compra" if tf_h1_estado == "alcista" else "Venta"
+
+        # Ajuste: sólo mantenemos setup ACTIVO si el precio está dentro del POI H1
+        if setup_activo.get("activo") and zonas.get("POI_H1") and isinstance(precio, (int, float)):
+            try:
+                lo_poi, hi_poi = [
+                    float(x.strip())
+                    for x in str(zonas["POI_H1"]).replace("–", "-").split("-")
+                ]
+                lo_poi, hi_poi = min(lo_poi, hi_poi), max(lo_poi, hi_poi)
+                if not (lo_poi <= float(precio) <= hi_poi):
+                    setup_activo = {"activo": False}
+            except Exception:
                 setup_activo = {"activo": False}
-        except Exception:
-            setup_activo = {"activo": False}
     else:
         setup_activo = {"activo": False}
 
-    # 🔹 Reflexión
+    # 🔹 Reflexión y conclusión operativa
     reflexion = random.choice(REFLEXIONES)
     slogan = "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
 
-    # 🔹 Conclusión operativa
     if setup_activo.get("activo"):
         conclusion_final = (
             "Estructura y volumen alineados intradía en POI H1. "
@@ -1199,61 +1197,6 @@ if setup_activo.get("activo"):
         )
     else:
         conclusion_final = concl
-
-        
-    # ============================================================
-    # 🔁 Verificación de retorno válido
-    # ============================================================
-    if not locals().get("resultado") and not locals().get("analisis"):
-        return {"🧠 TESLABTC.KG": {
-            "error": "sin_datos",
-            "detalle": "No se obtuvo respuesta de estructura o conexión fallida."
-        }}
-
-    # ============================================================
-    # 🔹 Fusión y enriquecimiento de escenarios TESLABTC
-    # ============================================================
-
-    def _merge_escenario(base, tipo_default, riesgo_default, contexto_extra):
-        """
-        Combina los datos reales del escenario con los contextuales del POI.
-        No sobreescribe campos válidos.
-        """
-        if not isinstance(base, dict):
-            base = {}
-
-        merged = {
-            "tipo": base.get("tipo", tipo_default),
-            "riesgo": base.get("riesgo", riesgo_default),
-            "contexto": (
-                base.get("contexto")
-                or contexto_extra
-                or "Transición estructural TESLABTC — sin POI activo."
-            ),
-            "setup_estado": base.get(
-                "setup_estado",
-                "⏳ Sin setup válido — esperando confirmaciones (BOS + POI + Sesión).",
-            ),
-            "setup": base.get(
-                "setup",
-                {
-                    "zona_entrada": zonas.get("POI_H1", "—"),
-                    "tp1": zonas.get("PDL", "—"),
-                    "tp2": zonas.get("ASIAN_LOW", "—"),
-                    "tp3": zonas.get("ASIAN_HIGH", "—"),
-                    "sl": zonas.get("PDH", "—"),
-                    "observacion": "Esperar ruptura BOS M5 antes de ejecutar entrada institucional.",
-                },
-            ),
-            "confs_favor": base.get("confs_favor", list(conf.keys())[:2] if conf else []),
-            "confs_pendientes": base.get("confs_pendientes", list(conf.keys())[2:4] if conf else []),
-            "texto": base.get(
-                "texto",
-                f"Escenario de {tipo_default}: esperar confirmación estructural (BOS, volumen o vela envolvente) "
-                "para validar entrada institucional.",
-            ),
-        }
-        return merged
 
     # ============================================================
     # 🔍 Detección contextual POI multi-temporal (TESLABTC Logic)
@@ -1290,39 +1233,33 @@ if setup_activo.get("activo"):
         tipo_operacion = "—"
         riesgo_operativo = "—"
 
-    # 🔹 Fusión final de escenarios
-    esc1 = _merge_escenario(esc1, tipo_operacion, riesgo_operativo, contexto_operativo)
-    esc2 = _merge_escenario(
-        esc2,
-        "Compra" if tipo_operacion == "Venta" else "Venta",
-        "Alto" if riesgo_operativo == "Bajo" else "Medio",
-        "Escenario alterno (corrección estructural TESLABTC).",
-    )
-
+    # ============================================================
+    # 🧩 Asegurar estructura mínima antes de formatear
+    # ============================================================
     payload_contextual = {
         "contexto_operativo": contexto_operativo,
         "tipo_operacion_sugerida": tipo_operacion,
         "riesgo_operativo": riesgo_operativo,
     }
-# 🧩 Asegurar que zonas_detectadas tenga estructura mínima
-if not zonas or len(zonas) < 2:
-    zonas = {
-        "PDH": "—",
-        "PDL": "—",
-        "ASIAN_HIGH": "—",
-        "ASIAN_LOW": "—",
-        "POI_H4": "—",
-        "POI_H1": "—",
-        "H1_HIGH": tf_h1.get("RANGO_HIGH"),
-        "H1_LOW": tf_h1.get("RANGO_LOW"),
-        "H4_HIGH": tf_h4.get("RANGO_HIGH"),
-        "H4_LOW": tf_h4.get("RANGO_LOW"),
-        "D_HIGH": tf_d.get("RANGO_HIGH"),
-        "D_LOW": tf_d.get("RANGO_LOW"),
-    }
+
+    if not zonas or len(zonas) < 2:
+        zonas = {
+            "PDH": "—",
+            "PDL": "—",
+            "ASIAN_HIGH": "—",
+            "ASIAN_LOW": "—",
+            "POI_H4": "—",
+            "POI_H1": "—",
+            "H1_HIGH": tf_h1.get("RANGO_HIGH"),
+            "H1_LOW": tf_h1.get("RANGO_LOW"),
+            "H4_HIGH": tf_h4.get("RANGO_HIGH"),
+            "H4_LOW": tf_h4.get("RANGO_LOW"),
+            "D_HIGH": tf_d.get("RANGO_HIGH"),
+            "D_LOW": tf_d.get("RANGO_LOW"),
+        }
 
     # ============================================================
-    # 🧠 Payload final enriquecido
+    # 🧠 Payload final enriquecido (completo para formatter)
     # ============================================================
     payload = {
         "fecha": fecha_txt,
@@ -1337,8 +1274,8 @@ if not zonas or len(zonas) < 2:
         "contexto_general": contexto,
         "zonas_detectadas": zonas,
         "confirmaciones": conf,
-        "escenario_1": esc1,  # 🔹 ahora con datos completos
-        "escenario_2": esc2,  # 🔹 ahora con datos completos
+        "escenario_1": esc1,
+        "escenario_2": esc2,
         "setup_tesla": setup_activo,
         "conclusion_general": conclusion_final,
         "reflexion": reflexion,
@@ -1348,22 +1285,22 @@ if not zonas or len(zonas) < 2:
         "contexto_operativo": payload_contextual.get("contexto_operativo"),
         "tipo_operacion_sugerida": payload_contextual.get("tipo_operacion_sugerida"),
         "riesgo_operativo": payload_contextual.get("riesgo_operativo"),
-       
     }
 
-    # 🧩 Fallback si zonas vino vacío — asegurar que el payload tenga rangos válidos
-    if not zonas or len(zonas) < 3:
-        zonas.update({
-            "D_HIGH": tf_d.get("RANGO_HIGH"),
-            "D_LOW": tf_d.get("RANGO_LOW"),
-            "H4_HIGH": tf_h4.get("RANGO_HIGH"),
-            "H4_LOW": tf_h4.get("RANGO_LOW"),
-            "H1_HIGH": tf_h1.get("RANGO_HIGH"),
-            "H1_LOW": tf_h1.get("RANGO_LOW"),
-        })
-        payload["zonas_detectadas"] = zonas
+    # ============================================================
+    # 🧩 Garantizar campos base (por seguridad visual)
+    # ============================================================
+    payload.setdefault("direccion_general", direccion_general)
+    payload.setdefault("estructura_resumen", estructura_txt)
+    payload.setdefault("zonas_detectadas", zonas)
+    payload.setdefault("escenario_1", esc1)
+    payload.setdefault("escenario_2", esc2)
+    payload.setdefault("confirmaciones", conf)
+    payload.setdefault("setup_tesla", setup_activo)
 
-    # 🔹 Formateo final (UI)
+    # ============================================================
+    # 🔹 Formateo final (para UI o BOT)
+    # ============================================================
     from utils.intelligent_formatter import (
         construir_mensaje_operativo,
         construir_mensaje_free,
@@ -1376,7 +1313,7 @@ if not zonas or len(zonas) < 2:
         payload["mensaje_formateado"] = construir_mensaje_free(payload)
 
     # ============================================================
-    # 🔁 Verificación de retorno válido (ubicación correcta)
+    # 🔁 Verificación final de retorno válido
     # ============================================================
     if not payload or "estructura_detectada" not in payload:
         return {"🧠 TESLABTC.KG": {
