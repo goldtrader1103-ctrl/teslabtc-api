@@ -1053,6 +1053,16 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     if tf_h1.get("RANGO_HIGH") is None or tf_h1.get("RANGO_LOW") is None:
         hi, lo = _fallback_range(kl_h1, 40)
         tf_h1["RANGO_HIGH"], tf_h1["RANGO_LOW"] = hi, lo
+    # 🧩 Fallback si zonas vino vacío — usar los rangos detectados manualmente
+    if not zonas or len(zonas) < 3:
+        zonas.update({
+            "D_HIGH": tf_d.get("RANGO_HIGH"),
+            "D_LOW": tf_d.get("RANGO_LOW"),
+            "H4_HIGH": tf_h4.get("RANGO_HIGH"),
+            "H4_LOW": tf_h4.get("RANGO_LOW"),
+            "H1_HIGH": tf_h1.get("RANGO_HIGH"),
+            "H1_LOW": tf_h1.get("RANGO_LOW"),
+        })
 
     # 🔹 OB/POI por detector clásico + filtro por rango swing
     ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
