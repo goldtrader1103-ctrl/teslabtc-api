@@ -58,20 +58,17 @@ def construir_mensaje_operativo(data):
     zonas = data.get("zonas_detectadas", {})
     confs = data.get("confirmaciones", {})
 
-    esc1 = data.get("escenario_1", {}) or {}
-    esc2 = data.get("escenario_2", {}) or {}
     setup = data.get("setup_tesla", {}) or {}
 
     reflexion = data.get("reflexion") or frase_motivacional()
     slogan = data.get(
         "slogan",
-        "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
+        "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados! "
     )
 
     # --------------------------------------------------------
     # 🧭 DIRECCIÓN GENERAL — RANGO REAL
     # --------------------------------------------------------
-
     d = estructura.get("D", {}) or {}
     h4 = estructura.get("H4", {}) or {}
     h1 = estructura.get("H1", {}) or {}
@@ -91,63 +88,39 @@ def construir_mensaje_operativo(data):
     h1_hi = h1.get("RANGO_HIGH", zonas.get("H1_HIGH"))
     h1_lo = h1.get("RANGO_LOW", zonas.get("H1_LOW"))
 
-    d_line = (
-        f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hi}–{d_lo}"
-        if d_hi is not None and d_lo is not None else
-        f"📈 D: {d_estado} ({d_bos})"
-    )
-
-    h4_line = (
-        f"⚙️ H4: {h4_estado} ({h4_bos}) | RANGO: {h4_hi}–{h4_lo}"
-        if h4_hi is not None and h4_lo is not None else
-        f"⚙️ H4: {h4_estado} ({h4_bos})"
-    )
-
-    h1_line = (
-        f"🔹 H1: {h1_estado} ({h1_bos}) | RANGO: {h1_hi}–{h1_lo}"
-        if h1_hi is not None and h1_lo is not None else
-        f"🔹 H1: {h1_estado} ({h1_bos})"
-    )
+    d_line = f"📈 D: {d_estado} ({d_bos}) | RANGO: {d_hi}–{d_lo}" if d_hi and d_lo else f"📈 D: {d_estado} ({d_bos})"
+    h4_line = f"⚙️ H4: {h4_estado} ({h4_bos}) | RANGO: {h4_hi}–{h4_lo}" if h4_hi and h4_lo else f"⚙️ H4: {h4_estado} ({h4_bos})"
+    h1_line = f"🔹 H1: {h1_estado} ({h1_bos}) | RANGO: {h1_hi}–{h1_lo}" if h1_hi and h1_lo else f"🔹 H1: {h1_estado} ({h1_bos})"
 
     direccion = f"{d_line}\n{h4_line}\n{h1_line}"
 
     # --------------------------------------------------------
     # 💎 ZONAS DE LIQUIDEZ
     # --------------------------------------------------------
-
     zonas_txt = []
 
-    pdh = zonas.get("PDH")
-    pdl = zonas.get("PDL")
+    if zonas.get("PDH") or zonas.get("PDL"):
+        zonas_txt.append(f"• PDH: {zonas.get('PDH', '—')} | • PDL: {zonas.get('PDL', '—')}")
 
-    if pdh or pdl:
-        zonas_txt.append(f"• PDH: {pdh or '—'} | • PDL: {pdl or '—'}")
-
-    asia_high = zonas.get("ASIAN_HIGH")
-    asia_low = zonas.get("ASIAN_LOW")
-
-    if asia_high and asia_low:
-        zonas_txt.append(f"• ASIAN HIGH: {asia_high} | • ASIAN LOW: {asia_low}")
-    elif asia_high or asia_low:
-        zonas_txt.append(f"• ASIAN HIGH: {asia_high or '—'} | • ASIAN LOW: {asia_low or '—'}")
+    if zonas.get("ASIAN_HIGH") or zonas.get("ASIAN_LOW"):
+        zonas_txt.append(f"• ASIAN HIGH: {zonas.get('ASIAN_HIGH', '—')} | • ASIAN LOW: {zonas.get('ASIAN_LOW', '—')}")
     else:
         zonas_txt.append("• Rango Asiático: — (sin datos)")
 
-    if zonas.get("OB_H4"):
-        zonas_txt.append(f"• OB H4: {zonas['OB_H4']}")
     if zonas.get("POI_H4"):
         zonas_txt.append(f"• POI H4: {zonas['POI_H4']}")
-    if zonas.get("OB_H1"):
-        zonas_txt.append(f"• OB H1: {zonas['OB_H1']}")
     if zonas.get("POI_H1"):
         zonas_txt.append(f"• POI H1: {zonas['POI_H1']}")
+    if zonas.get("OB_H4"):
+        zonas_txt.append(f"• OB H4: {zonas['OB_H4']}")
+    if zonas.get("OB_H1"):
+        zonas_txt.append(f"• OB H1: {zonas['OB_H1']}")
 
-    zonas_final = "\n".join(zonas_txt) if zonas_txt else "—"
+    zonas_final = "\n".join(zonas_txt)
 
     # --------------------------------------------------------
     # ⚙️ SETUP TESLABTC
     # --------------------------------------------------------
-
     if setup.get("activo"):
         setup_txt = (
             f"{setup.get('nivel', 'SETUP ACTIVO')}\n"
@@ -162,6 +135,7 @@ def construir_mensaje_operativo(data):
             "⏳ Sin setup activo — esperando confirmaciones estructurales "
             "(BOS + POI + Sesión NY)."
         )
+
     # --------------------------------------------------------
     # 🕐 ETIQUETA PRE-BOS (si aplica)
     # --------------------------------------------------------
@@ -176,9 +150,8 @@ Esperar ruptura o confirmación de gatillo antes de ejecutar setup.
 """
 
     # --------------------------------------------------------
-    # 🧩 MENSAJE FINAL
+    # 🧩 MENSAJE FINAL COMPLETO
     # --------------------------------------------------------
-
     msg = f"""
 📋 **REPORTE TESLABTC A.P. — Sesión NY**
 ──────────────────────────────
@@ -195,6 +168,10 @@ Esperar ruptura o confirmación de gatillo antes de ejecutar setup.
 💎 **ZONAS DE LIQUIDEZ**
 ──────────────────────────────
 {zonas_final}
+
+📊 **ESCENARIOS OPERATIVOS**
+──────────────────────────────
+{_fmt_escenarios_operativos(data)}
 
 ⚙️ **SETUP TESLABTC**
 ──────────────────────────────
@@ -239,6 +216,47 @@ def limpiar_texto(text: str) -> str:
         return ""
 
     return text.replace("  ", " ").strip()
+
+# ============================================================
+# 🔹 Escenarios Operativos (Continuación / Corrección)
+# ============================================================
+def _fmt_escenarios_operativos(payload: Dict[str, Any]) -> str:
+    e1 = payload.get("escenario_1", {})
+    e2 = payload.get("escenario_2", {})
+
+    def _esc_txt(e, titulo, color):
+        tipo = e.get("tipo", "—")
+        riesgo = e.get("riesgo", "—")
+        contexto = e.get("contexto", "—")
+        setup_estado = e.get("setup_estado", "—")
+        setup = e.get("setup", {})
+        confs_favor = e.get("confs_favor", [])
+        confs_pend = e.get("confs_pendientes", [])
+        texto = e.get("texto", "—")
+
+        return (
+f"{color} {titulo}\n"
+f"──────────────────────────────\n"
+f"📈 Dirección: {tipo}\n"
+f"⚠️ Riesgo: {riesgo}\n"
+f"📍 Contexto: {contexto}\n\n"
+f"{texto}\n\n"
+f"⚙️ Estado del Setup: {setup_estado}\n"
+f"📥 Zona de reacción: {setup.get('zona_entrada', '—')}\n"
+f"🎯 TP1: {setup.get('tp1', '—')}\n"
+f"🎯 TP2: {setup.get('tp2', '—')}\n"
+f"🎯 TP3: {setup.get('tp3', '—')}\n"
+f"🛡️ SL: {setup.get('sl', '—')}\n"
+f"💬 Nota: {setup.get('observacion', '—')}\n\n"
+f"✅ Confirmaciones a favor: {', '.join(confs_favor) if confs_favor else '—'}\n"
+f"⚠️ Confirmaciones faltantes: {', '.join(confs_pend) if confs_pend else '—'}\n"
+        )
+
+    msg = "📊 ESCENARIOS OPERATIVOS\n──────────────────────────────\n"
+    msg += _esc_txt(e1, "Escenario de Continuación", "🟢") + "\n"
+    msg += _esc_txt(e2, "Escenario de Corrección / Contra-tendencia", "🔴")
+    return msg
+
 # ============================================================
 # 🧩 FORMATEADOR FREE (para usuarios sin token Premium)
 # ============================================================
