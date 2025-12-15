@@ -162,6 +162,18 @@ def construir_mensaje_operativo(data):
             "⏳ Sin setup activo — esperando confirmaciones estructurales "
             "(BOS + POI + Sesión NY)."
         )
+    # --------------------------------------------------------
+    # 🕐 ETIQUETA PRE-BOS (si aplica)
+    # --------------------------------------------------------
+    pre_bos_txt = ""
+    estado_operativo = str(data.get("estado_operativo", "")).strip()
+    if estado_operativo.startswith("🕐"):
+        pre_bos_txt = f"""
+🔵 **{estado_operativo}**
+──────────────────────────────
+El precio se encuentra dentro del rango operativo, pero aún **sin confirmación BOS M5**.
+Esperar ruptura o confirmación de gatillo antes de ejecutar setup.
+"""
 
     # --------------------------------------------------------
     # 🧩 MENSAJE FINAL
@@ -175,6 +187,7 @@ def construir_mensaje_operativo(data):
 💵 Precio actual: {precio}
 🕒 Sesión: {sesion}
 
+{pre_bos_txt}
 🧭 **DIRECCIÓN GENERAL**
 ──────────────────────────────
 {direccion}
