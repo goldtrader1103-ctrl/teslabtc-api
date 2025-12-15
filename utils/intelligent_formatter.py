@@ -118,6 +118,13 @@ def construir_mensaje_operativo(data):
         zonas_txt.append(f"• OB H1: {zonas['OB_H1']}")
 
     zonas_final = "\n".join(zonas_txt)
+    # --------------------------------------------------------
+    # 📊 ESCENARIOS OPERATIVOS
+    # --------------------------------------------------------
+    try:
+        escenarios_txt = _fmt_escenarios_operativos(data)
+    except Exception as e:
+        escenarios_txt = f"Error al generar escenarios: {e}"
 
     # --------------------------------------------------------
     # ⚙️ SETUP TESLABTC
@@ -172,7 +179,7 @@ Esperar ruptura o confirmación de gatillo antes de ejecutar setup.
 
 📊 **ESCENARIOS OPERATIVOS**
 ──────────────────────────────
-{_fmt_escenarios_operativos(data)}
+{escenarios_txt}
 
 ⚙️ **SETUP TESLABTC**
 ──────────────────────────────
