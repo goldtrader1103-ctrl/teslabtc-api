@@ -560,16 +560,101 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # ============================
     # 📊 SCALPING (M5)
     # ============================
-    scalping_cont = {
-        "activo": False,
-        "direccion": "—",
-        "riesgo": "N/A",
-        "zona_reaccion": "—",
-        "sl": "—",
-        "tp1_rr": "1:1 (50% + BE)",
-        "tp2_rr": "1:2 (50%)",
-        "contexto": "Fuera de ventana o sin dirección clara en H1."
-    }
+# ============================
+# 📊 SCALPING (M5)
+# ============================
+scalping_cont = {
+    "activo": False,
+    "direccion": "—",
+    "riesgo": "N/A",
+    "zona_reaccion": "—",
+    "sl": "—",
+    "tp1_rr": "1:1 (50% + BE)",
+    "tp2_rr": "1:2 (50%)",
+    "contexto": "Sin dirección clara en H1 o sin datos suficientes."
+}
+scalping_corr = scalping_cont.copy()
+
+# 🔑 Para probar bien, NO usamos aún ventana_scalping aquí
+# Para que el SCALPING funcione mientras la sesión NY esté activa
+# (sin limitarlo solo a las 2 primeras horas mientras probamos)
+if kl_m5 and ny_activa and dir_h1 in ("alcista", "bajista"):
+    highs_m5 = [k["high"] for k in kl_m5[-30:]]
+    lows_m5 = [k["low"] for k in kl_m5[-30:]]
+    if len(highs_m5) >= 2 and len(lows_m5) >= 2:
+        prev_high = max(highs_m5[:-1])
+        prev_low = min(lows_m5[:-1])
+
+        if dir_h1 == "alcista":
+            # A FAVOR (LONG)
+            entrada_fav = prev_high
+            sl_fav = prev_low
+            tp1_fav = _calcular_tp(entrada_fav, sl_fav, 1.0)
+            tp2_fav = _calcular_tp(entrada_fav, sl_fav, 2.0)
+
+            scalping_cont = {
+                "activo": True,
+                "direccion": "ALCISTA (a favor de H1)",
+                "riesgo": "Bajo",
+                "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
+                "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
+                "tp1_rr": f"{tp1_fav:,.2f} (1:1 • 50% + BE)",
+                "tp2_rr": f"{tp2_fav:,.2f} (1:2 • 50%)",
+                "contexto": "Entrada SCALPING a favor de la estructura intradía H1."
+            }
+
+            # CONTRA (SHORT)
+            entrada_contra = prev_low
+            sl_contra = prev_high
+            tp1_contra = _calcular_tp(entrada_contra, sl_contra, 1.0)
+            tp2_contra = _calcular_tp(entrada_contra, sl_contra, 2.0)
+
+            scalping_corr = {
+                "activo": True,
+                "direccion": "BAJISTA (contra H1)",
+                "riesgo": "Alto",
+                "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
+                "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
+                "tp1_rr": f"{tp1_contra:,.2f} (1:1 • 50% + BE)",
+                "tp2_rr": f"{tp2_contra:,.2f} (1:2 • 50%)",
+                "contexto": "Entrada SCALPING de corrección intradía contra H1."
+            }
+
+        else:  # dir_h1 == "bajista"
+            # A FAVOR (SHORT)
+            entrada_fav = prev_low
+            sl_fav = prev_high
+            tp1_fav = _calcular_tp(entrada_fav, sl_fav, 1.0)
+            tp2_fav = _calcular_tp(entrada_fav, sl_fav, 2.0)
+
+            scalping_cont = {
+                "activo": True,
+                "direccion": "BAJISTA (a favor de H1)",
+                "riesgo": "Bajo",
+                "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
+                "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
+                "tp1_rr": f"{tp1_fav:,.2f} (1:1 • 50% + BE)",
+                "tp2_rr": f"{tp2_fav:,.2f} (1:2 • 50%)",
+                "contexto": "Entrada SCALPING a favor de la estructura intradía H1."
+            }
+
+            # CONTRA (LONG)
+            entrada_contra = prev_high
+            sl_contra = prev_low
+            tp1_contra = _calcular_tp(entrada_contra, sl_contra, 1.0)
+            tp2_contra = _calcular_tp(entrada_contra, sl_contra, 2.0)
+
+            scalping_corr = {
+                "activo": True,
+                "direccion": "ALCISTA (contra H1)",
+                "riesgo": "Alto",
+                "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
+                "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
+                "tp1_rr": f"{tp1_contra:,.2f} (1:1 • 50% + BE)",
+                "tp2_rr": f"{tp2_contra:,.2f} (1:2 • 50%)",
+                "contexto": "Entrada SCALPING de corrección intradía contra H1."
+            }
+
     scalping_corr = scalping_cont.copy()
 
     if kl_m5 and ny_activa and ventana_scalping and dir_h1 in ("alcista", "bajista"):
