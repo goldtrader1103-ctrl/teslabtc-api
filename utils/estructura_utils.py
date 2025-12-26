@@ -96,6 +96,80 @@ def evaluar_estructura(klines):
 
     return resultado
 
+# ============================================================
+# 🧩 ESTRUCTURA HH/HL vs LH/LL A VELAS (modo "micro")
+# ============================================================
+
+def detectar_estructura_simple(klines, lookback: int = 40):
+    """
+    Lee la estructura reciente solo con altos y bajos de velas.
+    Pensado para que el bot vea lo mismo que tú cuando dibujas
+    la línea morada: altos y bajos secuenciales.
+
+    Retorna:
+      {
+        "estado": "alcista|bajista|rango|sin_datos",
+        "ultimo_high": float | None,
+        "ultimo_low": float | None,
+        "high_anterior": float | None,
+        "low_anterior": float | None,
+      }
+    """
+    try:
+        if not klines or len(klines) < 5:
+            return {
+                "estado": "sin_datos",
+                "ultimo_high": None,
+                "ultimo_low": None,
+                "high_anterior": None,
+                "low_anterior": None,
+            }
+
+        # Tomamos solo las últimas N velas para leer estructura reciente
+        data = klines[-lookback:] if len(klines) >= lookback else klines
+
+        # Soporta dict (Binance) o lista cruda
+        if isinstance(data[0], dict):
+            highs = [float(k["high"]) for k in data]
+            lows = [float(k["low"]) for k in data]
+        else:
+            highs = [float(k[2]) for k in data]
+            lows = [float(k[3]) for k in data]
+
+        # Últimos 2 altos y bajos (estructura inmediata)
+        h1, h2 = highs[-2], highs[-1]
+        l1, l2 = lows[-2], lows[-1]
+
+        if h2 > h1 and l2 > l1:
+            estado = "alcista"
+        elif h2 < h1 and l2 < l1:
+            estado = "bajista"
+        else:
+            estado = "rango"
+
+        # Para SL / objetivos usamos high/low de toda la ventana reciente
+        ultimo_high = max(highs)
+        ultimo_low = min(lows)
+
+        # High/low inmediatamente anteriores (para SL protegido)
+        high_anterior = h1
+        low_anterior = l1
+
+        return {
+            "estado": estado,
+            "ultimo_high": round(ultimo_high, 2),
+            "ultimo_low": round(ultimo_low, 2),
+            "high_anterior": round(high_anterior, 2),
+            "low_anterior": round(low_anterior, 2),
+        }
+    except Exception:
+        return {
+            "estado": "sin_datos",
+            "ultimo_high": None,
+            "ultimo_low": None,
+            "high_anterior": None,
+            "low_anterior": None,
+        }
 
 
 def definir_escenarios(estados):
