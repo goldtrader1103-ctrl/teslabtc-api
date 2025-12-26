@@ -40,7 +40,9 @@ from utils.analisis_premium import generar_analisis_premium
 from utils.intelligent_formatter import (
     construir_mensaje_operativo,
     construir_mensaje_free,
+    construir_contexto_detallado,
 )
+
 
 # ============================================================
 # ⚙️ CONFIGURACIÓN FASTAPI
@@ -147,6 +149,50 @@ async def analizar(simbolo: str = "BTCUSDT", token: str | None = Query(None)):
 
         fallback_body["mensaje_formateado"] = construir_mensaje_operativo(fallback_body)
         return {"🧠 TESLABTC.KG": fallback_body}
+# ============================================================
+# 🧠 ENDPOINT CONTEXTO — /contexto
+# ============================================================
+
+@app.get("/contexto", tags=["TESLABTC Premium"])
+async def obtener_contexto(
+    simbolo: str = "BTCUSDT",
+    tipo: str = Query(
+        "scalping_continuacion",
+        description="scalping_continuacion | scalping_correccion | swing",
+    ),
+    token: str | None = Query(None),
+):
+    """
+    Devuelve sólo el texto de contexto para el escenario elegido.
+    Pensado para el botón del bot de Telegram.
+    """
+    # 🔐 Validar token (igual que en /analyze)
+    auth = validar_token(token) if token else None
+    if not auth or auth.get("estado") != "✅":
+        return {
+            "estado": "⛔",
+            "mensaje": "Token inválido o sin acceso Premium para ver el contexto.",
+        }
+
+    # Reutilizamos el mismo análisis premium
+    analisis_premium = generar_analisis_premium(simbolo)
+    data = analisis_premium.get("🧠 TESLABTC.KG", analisis_premium)
+
+    # Aseguramos que tenga estructura básica
+    if not data or "estructura_detectada" not in data:
+        return {
+            "estado": "⚙️",
+            "mensaje": "No se pudo generar el análisis estructural para este símbolo.",
+        }
+
+    contexto = construir_contexto_detallado(data, tipo)
+
+    return {
+        "estado": "✅",
+        "simbolo": simbolo,
+        "tipo_escenario": tipo,
+        "contexto": contexto,
+    }
 
 # ============================================================
 # 🧩 OTROS ENDPOINTS (tokens, health, monitor)
