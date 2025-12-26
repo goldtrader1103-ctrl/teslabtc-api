@@ -169,63 +169,97 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 # 🔹 Escenarios Operativos TESLABTC (Continuación / Corrección)
 # ============================================================
 
-def _fmt_escenarios_operativos(payload: Dict[str, Any]) -> str:
-    e1 = payload.get("escenario_1", {})
-    e2 = payload.get("escenario_2", {})
+def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
+    """Formatea el mensaje principal del bot con la nueva lógica:
 
-    contexto_operativo = payload.get("contexto_operativo", "—")
-    tipo_sugerido = payload.get("tipo_operacion_sugerida", "—")
-    riesgo_operativo = payload.get("riesgo_operativo", "—")
+    - Muestra sólo info clave (fecha, activo, sesión, precio)
+    - Escenarios SCALPING (continuación / corrección) en M5
+    - Escenario SWING basado en H4 + H1
+    - El detalle de contexto se delega a futuros botones/comandos
+    """
+    fecha = data.get("fecha", "—")
+    activo = data.get("activo", "BTCUSDT")
+    sesion = data.get("sesión", "—")
+    precio = data.get("precio_actual", "—")
+    scalping = data.get("scalping", {}) or {}
+    swing = data.get("swing", {}) or {}
+    reflexion = data.get("reflexion") or frase_motivacional()
+    slogan = data.get("slogan", "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!")
 
-    def _esc_txt(e: Dict[str, Any], titulo: str, color: str) -> str:
-        tipo = e.get("tipo", tipo_sugerido)
-        riesgo = e.get("riesgo", riesgo_operativo)
-        contexto = e.get("contexto", contexto_operativo)
-        setup = e.get("setup", {})
-        setup_estado = e.get("setup_estado", "⏳ En espera de confirmación estructural.")
-        confs_favor = e.get("confs_favor", [])
-        confs_pend = e.get("confs_pendientes", [])
-        texto = e.get("texto", "—")
+    s_cont = scalping.get("continuacion", {}) or {}
+    s_corr = scalping.get("correccion", {}) or {}
+    s_swing = swing or {}
 
-        confs_lista = ""
-        if confs_favor or confs_pend:
-            confs_lista += "\n✅ **Confirmaciones a favor:**\n"
-            for c in confs_favor:
-                confs_lista += f"   • {c} ✔️\n"
-            confs_lista += "⚠️ **Confirmaciones faltantes:**\n"
-            for c in confs_pend:
-                confs_lista += f"   • {c} ❌\n"
+    def _flag(activo_flag: bool) -> str:
+        return "✅ ACTIVO" if activo_flag else "⏳ En espera"
 
-        return (
-f"{color} {titulo}\n"
-f"──────────────────────────────\n"
-f"📈 Dirección: {tipo}\n"
-f"⚠️ Riesgo: {riesgo}\n"
-f"📍 Contexto: {contexto}\n\n"
-f"{texto}\n\n"
-f"⚙️ Estado del Setup: {setup_estado}\n"
-f"📥 Zona de reacción: {setup.get('zona_entrada', '—')}\n"
-f"🎯 TP1: {setup.get('tp1', '—')}\n"
-f"🎯 TP2: {setup.get('tp2', '—')}\n"
-f"🎯 TP3: {setup.get('tp3', '—')}\n"
-f"🛡️ SL: {setup.get('sl', '—')}\n"
-f"💬 Nota: {setup.get('observacion', 'Esperar confirmación BOS M15/M5 en la zona.')}\n"
-f"{confs_lista}\n"
-        )
-
+    # ============================
+    # CABECERA
+    # ============================
     msg = ""
-    msg += _esc_txt(e1, "Escenario de Continuación (Tendencia Principal)", "🟢")
-    msg += "\n"
-    msg += _esc_txt(e2, "Escenario de Corrección (Contra Tendencia)", "🔴")
+    msg += "📋 SEÑALES ACTIVAS\n"
+    msg += "──────────────────────────────\n"
+    msg += f"📅 Fecha: {fecha}\n"
+    msg += f"💰 Activo: {safe_markdown(activo)}\n"
+    msg += f"💵 Precio actual: {precio}\n"
+    msg += f"🕒 Sesión: {sesion}\n\n"
 
-    if contexto_operativo and contexto_operativo != "—":
-        msg += (
-            "\n──────────────────────────────\n"
-            f"🧠 **Contexto Operativo Global TESLABTC:**\n{contexto_operativo}\n"
-            f"📊 **Operación sugerida:** {tipo_sugerido} ({riesgo_operativo} riesgo)\n"
-        )
+    # ============================
+    # SCALPING
+    # ============================
+    msg += "📊 ESCENARIOS OPERATIVOS SCALPING\n"
+    msg += "──────────────────────────────\n"
 
-    return msg.strip()
+    # Continuación
+    msg += "🟢 Escenario de Continuación (Tendencia Principal)\n"
+    msg += "──────────────────────────────\n"
+    msg += f"📌 Estado: {_flag(s_cont.get('activo', False))}\n"
+    msg += f"📈 Dirección: {s_cont.get('direccion', '—')}\n"
+    msg += f"⚠️ Riesgo: {s_cont.get('riesgo', 'N/A')}\n"
+    msg += "📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.\n\n"
+    msg += f"📥 Zona de reacción: {s_cont.get('zona_reaccion', '—')}\n"
+    msg += f"🎯 TP1: {s_cont.get('tp1_rr', '1:1 (50% + BE)')}\n"
+    msg += f"🎯 TP2: {s_cont.get('tp2_rr', '1:2 (50%)')}\n"
+    msg += f"🛡️ SL: {s_cont.get('sl', '—')}\n\n"
+
+    # Corrección
+    msg += "🔴 Escenario de Corrección (Contra Tendencia)\n"
+    msg += "──────────────────────────────\n"
+    msg += f"📌 Estado: {_flag(s_corr.get('activo', False))}\n"
+    msg += f"📈 Dirección: {s_corr.get('direccion', '—')}\n"
+    msg += f"⚠️ Riesgo: {s_corr.get('riesgo', 'N/A')}\n"
+    msg += "📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.\n\n"
+    msg += f"📥 Zona de reacción: {s_corr.get('zona_reaccion', '—')}\n"
+    msg += f"🎯 TP1: {s_corr.get('tp1_rr', '1:1 (50% + BE)')}\n"
+    msg += f"🎯 TP2: {s_corr.get('tp2_rr', '1:2 (50%)')}\n"
+    msg += f"🛡️ SL: {s_corr.get('sl', '—')}\n\n"
+
+    # ============================
+    # SWING
+    # ============================
+    msg += "📈 ESCENARIO SWING\n"
+    msg += "──────────────────────────────\n"
+    msg += f"📌 Estado: {_flag(s_swing.get('activo', False))}\n"
+    msg += f"📈 Dirección: {s_swing.get('direccion', '—')}\n"
+    msg += f"⚠️ Riesgo: {s_swing.get('riesgo', 'N/A')}\n"
+    msg += "📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.\n\n"
+    msg += f"📥 Zona de reacción: {s_swing.get('zona_reaccion', '—')}\n"
+    msg += f"🎯 TP1: {s_swing.get('tp1_rr', '1:1 (BE)')}\n"
+    msg += f"🎯 TP2: {s_swing.get('tp2_rr', '1:2 (50%)')}\n"
+    msg += f"🎯 TP3: {s_swing.get('tp3_objetivo', 'Alto/Bajo H4')}\n"
+    msg += f"🛡️ SL: {s_swing.get('sl', '—')}\n\n"
+
+    # ============================
+    # REFLEXIÓN
+    # ============================
+    msg += "📓 Reflexión TESLABTC A.P.\n"
+    msg += "──────────────────────────────\n"
+    msg += f"💭 {reflexion}\n\n"
+    msg += "⚠️ Análisis SCALPING exclusivo para la apertura de la sesión NY (primeras 2 horas).\n"
+    msg += "⚠️ Análisis SWING actualizado cada vela de 1H.\n"
+    msg += slogan
+
+    return msg
 
 
 # ============================================================

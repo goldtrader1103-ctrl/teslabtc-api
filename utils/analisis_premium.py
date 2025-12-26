@@ -16,6 +16,8 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import pytz
+from utils.estructura_utils import detectar_bos
+
 
 # ------------------------------
 # 🌎 Config base
@@ -470,6 +472,13 @@ REFLEXIONES = [
     "El trader exitoso no predice, se adapta.",
     "Tu disciplina define tu rentabilidad.",
 ]
+def _ventana_scalping_ny() -> bool:
+    """Ventana operativa para SCALPING en NY: solo primeras 2 horas."""
+    ahora = datetime.now(TZ_COL)
+    # Ajusta la hora si tu apertura de NY es distinta
+    start = ahora.replace(hour=8, minute=30, second=0, microsecond=0)
+    end = start + timedelta(hours=2)
+    return start <= ahora <= end
 
 
 # ------------------------------------------------------------
@@ -967,361 +976,203 @@ def _detectar_ob_poi_cercanos(
 # 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3)
 # ============================================================
 def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
+    """Versión simplificada TESLABTC:
+    - Usa estructura H4/H1 para SWING
+    - Usa M5 para señales SCALPING en NY
+    - No muestra zonas de liquidez; sólo acción del precio
+    """
     now = datetime.now(TZ_COL)
     fecha_txt = now.strftime("%d/%m/%Y %H:%M:%S")
 
-    # 🔹 Precio
+    # Precio actual
     precio, fuente = _safe_get_price(symbol)
-    precio_txt = f"{precio:,.2f} USD" if isinstance(precio, (int, float)) else "—"
+    precio_num = float(precio) if isinstance(precio, (int, float)) else None
+    precio_txt = f"{precio_num:,.2f} USD" if precio_num is not None else "—"
 
-    # 🔹 Datos Multi-TF
-    kl_15m = _safe_get_klines(symbol, "15m", 600)
-    kl_h1 = _safe_get_klines(symbol, "1h", 600)
-    kl_h4 = _safe_get_klines(symbol, "4h", 600)
-    kl_d = _safe_get_klines(symbol, "1d", 400)
+    # Datos por temporalidad
+    kl_h4 = _safe_get_klines(symbol, "4h", 400)
+    kl_h1 = _safe_get_klines(symbol, "1h", 400)
+    kl_m5 = _safe_get_klines(symbol, "5m", 300)
 
-    # 🧭 Tendencias TESLABTC usando ZigZag estructural
-    tf_d = _detectar_tendencia_zigzag(kl_d, depth=12, deviation=5.0, backstep=2)
+    # Estructura con ZigZag pero sólo para dirección general
     tf_h4 = _detectar_tendencia_zigzag(kl_h4, depth=12, deviation=5.0, backstep=2)
-    tf_h1 = _detectar_tendencia_zigzag(kl_h1, depth=12, deviation=5.0, backstep=2)
-    tf_m15 = _detectar_tendencia_zigzag(kl_15m, depth=12, deviation=5.0, backstep=2)
+    tf_h1 = _detectar_tendencia_zigzag(kl_h1, depth=10, deviation=4.0, backstep=2)
+    dir_h4 = tf_h4.get("estado", "lateral")
+    dir_h1 = tf_h1.get("estado", "lateral")
 
-    asian = _asian_range(kl_15m)
-    pd = _pdh_pdl(kl_15m)
-    sesion_txt, sesion_activa = _estado_sesion_ny()
+    # Rango H4 aproximado (para TP3 swing)
+    if kl_h4:
+        h4_high = max(k["high"] for k in kl_h4[-60:])
+        h4_low = min(k["low"] for k in kl_h4[-60:])
+    else:
+        h4_high = None
+        h4_low = None
 
-    # 🔹 Zonas (PDH/PDL, Asia, rangos) base
-    zonas = _fmt_zonas(asian, pd, kl_15m, kl_d, kl_h4, kl_h1)
-
-    # 🔹 POI TESLABTC por Fibo 61.8–88.6
-    # H4: respecto a tendencia PRINCIPAL (D si no es lateral; si no, H4).
-    estado_principal = (
-        tf_d.get("estado")
-        if tf_d.get("estado") in ("alcista", "bajista")
-        else tf_h4.get("estado")
-    )
-    poi_h4 = _poi_fibo_band(
-        estado_principal,
-        zonas.get("H4_HIGH"),
-        zonas.get("H4_LOW"),
-    )
+    # POI H4 61.8–88.6 para swing (zona premium)
+    poi_h4 = _poi_fibo_band(dir_h4, h4_high, h4_low)
+    poi_txt = "—"
+    in_premium = False
     if poi_h4:
-        zonas["POI_H4"] = f"{poi_h4[0]:.2f}–{poi_h4[1]:.2f}"
+        p_lo, p_hi = sorted([float(poi_h4[0]), float(poi_h4[1])])
+        poi_txt = f"{p_lo:,.2f}–{p_hi:,.2f} USD"
+        if precio_num is not None and p_lo <= precio_num <= p_hi:
+            in_premium = True
 
-    # H1: respecto a la propia tendencia de H1 (corrección).
-    poi_h1 = _poi_fibo_band(
-        tf_h1.get("estado"),
-        zonas.get("H1_HIGH"),
-        zonas.get("H1_LOW"),
-    )
-    if poi_h1:
-        zonas["POI_H1"] = f"{poi_h1[0]:.2f}–{poi_h1[1]:.2f}"
+    # Sesión NY
+    sesion_txt, ny_activa = _estado_sesion_ny()
+    ventana_scalping = _ventana_scalping_ny()
 
-    # Inyectar rangos a cada temporalidad para el formatter
-    tf_d["RANGO_HIGH"] = zonas.get("D_HIGH")
-    tf_d["RANGO_LOW"] = zonas.get("D_LOW")
-    tf_h4["RANGO_HIGH"] = zonas.get("H4_HIGH")
-    tf_h4["RANGO_LOW"] = zonas.get("H4_LOW")
-    tf_h1["RANGO_HIGH"] = zonas.get("H1_HIGH")
-    tf_h1["RANGO_LOW"] = zonas.get("H1_LOW")
+    # ============================
+    # 📊 SCALPING (M5)
+    # ============================
+    scalping_cont = {
+        "activo": False,
+        "direccion": "—",
+        "riesgo": "N/A",
+        "zona_reaccion": "—",
+        "sl": "—",
+        "tp1_rr": "1:1 (50% + BE)",
+        "tp2_rr": "1:2 (50%)",
+        "contexto": "Fuera de ventana o sin dirección clara en H1."
+    }
+    scalping_corr = scalping_cont.copy()
 
-    # 🛠️ Fallback: si algún rango viene vacío, usar high/low promedio de las últimas velas
-    def _fallback_range(kl: List[Dict[str, Any]], n: int = 40) -> Tuple[float, float]:
-        try:
-            data = kl[-n:]
-            highs = [float(k["high"]) for k in data]
-            lows = [float(k["low"]) for k in data]
-            return round(max(highs), 2), round(min(lows), 2)
-        except Exception:
-            return None, None
+    if kl_m5 and ny_activa and ventana_scalping and dir_h1 in ("alcista", "bajista"):
+        highs_m5 = [k["high"] for k in kl_m5[-30:]]
+        lows_m5 = [k["low"] for k in kl_m5[-30:]]
+        if len(highs_m5) >= 2 and len(lows_m5) >= 2:
+            prev_high = max(highs_m5[:-1])
+            prev_low = min(lows_m5[:-1])
 
-    if tf_d.get("RANGO_HIGH") is None or tf_d.get("RANGO_LOW") is None:
-        hi, lo = _fallback_range(kl_d, 60)
-        tf_d["RANGO_HIGH"], tf_d["RANGO_LOW"] = hi, lo
+            # Continuación: en dirección de H1
+            if dir_h1 == "alcista":
+                scalping_cont.update({
+                    "activo": True,
+                    "direccion": "ALCISTA (a favor de H1)",
+                    "riesgo": "Bajo",
+                    "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
+                    "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
+                    "contexto": "Entrada SCALPING a favor de la estructura intradía H1."
+                })
+                scalping_corr.update({
+                    "activo": True,
+                    "direccion": "BAJISTA (contra H1)",
+                    "riesgo": "Alto",
+                    "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
+                    "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
+                    "contexto": "Entrada SCALPING de corrección intradía contra H1."
+                })
+            else:  # dir_h1 == "bajista"
+                scalping_cont.update({
+                    "activo": True,
+                    "direccion": "BAJISTA (a favor de H1)",
+                    "riesgo": "Bajo",
+                    "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
+                    "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
+                    "contexto": "Entrada SCALPING a favor de la estructura intradía H1."
+                })
+                scalping_corr.update({
+                    "activo": True,
+                    "direccion": "ALCISTA (contra H1)",
+                    "riesgo": "Alto",
+                    "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
+                    "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
+                    "contexto": "Entrada SCALPING de corrección intradía contra H1."
+                })
 
-    if tf_h4.get("RANGO_HIGH") is None or tf_h4.get("RANGO_LOW") is None:
-        hi, lo = _fallback_range(kl_h4, 40)
-        tf_h4["RANGO_HIGH"], tf_h4["RANGO_LOW"] = hi, lo
-
-    if tf_h1.get("RANGO_HIGH") is None or tf_h1.get("RANGO_LOW") is None:
-        hi, lo = _fallback_range(kl_h1, 40)
-        tf_h1["RANGO_HIGH"], tf_h1["RANGO_LOW"] = hi, lo
-    # 🧩 Fallback si zonas vino vacío — usar los rangos detectados manualmente
-    if not zonas or len(zonas) < 3:
-        zonas.update({
-            "D_HIGH": tf_d.get("RANGO_HIGH"),
-            "D_LOW": tf_d.get("RANGO_LOW"),
-            "H4_HIGH": tf_h4.get("RANGO_HIGH"),
-            "H4_LOW": tf_h4.get("RANGO_LOW"),
-            "H1_HIGH": tf_h1.get("RANGO_HIGH"),
-            "H1_LOW": tf_h1.get("RANGO_LOW"),
-        })
-
-    # 🔹 OB/POI por detector clásico + filtro por rango swing
-    ob_poi = _detectar_ob_poi_cercanos(kl_h4, kl_h1, tf_h4, tf_h1)
-    if ob_poi:
-        zonas.update(ob_poi)
-
-    zonas["OB_H4"] = _ob_en_rango(
-        zonas.get("OB_H4"),
-        zonas.get("H4_HIGH"),
-        zonas.get("H4_LOW"),
-    )
-    zonas["OB_H1"] = _ob_en_rango(
-        zonas.get("OB_H1"),
-        zonas.get("H1_HIGH"),
-        zonas.get("H1_LOW"),
-    )
-
-    if zonas.get("OB_H4") is None:
-        zonas.pop("OB_H4", None)
-    if zonas.get("OB_H1") is None:
-        zonas.pop("OB_H1", None)
-
-    # 🔹 Confirmaciones con contexto
-    conf = _confirmaciones(
-        precio if isinstance(precio, (int, float)) else math.nan,
-        asian,
-        pd,
-        tf_d,
-        tf_h1,
-        sesion_activa,
-    )
-
-    # Añadir confirmación Fibo H1 (61.8–88.6)
-    _, fib_txt = _fib_retracement_h1(
-        precio if isinstance(precio, (int, float)) else math.nan,
-        tf_h1,
-        zonas,
-    )
-    if fib_txt:
-        conf["Fibo H1 (61.8–88.6)"] = fib_txt
-
-    # 🔹 Dirección general (texto auxiliar)
-    tendencia_d = tf_d.get("estado", "—")
-    tendencia_h4 = tf_h4.get("estado", "—")
-    tendencia_h1 = tf_h1.get("estado", "—")
-    direccion_general = (
-        "🟢 Alcista"
-        if tendencia_h4 == "alcista"
-        else "🔴 Bajista"
-        if tendencia_h4 == "bajista"
-        else "⚪ Lateral"
-    )
-    estructura_txt = (
-        f"D: {tendencia_d.upper()} | H4: {tendencia_h4.upper()} | H1: {tendencia_h1.upper()}"
-    )
-
-    # 🔹 Interpretación macro (para UI)
-    contexto = interpretar_contexto(tf_d, tf_h4, tf_h1, conf, zonas)
-
-    # 🔹 Escenarios (continuidad y corrección)
-    esc1, esc2, concl = _escenarios(
-        precio if isinstance(precio, (int, float)) else math.nan,
-        asian,
-        pd,
-        tf_d,
-        tf_h4,
-        tf_h1,
-        conf,
-    )
-    # ============================================================
-    # 🔹 Enriquecer escenarios TESLABTC antes del retorno
-    # ============================================================
-    def _enriquecer_escenario(e, tipo_default, riesgo_default):
-        if not isinstance(e, dict):
-            e = {}
-
-        return {
-            "tipo": e.get("tipo", tipo_default),
-            "riesgo": e.get("riesgo", riesgo_default),
-            "contexto": e.get("contexto", "Transición estructural TESLABTC."),
-            "setup_estado": e.get("setup_estado", "⏳ Sin setup válido — esperando confirmaciones."),
-            "setup": e.get("setup", {
-                "zona_entrada": zonas.get("POI_H1", "—"),
-                "tp1": zonas.get("PDL", "—"),
-                "tp2": zonas.get("ASIAN_LOW", "—"),
-                "tp3": zonas.get("ASIAN_HIGH", "—"),
-                "sl": zonas.get("PDH", "—"),
-                "observacion": "Esperar ruptura BOS M5 antes de ejecutar entrada institucional."
-            }),
-            "confs_favor": e.get("confs_favor", list(conf.keys())[:2] if conf else []),
-            "confs_pendientes": e.get("confs_pendientes", list(conf.keys())[2:4] if conf else []),
-            "texto": e.get("texto", f"Escenario de {tipo_default}: precio en fase de {'retroceso' if tipo_default == 'Venta' else 'transición'}, "
-                                     "esperar confirmación estructural en M15/M5.")
-        }
-
-    esc1 = _enriquecer_escenario(esc1, "Venta", "Medio")
-    esc2 = _enriquecer_escenario(esc2, "Compra", "Alto")
-
-    # 🔹 Setup activo M5 (BOS + volumen)
-    setup_activo = _setup_activo_m5(symbol)
-
-    # 🔸 Añadir tipo de setup (para el encabezado dinámico del formatter)
-    if setup_activo.get("activo"):
-        tf_h1_estado = tf_h1.get("estado")
-        setup_activo["tipo"] = "Compra" if tf_h1_estado == "alcista" else "Venta"
-
-        # Ajuste: sólo mantenemos setup ACTIVO si el precio está dentro del POI H1
-        if setup_activo.get("activo") and zonas.get("POI_H1") and isinstance(precio, (int, float)):
-            try:
-                lo_poi, hi_poi = [
-                    float(x.strip())
-                    for x in str(zonas["POI_H1"]).replace("–", "-").split("-")
-                ]
-                lo_poi, hi_poi = min(lo_poi, hi_poi), max(lo_poi, hi_poi)
-                if not (lo_poi <= float(precio) <= hi_poi):
-                    setup_activo = {"activo": False}
-            except Exception:
-                setup_activo = {"activo": False}
-    else:
-        setup_activo = {"activo": False}
-
-    # 🔹 Reflexión y conclusión operativa
-    reflexion = random.choice(REFLEXIONES)
-    slogan = "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!"
-
-    if setup_activo.get("activo"):
-        conclusion_final = (
-            "Estructura y volumen alineados intradía en POI H1. "
-            "Priorizar la ejecución del Setup activo respetando gestión 1:2 "
-            "y mover a BE en 1:1 + 50%."
-        )
-    elif sesion_activa and tendencia_h4 == "bajista" and tendencia_h1 == "bajista":
-        conclusion_final = (
-            "Estructura bajista consolidada: priorizar ventas tras retrocesos a oferta válida."
-        )
-    elif sesion_activa and tendencia_h4 == "alcista" and tendencia_h1 == "alcista":
-        conclusion_final = (
-            "Estructura alcista confirmada: buscar compras tras mitigación en demanda."
-        )
-    else:
-        conclusion_final = concl
-
-    # ============================================================
-    # 🔍 Detección contextual POI multi-temporal (TESLABTC Logic)
-    # ============================================================
-    contexto_operativo = ""
-    tipo_operacion = "—"
-    riesgo_operativo = "—"
-
-    try:
-        if zonas.get("POI_H4"):
-            poi_h4_min, poi_h4_max = [float(x) for x in str(zonas["POI_H4"]).replace("–", "-").split("-")]
-            if poi_h4_min <= float(precio) <= poi_h4_max:
-                contexto_operativo = (
-                    "El precio se encuentra dentro del POI H4 (zona de demanda/oferta). "
-                    "Esperar reacción en M15/M5 (BOS, vela envolvente o confirmación de volumen)."
-                )
-                tipo_operacion = "Compra" if tendencia_h4 == "alcista" else "Venta"
-                riesgo_operativo = "Bajo"
-        elif zonas.get("POI_H1"):
-            poi_h1_min, poi_h1_max = [float(x) for x in str(zonas["POI_H1"]).replace("–", "-").split("-")]
-            if poi_h1_min <= float(precio) <= poi_h1_max:
-                contexto_operativo = (
-                    "El precio está reaccionando dentro del POI H1. "
-                    "Esperar confirmaciones estructurales (BOS M5 o ruptura local)."
-                )
-                tipo_operacion = "Compra" if tendencia_h1 == "alcista" else "Venta"
-                riesgo_operativo = "Medio"
-        else:
-            contexto_operativo = "El precio no se encuentra dentro de ningún POI relevante."
-            tipo_operacion = "—"
-            riesgo_operativo = "Alto"
-    except Exception as e:
-        contexto_operativo = f"Error al evaluar POI: {e}"
-        tipo_operacion = "—"
-        riesgo_operativo = "—"
-
-    # ============================================================
-    # 🧩 Asegurar estructura mínima antes de formatear
-    # ============================================================
-    payload_contextual = {
-        "contexto_operativo": contexto_operativo,
-        "tipo_operacion_sugerida": tipo_operacion,
-        "riesgo_operativo": riesgo_operativo,
+    # ============================
+    # 🕰️ SWING (H4 + H1)
+    # ============================
+    swing = {
+        "activo": False,
+        "direccion": "—",
+        "riesgo": "N/A",
+        "premium_zone": poi_txt,
+        "zona_reaccion": "—",
+        "sl": "—",
+        "tp1_rr": "1:1 (BE)",
+        "tp2_rr": "1:2 (50%)",
+        "tp3_objetivo": "—",
+        "contexto": "Esperando alineación H4/H1 y BOS H1 en zona premium."
     }
 
-    if not zonas or len(zonas) < 2:
-        zonas = {
-            "PDH": "—",
-            "PDL": "—",
-            "ASIAN_HIGH": "—",
-            "ASIAN_LOW": "—",
-            "POI_H4": "—",
-            "POI_H1": "—",
-            "H1_HIGH": tf_h1.get("RANGO_HIGH"),
-            "H1_LOW": tf_h1.get("RANGO_LOW"),
-            "H4_HIGH": tf_h4.get("RANGO_HIGH"),
-            "H4_LOW": tf_h4.get("RANGO_LOW"),
-            "D_HIGH": tf_d.get("RANGO_HIGH"),
-            "D_LOW": tf_d.get("RANGO_LOW"),
-        }
+    if kl_h1 and dir_h4 in ("alcista", "bajista") and dir_h1 == dir_h4 and precio_num is not None and in_premium:
+        # BOS H1 en dirección de H4
+        bos_h1 = detectar_bos(kl_h1)
+        bos_ok = bos_h1.get("bos") and (
+            (bos_h1.get("tipo") == "alcista" and dir_h4 == "alcista") or
+            (bos_h1.get("tipo") == "bajista" and dir_h4 == "bajista")
+        )
 
-    # ============================================================
-    # 🧠 Payload final enriquecido (completo para formatter)
-    # ============================================================
+        if bos_ok:
+            highs_h1 = [k["high"] for k in kl_h1[-40:]]
+            lows_h1 = [k["low"] for k in kl_h1[-40:]]
+            if len(highs_h1) >= 2 and len(lows_h1) >= 2:
+                prev_high_h1 = max(highs_h1[:-1])
+                prev_low_h1 = min(lows_h1[:-1])
+
+                if dir_h4 == "alcista":
+                    zona_reac = (
+                        f"Quebrar y cerrar sobre el HIGH H1 ≈ {prev_high_h1:,.2f} USD "
+                        f"(en zona premium H4)."
+                    )
+                    sl_txt = f"LOW H1 previo ≈ {prev_low_h1:,.2f} USD"
+                    tp3_txt = f"HIGH H4 ≈ {h4_high:,.2f} USD" if h4_high is not None else "HIGH H4"
+                    direccion_txt = "ALCISTA (H1 a favor de H4)"
+                else:
+                    zona_reac = (
+                        f"Quebrar y cerrar bajo el LOW H1 ≈ {prev_low_h1:,.2f} USD "
+                        f"(en zona premium H4)."
+                    )
+                    sl_txt = f"HIGH H1 previo ≈ {prev_high_h1:,.2f} USD"
+                    tp3_txt = f"LOW H4 ≈ {h4_low:,.2f} USD" if h4_low is not None else "LOW H4"
+                    direccion_txt = "BAJISTA (H1 a favor de H4)"
+
+                swing.update({
+                    "activo": True,
+                    "direccion": direccion_txt,
+                    "riesgo": "Medio",
+                    "zona_reaccion": zona_reac,
+                    "sl": sl_txt,
+                    "tp3_objetivo": tp3_txt,
+                    "contexto": "Operación SWING siguiendo estructura H4, con BOS H1 confirmado en zona premium."
+                })
+
+    # Reflexión
+    reflexion = random.choice(REFLEXIONES)
+
+    # Estructura / zonas mínimas (para compatibilidad)
+    estructura_detectada = {
+        "H4": dir_h4,
+        "H1": dir_h1,
+        "sesion_ny_activa": ny_activa,
+        "ventana_scalping_ny": ventana_scalping,
+    }
+    zonas_detectadas = {
+        "H4_HIGH": h4_high,
+        "H4_LOW": h4_low,
+        "POI_H4": poi_txt,
+    }
+
     payload = {
+        "version": VERSION_TESLA,
         "fecha": fecha_txt,
-        "nivel_usuario": "Premium",
-        "sesión": sesion_txt,
         "activo": symbol,
         "precio_actual": precio_txt,
+        "sesión": sesion_txt,
         "fuente_precio": fuente,
-        "estructura_detectada": {"D": tf_d, "H4": tf_h4, "H1": tf_h1, "M15": tf_m15},
-        "direccion_general": direccion_general,
-        "estructura_resumen": estructura_txt,
-        "contexto_general": contexto,
-        "zonas_detectadas": zonas,
-        "confirmaciones": conf,
-        "escenario_1": esc1,
-        "escenario_2": esc2,
-        "setup_tesla": setup_activo,
-        "conclusion_general": conclusion_final,
+        "estructura_detectada": estructura_detectada,
+        "zonas_detectadas": zonas_detectadas,
+        "scalping": {
+            "continuacion": scalping_cont,
+            "correccion": scalping_corr,
+        },
+        "swing": swing,
         "reflexion": reflexion,
-        "slogan": slogan,
-        "simbolo": symbol,
-        "temporalidades": ["D", "H4", "H1", "M15", "M5"],
-        "contexto_operativo": payload_contextual.get("contexto_operativo"),
-        "tipo_operacion_sugerida": payload_contextual.get("tipo_operacion_sugerida"),
-        "riesgo_operativo": payload_contextual.get("riesgo_operativo"),
+        "slogan": "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!",
     }
 
-    # ============================================================
-    # 🧩 Garantizar campos base (por seguridad visual)
-    # ============================================================
-    payload.setdefault("direccion_general", direccion_general)
-    payload.setdefault("estructura_resumen", estructura_txt)
-    payload.setdefault("zonas_detectadas", zonas)
-    payload.setdefault("escenario_1", esc1)
-    payload.setdefault("escenario_2", esc2)
-    payload.setdefault("confirmaciones", conf)
-    payload.setdefault("setup_tesla", setup_activo)
-
-    # ============================================================
-    # 🔹 Formateo final (para UI o BOT)
-    # ============================================================
-    from utils.intelligent_formatter import (
-        construir_mensaje_operativo,
-        construir_mensaje_free,
-    )
-
-    nivel_usuario = payload.get("nivel_usuario", "Premium")
-    if nivel_usuario.lower() == "premium":
-        payload["mensaje_formateado"] = construir_mensaje_operativo(payload)
-    else:
-        payload["mensaje_formateado"] = construir_mensaje_free(payload)
-
-    # ============================================================
-    # 🔁 Verificación final de retorno válido
-    # ============================================================
-    if not payload or "estructura_detectada" not in payload:
-        return {"🧠 TESLABTC.KG": {
-            "error": "sin_datos",
-            "detalle": "No se obtuvo respuesta de estructura o conexión fallida (payload vacío)."
-        }}
-
-    return {"🧠 TESLABTC.KG": payload}
+    return payload
 
 # ============================================================
 # 🔹 Interpretación contextual inteligente TESLABTC (v5.3)
