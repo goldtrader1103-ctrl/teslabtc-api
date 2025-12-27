@@ -295,31 +295,32 @@ def _calcular_tp(entrada: float, sl: float, rr: float) -> float:
 # ============================================================
 def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     """
-    - SCALPING (M5): sólo primeras 2h de NY, en dirección de H1 (continuación)
-      y contra H1 (corrección), usando ruptura del alto/bajo previo de M5.
-    - SWING (H4 + H1): estructura de H4, con BOS en H1 dentro de zona premium
-      61.8–88.6 de H4.
+    Versión simplificada TESLABTC:
+    - SCALPING: M5 en ventana de apertura NY (primeras 2 horas), a favor y contra H1.
+    - SWING: H4 + H1, con TP3 en HIGH/LOW de H4.
+    - No mostramos zonas de liquidez; sólo acción del precio.
     """
     now = datetime.now(TZ_COL)
     fecha_txt = now.strftime("%d/%m/%Y %H:%M:%S")
 
-    # Precio actual
+    # 🔹 Precio actual
     precio, fuente = _safe_get_price(symbol)
     precio_num = float(precio) if isinstance(precio, (int, float)) else None
     precio_txt = f"{precio_num:,.2f} USD" if precio_num is not None else "—"
 
-    # Klines
+    # 🔹 Datos por temporalidad
     kl_h4 = _safe_get_klines(symbol, "4h", 400)
     kl_h1 = _safe_get_klines(symbol, "1h", 400)
     kl_m5 = _safe_get_klines(symbol, "5m", 300)
 
-    # Tendencias estructurales
+    # 🧭 Estructura con ZigZag (sólo para dirección general)
     tf_h4 = _detectar_tendencia_zigzag(kl_h4, depth=12, deviation=5.0, backstep=2) if kl_h4 else {"estado": "lateral"}
     tf_h1 = _detectar_tendencia_zigzag(kl_h1, depth=10, deviation=4.0, backstep=2) if kl_h1 else {"estado": "lateral"}
+
     dir_h4 = tf_h4.get("estado", "lateral")
     dir_h1 = tf_h1.get("estado", "lateral")
 
-    # Rango H4 reciente (para TP3 swing)
+    # 🔹 Rango H4 aproximado (para TP3 swing)
     if kl_h4:
         h4_high = max(k["high"] for k in kl_h4[-60:])
         h4_low = min(k["low"] for k in kl_h4[-60:])
@@ -327,7 +328,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         h4_high = None
         h4_low = None
 
-    # Zona premium H4 (61.8–88.6) respecto a su tendencia
+    # 🔹 POI H4 61.8–88.6 para swing (zona premium)
     poi_h4 = _poi_fibo_band(dir_h4, h4_high, h4_low)
     poi_txt = "—"
     in_premium = False
@@ -337,7 +338,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         if precio_num is not None and p_lo <= precio_num <= p_hi:
             in_premium = True
 
-    # Sesión NY y ventana scalping
+    # 🕒 Sesión NY y ventana SCALPING
     sesion_txt, ny_activa = _estado_sesion_ny()
     ventana_scalping = _ventana_scalping_ny()
 
@@ -354,7 +355,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "tp2_rr": "1:2 (50%)",
         "contexto": "Fuera de ventana o sin dirección clara en H1.",
     }
-    scalping_corr: Dict[str, Any] = scalping_cont.copy()
+    scalping_corr: Dict[str, Any] = dict(scalping_cont)  # copia base
 
     if kl_m5 and ny_activa and ventana_scalping and dir_h1 in ("alcista", "bajista"):
         highs_m5 = [k["high"] for k in kl_m5[-30:]]
@@ -364,77 +365,53 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             prev_low = min(lows_m5[:-1])
 
             if dir_h1 == "alcista":
-                # Continuación: ruptura del HIGH M5
-                entrada_fav = prev_high
-                sl_fav = prev_low
-                tp1_fav = _calcular_tp(entrada_fav, sl_fav, 1.0)
-                tp2_fav = _calcular_tp(entrada_fav, sl_fav, 2.0)
-
-                scalping_cont = {
-                    "activo": True,
-                    "direccion": "ALCISTA (a favor de H1)",
-                    "riesgo": "Bajo",
-                    "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
-                    "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
-                    "tp1_rr": f"{tp1_fav:,.2f} (1:1 • 50% + BE)",
-                    "tp2_rr": f"{tp2_fav:,.2f} (1:2 • 50%)",
-                    "contexto": "Entrada SCALPING a favor de la estructura intradía H1.",
-                }
-
-                # Corrección: ruptura del LOW M5
-                entrada_contra = prev_low
-                sl_contra = prev_high
-                tp1_contra = _calcular_tp(entrada_contra, sl_contra, 1.0)
-                tp2_contra = _calcular_tp(entrada_contra, sl_contra, 2.0)
-
-                scalping_corr = {
-                    "activo": True,
-                    "direccion": "BAJISTA (contra H1)",
-                    "riesgo": "Alto",
-                    "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
-                    "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
-                    "tp1_rr": f"{tp1_contra:,.2f} (1:1 • 50% + BE)",
-                    "tp2_rr": f"{tp2_contra:,.2f} (1:2 • 50%)",
-                    "contexto": "Entrada SCALPING de corrección intradía contra H1.",
-                }
+                # Continuación: compras
+                scalping_cont.update(
+                    {
+                        "activo": True,
+                        "direccion": "ALCISTA (a favor de H1)",
+                        "riesgo": "Bajo",
+                        "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
+                        "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
+                        "contexto": "Entrada SCALPING a favor de la estructura intradía H1.",
+                    }
+                )
+                # Corrección: ventas
+                scalping_corr.update(
+                    {
+                        "activo": True,
+                        "direccion": "BAJISTA (contra H1)",
+                        "riesgo": "Alto",
+                        "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
+                        "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
+                        "contexto": "Entrada SCALPING de corrección intradía contra H1.",
+                    }
+                )
             else:
                 # dir_h1 == "bajista"
-                # Continuación: ruptura del LOW M5
-                entrada_fav = prev_low
-                sl_fav = prev_high
-                tp1_fav = _calcular_tp(entrada_fav, sl_fav, 1.0)
-                tp2_fav = _calcular_tp(entrada_fav, sl_fav, 2.0)
+                # Continuación: ventas
+                scalping_cont.update(
+                    {
+                        "activo": True,
+                        "direccion": "BAJISTA (a favor de H1)",
+                        "riesgo": "Bajo",
+                        "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
+                        "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
+                        "contexto": "Entrada SCALPING a favor de la estructura intradía H1.",
+                    }
+                )
+                # Corrección: compras
+                scalping_corr.update(
+                    {
+                        "activo": True,
+                        "direccion": "ALCISTA (contra H1)",
+                        "riesgo": "Alto",
+                        "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
+                        "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
+                        "contexto": "Entrada SCALPING de corrección intradía contra H1.",
+                    }
+                )
 
-                scalping_cont = {
-                    "activo": True,
-                    "direccion": "BAJISTA (a favor de H1)",
-                    "riesgo": "Bajo",
-                    "zona_reaccion": f"Ruptura del LOW M5 ≈ {prev_low:,.2f} USD",
-                    "sl": f"HIGH M5 previo ≈ {prev_high:,.2f} USD",
-                    "tp1_rr": f"{tp1_fav:,.2f} (1:1 • 50% + BE)",
-                    "tp2_rr": f"{tp2_fav:,.2f} (1:2 • 50%)",
-                    "contexto": "Entrada SCALPING a favor de la estructura intradía H1.",
-                }
-
-                # Corrección: ruptura del HIGH M5
-                entrada_contra = prev_high
-                sl_contra = prev_low
-                tp1_contra = _calcular_tp(entrada_contra, sl_contra, 1.0)
-                tp2_contra = _calcular_tp(entrada_contra, sl_contra, 2.0)
-
-                scalping_corr = {
-                    "activo": True,
-                    "direccion": "ALCISTA (contra H1)",
-                    "riesgo": "Alto",
-                    "zona_reaccion": f"Ruptura del HIGH M5 ≈ {prev_high:,.2f} USD",
-                    "sl": f"LOW M5 previo ≈ {prev_low:,.2f} USD",
-                    "tp1_rr": f"{tp1_contra:,.2f} (1:1 • 50% + BE)",
-                    "tp2_rr": f"{tp2_contra:,.2f} (1:2 • 50%)",
-                    "contexto": "Entrada SCALPING de corrección intradía contra H1.",
-                }
-
-    # ============================
-    # 🕰️ SWING (H4 + H1)
     # ============================
     # 🕰️ SWING (H4 + H1)
     # ============================
@@ -460,54 +437,70 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             prev_high_h1 = max(highs_h1[:-1])
             prev_low_h1 = min(lows_h1[:-1])
 
-    # Siempre que H4 tenga dirección y haya datos de H1,
-    # mostramos al menos "esperando ruptura del máximo/mínimo"
-    if dir_h4 in ("alcista", "bajista") and prev_high_h1 is not None and prev_low_h1 is not None:
-        if dir_h4 == "alcista":
-            direccion_txt = "ALCISTA (buscando continuación de H4)"
+    # Dirección base del swing:
+    # 1) Preferimos H4 si tiene tendencia clara.
+    # 2) Si H4 está lateral pero H1 tiene dirección, usamos H1.
+    swing_dir = None
+    if dir_h4 in ("alcista", "bajista"):
+        swing_dir = dir_h4
+    elif dir_h1 in ("alcista", "bajista"):
+        swing_dir = dir_h1
+
+    # Siempre que tengamos dirección y referencias H1, construimos mensaje de "esperando ruptura"
+    if swing_dir in ("alcista", "bajista") and prev_high_h1 is not None and prev_low_h1 is not None:
+        if swing_dir == "alcista":
+            direccion_txt = (
+                "ALCISTA (buscando continuación del ciclo mayor: H4/H1)"
+                if dir_h4 == "alcista"
+                else "ALCISTA (basado en H1; H4 en rango)"
+            )
             zona_reac_txt = (
                 f"Esperando quiebre y cierre del HIGH H1 ≈ {prev_high_h1:,.2f} USD "
-                f"a favor de la estructura H4."
+                f"a favor de la estructura superior."
             )
             sl_txt = f"LOW H1 previo ≈ {prev_low_h1:,.2f} USD"
-            tp3_txt = (
-                f"HIGH H4 ≈ {h4_high:,.2f} USD"
-                if h4_high is not None
-                else "HIGH H4"
-            )
+            if h4_high is not None:
+                tp3_txt = f"HIGH H4 ≈ {h4_high:,.2f} USD"
+            else:
+                tp3_txt = "Extensión alcista del último impulso H4/H1"
         else:
-            direccion_txt = "BAJISTA (buscando continuación de H4)"
+            direccion_txt = (
+                "BAJISTA (buscando continuación del ciclo mayor: H4/H1)"
+                if dir_h4 == "bajista"
+                else "BAJISTA (basado en H1; H4 en rango)"
+            )
             zona_reac_txt = (
                 f"Esperando quiebre y cierre del LOW H1 ≈ {prev_low_h1:,.2f} USD "
-                f"a favor de la estructura H4."
+                f"a favor de la estructura superior."
             )
             sl_txt = f"HIGH H1 previo ≈ {prev_high_h1:,.2f} USD"
-            tp3_txt = (
-                f"LOW H4 ≈ {h4_low:,.2f} USD"
-                if h4_low is not None
-                else "LOW H4"
-            )
+            if h4_low is not None:
+                tp3_txt = f"LOW H4 ≈ {h4_low:,.2f} USD"
+            else:
+                tp3_txt = "Extensión bajista del último impulso H4/H1"
 
         contexto_base = []
 
+        if dir_h4 not in ("alcista", "bajista"):
+            contexto_base.append("H4 en rango: la dirección principal se toma de H1.")
         if not in_premium:
             contexto_base.append(
                 "El precio aún no ha entrado en la zona premium H4 (61.8–88.6)."
             )
-        if dir_h1 != dir_h4:
+        if dir_h1 != swing_dir:
             contexto_base.append(
-                "H1 todavía no está alineado con la dirección de H4 (corrección activa)."
+                "H1 todavía no está totalmente alineado con la dirección de swing."
             )
 
         contexto_base.append(
-            "Se requiere quiebre y cierre de H1 en la dirección de H4 para activar la entrada."
+            "Se requiere quiebre y cierre de H1 en la dirección del swing para activar la entrada."
         )
 
         swing.update(
             {
                 "activo": False,
                 "direccion": direccion_txt,
-                "riesgo": "Medio" if dir_h1 == dir_h4 else "Alto",
+                "riesgo": "Medio" if dir_h1 == swing_dir else "Alto",
                 "zona_reaccion": zona_reac_txt,
                 "sl": sl_txt,
                 "tp3_objetivo": tp3_txt,
@@ -515,8 +508,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             }
         )
 
-    # Si además se cumplen TODAS las condiciones TESLABTC para entrada SWING,
-    # marcamos la operación como ACTIVA
+    # ✔️ Condición TESLABTC para marcar el SWING como ACTIVO
     if (
         kl_h1
         and dir_h4 in ("alcista", "bajista")
@@ -568,10 +560,10 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 }
             )
 
-    # Reflexión
+    # ✨ Reflexión
     reflexion = random.choice(REFLEXIONES)
 
-    # Payload final (lo que consume intelligent_formatter)
+    # Estructura mínima para compatibilidad
     estructura_detectada = {
         "H4": dir_h4,
         "H1": dir_h1,
@@ -584,7 +576,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "POI_H4": poi_txt,
     }
 
-    payload: Dict[str, Any] = {
+    payload = {
         "version": VERSION_TESLA,
         "fecha": fecha_txt,
         "activo": symbol,
