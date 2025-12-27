@@ -436,6 +436,8 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # ============================
     # 🕰️ SWING (H4 + H1)
     # ============================
+    # 🕰️ SWING (H4 + H1)
+    # ============================
     swing: Dict[str, Any] = {
         "activo": False,
         "direccion": "—",
@@ -449,6 +451,72 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "contexto": "Esperando alineación H4/H1 y BOS H1 en zona premium.",
     }
 
+    # High/Low de referencia en H1 para construir el mensaje
+    prev_high_h1 = prev_low_h1 = None
+    if kl_h1:
+        highs_h1 = [k["high"] for k in kl_h1[-40:]]
+        lows_h1 = [k["low"] for k in kl_h1[-40:]]
+        if len(highs_h1) >= 2 and len(lows_h1) >= 2:
+            prev_high_h1 = max(highs_h1[:-1])
+            prev_low_h1 = min(lows_h1[:-1])
+
+    # Siempre que H4 tenga dirección y haya datos de H1,
+    # mostramos al menos "esperando ruptura del máximo/mínimo"
+    if dir_h4 in ("alcista", "bajista") and prev_high_h1 is not None and prev_low_h1 is not None:
+        if dir_h4 == "alcista":
+            direccion_txt = "ALCISTA (buscando continuación de H4)"
+            zona_reac_txt = (
+                f"Esperando quiebre y cierre del HIGH H1 ≈ {prev_high_h1:,.2f} USD "
+                f"a favor de la estructura H4."
+            )
+            sl_txt = f"LOW H1 previo ≈ {prev_low_h1:,.2f} USD"
+            tp3_txt = (
+                f"HIGH H4 ≈ {h4_high:,.2f} USD"
+                if h4_high is not None
+                else "HIGH H4"
+            )
+        else:
+            direccion_txt = "BAJISTA (buscando continuación de H4)"
+            zona_reac_txt = (
+                f"Esperando quiebre y cierre del LOW H1 ≈ {prev_low_h1:,.2f} USD "
+                f"a favor de la estructura H4."
+            )
+            sl_txt = f"HIGH H1 previo ≈ {prev_high_h1:,.2f} USD"
+            tp3_txt = (
+                f"LOW H4 ≈ {h4_low:,.2f} USD"
+                if h4_low is not None
+                else "LOW H4"
+            )
+
+        contexto_base = []
+
+        if not in_premium:
+            contexto_base.append(
+                "El precio aún no ha entrado en la zona premium H4 (61.8–88.6)."
+            )
+        if dir_h1 != dir_h4:
+            contexto_base.append(
+                "H1 todavía no está alineado con la dirección de H4 (corrección activa)."
+            )
+
+        contexto_base.append(
+            "Se requiere quiebre y cierre de H1 en la dirección de H4 para activar la entrada."
+        )
+
+        swing.update(
+            {
+                "activo": False,
+                "direccion": direccion_txt,
+                "riesgo": "Medio" if dir_h1 == dir_h4 else "Alto",
+                "zona_reaccion": zona_reac_txt,
+                "sl": sl_txt,
+                "tp3_objetivo": tp3_txt,
+                "contexto": " ".join(contexto_base),
+            }
+        )
+
+    # Si además se cumplen TODAS las condiciones TESLABTC para entrada SWING,
+    # marcamos la operación como ACTIVA
     if (
         kl_h1
         and dir_h4 in ("alcista", "bajista")
@@ -462,49 +530,43 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             or (bos_h1.get("tipo") == "bajista" and dir_h4 == "bajista")
         )
 
-        if bos_ok:
-            highs_h1 = [k["high"] for k in kl_h1[-40:]]
-            lows_h1 = [k["low"] for k in kl_h1[-40:]]
-            if len(highs_h1) >= 2 and len(lows_h1) >= 2:
-                prev_high_h1 = max(highs_h1[:-1])
-                prev_low_h1 = min(lows_h1[:-1])
-
-                if dir_h4 == "alcista":
-                    zona_reac = (
-                        f"Quebrar y cerrar sobre el HIGH H1 ≈ {prev_high_h1:,.2f} USD "
-                        f"(en zona premium H4)."
-                    )
-                    sl_txt = f"LOW H1 previo ≈ {prev_low_h1:,.2f} USD"
-                    tp3_txt = (
-                        f"HIGH H4 ≈ {h4_high:,.2f} USD"
-                        if h4_high is not None
-                        else "HIGH H4"
-                    )
-                    direccion_txt = "ALCISTA (H1 a favor de H4)"
-                else:
-                    zona_reac = (
-                        f"Quebrar y cerrar bajo el LOW H1 ≈ {prev_low_h1:,.2f} USD "
-                        f"(en zona premium H4)."
-                    )
-                    sl_txt = f"HIGH H1 previo ≈ {prev_high_h1:,.2f} USD"
-                    tp3_txt = (
-                        f"LOW H4 ≈ {h4_low:,.2f} USD"
-                        if h4_low is not None
-                        else "LOW H4"
-                    )
-                    direccion_txt = "BAJISTA (H1 a favor de H4)"
-
-                swing.update(
-                    {
-                        "activo": True,
-                        "direccion": direccion_txt,
-                        "riesgo": "Medio",
-                        "zona_reaccion": zona_reac,
-                        "sl": sl_txt,
-                        "tp3_objetivo": tp3_txt,
-                        "contexto": "Operación SWING siguiendo estructura H4, con BOS H1 confirmado en zona premium.",
-                    }
+        if bos_ok and prev_high_h1 is not None and prev_low_h1 is not None:
+            if dir_h4 == "alcista":
+                zona_reac = (
+                    f"Quiebre y cierre sobre el HIGH H1 ≈ {prev_high_h1:,.2f} USD "
+                    f"en zona premium H4."
                 )
+                sl_txt = f"LOW H1 previo ≈ {prev_low_h1:,.2f} USD"
+                tp3_txt = (
+                    f"HIGH H4 ≈ {h4_high:,.2f} USD"
+                    if h4_high is not None
+                    else "HIGH H4"
+                )
+                direccion_txt = "ALCISTA (H1 a favor de H4)"
+            else:
+                zona_reac = (
+                    f"Quiebre y cierre bajo el LOW H1 ≈ {prev_low_h1:,.2f} USD "
+                    f"en zona premium H4."
+                )
+                sl_txt = f"HIGH H1 previo ≈ {prev_high_h1:,.2f} USD"
+                tp3_txt = (
+                    f"LOW H4 ≈ {h4_low:,.2f} USD"
+                    if h4_low is not None
+                    else "LOW H4"
+                )
+                direccion_txt = "BAJISTA (H1 a favor de H4)"
+
+            swing.update(
+                {
+                    "activo": True,
+                    "direccion": direccion_txt,
+                    "riesgo": "Medio",
+                    "zona_reaccion": zona_reac,
+                    "sl": sl_txt,
+                    "tp3_objetivo": tp3_txt,
+                    "contexto": "Operación SWING siguiendo estructura H4, con BOS H1 confirmado en zona premium.",
+                }
+            )
 
     # Reflexión
     reflexion = random.choice(REFLEXIONES)
