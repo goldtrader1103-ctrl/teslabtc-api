@@ -2,10 +2,10 @@ from main import VERSION_TESLA
 # ============================================================
 # 🧠 TESLABTC.KG — Análisis Premium (v5.3.1 PRO REAL MARKET)
 # ============================================================
-# Versión simplificada TESLABTC:
+# Versión simplificada:
 #   - Swing: estructura H4/H1 con zona premium H4 (61.8–88.6)
-#   - Scalping: M5 en sesión NY, a favor y contra tendencia H1
-#   - Sin zonas de liquidez antiguas, sólo acción del precio
+#   - Scalping: M5 a favor / contra H1 (modo backtest 24/7)
+#   - Sin zonas de liquidez clásicas; sólo acción del precio
 # ============================================================
 
 import requests
@@ -97,12 +97,6 @@ def _zigzag_pivots(
     deviation: float = 5.0,
     backstep: int = 2,
 ) -> List[Tuple[int, str, float]]:
-    """
-    Pivotes tipo ZigZag:
-    - depth: pivote confirmado con 'depth' velas a cada lado
-    - deviation: % mínimo de cambio desde el último pivote
-    - backstep: si aparece pivote del mismo tipo muy cerca, se reemplaza por el más extremo
-    """
     if not kl or len(kl) < (depth * 2 + 5):
         return []
 
@@ -152,10 +146,6 @@ def _detectar_tendencia_zigzag(
     deviation: float = 5.0,
     backstep: int = 2,
 ) -> Dict[str, Any]:
-    """
-    Tendencia estructural TESLABTC usando ZigZag:
-    - Usa los últimos 2 HIGH y 2 LOW del zigzag.
-    """
     piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
     if not kl or len(piv) < 3:
         return {"estado": "lateral", "BOS": "—"}
@@ -163,7 +153,6 @@ def _detectar_tendencia_zigzag(
     highs = [(i, p) for (i, t, p) in piv if t == "H"]
     lows = [(i, p) for (i, t, p) in piv if t == "L"]
 
-    # Pocos pivotes: inferimos sólo por el último tramo
     if len(highs) < 2 or len(lows) < 2:
         idx_prev, tipo_prev, price_prev = piv[-2]
         idx_last, tipo_last, price_last = piv[-1]
@@ -223,11 +212,6 @@ def _poi_fibo_band(
     hi: Optional[float],
     lo: Optional[float],
 ) -> Optional[Tuple[float, float]]:
-    """
-    Banda POI 61.8–88.6 del último impulso (H4):
-    - En alcista: se mide desde el LOW al HIGH
-    - En bajista: desde el HIGH al LOW
-    """
     if hi is None or lo is None or hi == lo:
         return None
 
@@ -254,32 +238,25 @@ def _poi_fibo_band(
 
 
 # ------------------------------------------------------------
-# 🔹 Sesiones (Asia, Londres, NY) + ventana SCALPING
+# 🔹 Sesiones (Asia, Londres, NY)
 # ------------------------------------------------------------
 def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
     """
     Devuelve:
       - Texto de la sesión actual (NY, Londres, Asia o combinadas)
       - Flags booleanos por sesión: {"asia": bool, "londres": bool, "ny": bool}
-
-    Horario de referencia Colombia:
+    Horario Colombia:
       • ASIA:    17:00 – 02:00
       • LONDRES: 02:00 – 11:00
       • NY:      07:00 – 15:00
-
-    🔵 MODO 24/7:
-      - Si no cae en ninguna ventana exacta, se asigna por defecto a NY
-        para mantener los análisis activos todo el tiempo.
     """
     ahora = datetime.now(TZ_COL)
     m = ahora.hour * 60 + ahora.minute  # minutos desde medianoche
 
-    # Ventanas estándar
     asia = (m >= 17 * 60) or (m < 2 * 60)
     londres = 2 * 60 <= m < 11 * 60
     ny = 7 * 60 <= m < 15 * 60
 
-    # Texto según combinaciones
     if ny and londres:
         sesion_txt = "Sesión NY-LONDRES (NY 07:00–15:00 | LONDRES 02:00–11:00 COL)"
     elif londres and asia:
@@ -291,24 +268,10 @@ def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
     elif asia:
         sesion_txt = "Sesión ASIA (17:00–02:00 COL)"
     else:
-        # 🔵 MODO BACKTEST 24/7:
-        # Si no está en ninguna ventana exacta (p.ej. 15:00–17:00),
-        # lo consideramos como sesión NY para efectos del análisis.
-        sesion_txt = "Sesión NY (07:00–15:00 COL)"
-        ny = True
+        # Sin huecos "fuera de sesión": lo marcamos como extensión de NY
+        sesion_txt = "Sesión NY (horario extendido fuera de cash RTH)."
 
     return sesion_txt, {"asia": asia, "londres": londres, "ny": ny}
-
-
-def _ventana_scalping_ny() -> bool:
-    """
-    Ventana operativa original de SCALPING NY (primeras 2 horas).
-    La dejamos disponible por si más adelante quieres limitarla otra vez.
-    """
-    ahora = datetime.now(TZ_COL)
-    start = ahora.replace(hour=8, minute=30, second=0, microsecond=0)
-    end = start + timedelta(hours=2)
-    return start <= ahora <= end
 
 
 REFLEXIONES = [
@@ -323,13 +286,9 @@ REFLEXIONES = [
 
 
 # ------------------------------------------------------------
-# 🔹 Cálculo de TP numérico
+# 🔹 Cálculo de TP numérico (por si lo necesitas luego)
 # ------------------------------------------------------------
 def _calcular_tp(entrada: float, sl: float, rr: float) -> float:
-    """
-    TP genérico: entrada ± (riesgo * RR).
-    Se dejó por si en el futuro quieres reusarlo para variantes.
-    """
     try:
         entrada = float(entrada)
         sl = float(sl)
@@ -351,10 +310,9 @@ def _calcular_tp(entrada: float, sl: float, rr: float) -> float:
 # ============================================================
 def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     """
-    Versión simplificada TESLABTC:
-      - Usa estructura H4/H1 para SWING
-      - Usa M5 para señales SCALPING ligadas a H1
-      - No muestra zonas de liquidez; sólo acción del precio
+    - Usa estructura H4/H1 para SWING
+    - Usa M5 para señales SCALPING (a favor/contra H1)
+    - Análisis 24/7 (modo backtest); no se apaga por sesión.
     """
     now = datetime.now(TZ_COL)
     fecha_txt = now.strftime("%d/%m/%Y %H:%M:%S")
@@ -393,13 +351,11 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         if precio_num is not None and p_lo <= precio_num <= p_hi:
             in_premium = True
 
-    # Sesiones globales (Asia / Londres / NY)
-    sesion_txt, sesiones_flags = _estado_sesiones()
-    ny_activa = bool(sesiones_flags.get("ny", False))
+    # Sesión actual (solo texto + flags)
+    sesion_txt, ses_flags = _estado_sesiones()
 
-    # 🔵 MODO BACKTEST:
-    # SCALPING activo durante toda la sesión NY
-    ventana_scalping = ny_activa
+    # Modo backtest: scalping siempre permitido
+    ventana_scalping = True
 
     # ============================
     # 📊 SCALPING (M5)
@@ -412,12 +368,11 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "sl": "—",
         "tp1_rr": "1:1 (50% + BE)",
         "tp2_rr": "1:2 (50%)",
-        "contexto": "Fuera de ventana o sin dirección clara en H1.",
+        "contexto": "Sin dirección clara en H1.",
     }
     scalping_corr = dict(scalping_cont)
 
     if kl_m5 and ventana_scalping and dir_h1 in ("alcista", "bajista"):
-        # Usamos el último HIGH/LOW operativos de M5 (ventana reciente)
         highs_m5 = [k["high"] for k in kl_m5[-30:]]
         lows_m5 = [k["low"] for k in kl_m5[-30:]]
         if len(highs_m5) >= 2 and len(lows_m5) >= 2:
@@ -425,7 +380,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             prev_low = min(lows_m5[:-1])
 
             if dir_h1 == "alcista":
-                # ✅ CONTINUACIÓN ALCISTA (a favor de H1)
+                # ✅ CONTINUACIÓN ALCISTA
                 entry_cont = prev_high
                 sl_cont = prev_low
                 r_cont = max(entry_cont - sl_cont, 0)
@@ -453,7 +408,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     }
                 )
 
-                # 🔻 CORRECCIÓN BAJISTA (contra H1)
+                # 🔻 CORRECCIÓN BAJISTA
                 entry_corr = prev_low
                 sl_corr = prev_high
                 r_corr = max(sl_corr - entry_corr, 0)
@@ -481,7 +436,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     }
                 )
             else:
-                # ✅ CONTINUACIÓN BAJISTA (a favor de H1)
+                # ✅ CONTINUACIÓN BAJISTA
                 entry_cont = prev_low
                 sl_cont = prev_high
                 r_cont = max(sl_cont - entry_cont, 0)
@@ -509,7 +464,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     }
                 )
 
-                # 🔺 CORRECCIÓN ALCISTA (contra H1)
+                # 🔺 CORRECCIÓN ALCISTA
                 entry_corr = prev_high
                 sl_corr = prev_low
                 r_corr = max(entry_corr - sl_corr, 0)
@@ -540,9 +495,6 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # ============================
     # 🕰️ SWING (H4 + H1)
     # ============================
-    # ============================
-    # 🕰️ SWING (H4 + H1)
-    # ============================
     swing = {
         "activo": False,
         "direccion": "—",
@@ -556,52 +508,34 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "contexto": "Esperando alineación H4/H1 y BOS H1 en zona premium.",
     }
 
-    # Condición mínima para mostrar escenario SWING:
-    #   - H4 con tendencia clara
-    #   - H1 a favor de H4
-    #   - Precio dentro de la zona premium H4 (61.8–88.6)
-    if kl_h1 and dir_h4 in ("alcista", "bajista") and dir_h1 == dir_h4 and precio_num is not None and in_premium:
-        # Intentamos detectar si YA hubo BOS en H1 en la dirección de H4
-        bos_h1 = detectar_bos(kl_h1)
-        bos_ok = bos_h1.get("bos") and (
-            (bos_h1.get("tipo") == "alcista" and dir_h4 == "alcista")
-            or (bos_h1.get("tipo") == "bajista" and dir_h4 == "bajista")
-        )
-
+    # Solo si H4 y H1 tienen dirección clara (no lateral)
+    if kl_h1 and dir_h4 in ("alcista", "bajista") and dir_h1 in ("alcista", "bajista"):
         highs_h1 = [k["high"] for k in kl_h1[-40:]]
         lows_h1 = [k["low"] for k in kl_h1[-40:]]
-
         if len(highs_h1) >= 2 and len(lows_h1) >= 2:
             prev_high_h1 = max(highs_h1[:-1])
             prev_low_h1 = min(lows_h1[:-1])
 
-            # Definimos entrada / SL / objetivo H4 según dirección
+            # Nivel de entrada propuesto por estructura H1
             if dir_h4 == "alcista":
-                entry = prev_high_h1           # nivel a quebrar y cerrar
-                sl_val = prev_low_h1           # SL bajo el mínimo previo
+                entry = prev_high_h1
+                sl_val = prev_low_h1
                 tp3_val = h4_high
-                direccion_txt = "ALCISTA (a favor de H4)"
-                # Cálculo de RR numérico
-                r = abs(entry - sl_val)
-                if r > 0:
+                direccion_txt = "ALCISTA"
+            else:
+                entry = prev_low_h1
+                sl_val = prev_high_h1
+                tp3_val = h4_low
+                direccion_txt = "BAJISTA"
+
+            r = abs(entry - sl_val)
+            if r > 0:
+                if dir_h4 == "alcista":
                     tp1_val = entry + r
                     tp2_val = entry + 2 * r
                 else:
-                    tp1_val = tp2_val = entry
-            else:  # dir_h4 == "bajista"
-                entry = prev_low_h1           # nivel a quebrar y cerrar
-                sl_val = prev_high_h1         # SL sobre el máximo previo
-                tp3_val = h4_low
-                direccion_txt = "BAJISTA (a favor de H4)"
-                r = abs(entry - sl_val)
-                if r > 0:
                     tp1_val = entry - r
                     tp2_val = entry - 2 * r
-                else:
-                    tp1_val = tp2_val = entry
-
-            # Formateo de textos
-            if r > 0:
                 tp1_txt = f"{tp1_val:,.2f} (1:1 • BE)"
                 tp2_txt = f"{tp2_val:,.2f} (1:2 • 50%)"
             else:
@@ -612,36 +546,54 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             sl_txt = f"{sl_val:,.2f} USD"
             tp3_txt = f"{tp3_val:,.2f} USD" if tp3_val is not None else "Alto/Bajo H4"
 
-            # Si YA hubo BOS en H1 → ACTIVO, si no → EN ESPERA
+            # BOS H1 en dirección de H4 (para marcar ACTIVO)
+            bos_ok = False
+            try:
+                bos_h1 = detectar_bos(kl_h1)
+                bos_ok = bos_h1.get("bos") and (
+                    (bos_h1.get("tipo") == "alcista" and dir_h4 == "alcista")
+                    or (bos_h1.get("tipo") == "bajista" and dir_h4 == "bajista")
+                )
+            except Exception:
+                bos_ok = False
+
+            activo = bool(bos_ok and in_premium)
+
+            if activo:
+                contexto_txt = (
+                    "Operación SWING activa: H4 y H1 alineados, BOS H1 confirmado "
+                    "en zona premium TESLABTC."
+                )
+            else:
+                contexto_txt = (
+                    "Escenario SWING en espera: se requiere quiebre y cierre de ese nivel "
+                    "con BOS H1 claro en zona premium para activar la entrada."
+                )
+
             swing.update(
                 {
-                    "activo": bool(bos_ok),
+                    "activo": activo,
                     "direccion": direccion_txt,
-                    "riesgo": "Medio" if bos_ok else "Alto",
+                    "riesgo": "Medio",
                     "premium_zone": poi_txt,
                     "zona_reaccion": zona_reac,
                     "sl": sl_txt,
                     "tp1_rr": tp1_txt,
                     "tp2_rr": tp2_txt,
                     "tp3_objetivo": tp3_txt,
-                    "contexto": (
-                        "Operación SWING siguiendo estructura H4: "
-                        "BOS H1 ya confirmado en zona premium."
-                        if bos_ok
-                        else "Escenario SWING en zona premium H4: esperando quiebre y cierre de H1 en esa dirección."
-                    ),
+                    "contexto": contexto_txt,
                 }
             )
 
     # Reflexión
     reflexion = random.choice(REFLEXIONES)
 
-    # Estructura / zonas mínimas (para compatibilidad con formatter)
+    # Estructura / zonas mínimas (para compatibilidad)
     estructura_detectada = {
         "H4": dir_h4,
         "H1": dir_h1,
-        "sesion_ny_activa": ny_activa,
-        "ventana_scalping_ny": bool(ventana_scalping),
+        "sesiones": ses_flags,
+        "ventana_scalping_activa": bool(ventana_scalping),
     }
     zonas_detectadas = {
         "H4_HIGH": h4_high,
