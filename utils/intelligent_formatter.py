@@ -182,19 +182,19 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
     cont = scalping.get("continuacion", {})
     corr = scalping.get("correccion", {})
 
-    def estado(activo: Any) -> str:
-        return "✅ ACTIVO" if activo else "⏳ En espera"
+    def estado(activo_flag: Any) -> str:
+        return "✅ ACTIVO" if activo_flag else "⏳ En espera"
 
-    msg = f"""📋 SEÑALES ACTIVAS
+    msg = f"""*📋 SEÑALES ACTIVAS*
 ──────────────────────────────
 📅 Fecha: {fecha}
 💰 Activo: {activo}
 💵 Precio actual: {precio}
 🕒 Sesión: {sesion}
 
-📊 ESCENARIOS OPERATIVOS SCALPING
+*📊 ESCENARIOS OPERATIVOS SCALPING*
 ──────────────────────────────
-🔷 Escenario de Continuación (Tendencia Principal)
+*🔷 Escenario de Continuación (Tendencia Principal)*
 ──────────────────────────────
 📌 Estado: {estado(cont.get('activo'))}
 📈 Dirección: {cont.get('direccion', '—')}
@@ -206,7 +206,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 🎯 TP2: {cont.get('tp2_rr', '1:2 (50%)')}
 🛡️ SL: {cont.get('sl', '—')}
 
-🔷 Escenario de Corrección (Contra Tendencia)
+*🔷 Escenario de Corrección (Contra Tendencia)*
 ──────────────────────────────
 📌 Estado: {estado(corr.get('activo'))}
 📈 Dirección: {corr.get('direccion', '—')}
@@ -218,7 +218,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 🎯 TP2: {corr.get('tp2_rr', '1:2 (50%)')}
 🛡️ SL: {corr.get('sl', '—')}
 
-📈 ESCENARIO SWING
+*📈 ESCENARIO SWING*
 ──────────────────────────────
 📌 Estado: {estado(swing.get('activo'))}
 📈 Dirección: {swing.get('direccion', '—')}
@@ -231,15 +231,14 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 🎯 TP3: {swing.get('tp3_objetivo', '—')}
 🛡️ SL: {swing.get('sl', '—')}
 
-📓 Reflexión TESLABTC A.P.
+*📓 Reflexión TESLABTC A.P.*
 ──────────────────────────────
 💭 {reflexion}
 
-⚠️ Análisis SCALPING actualmente activo durante toda la sesión NY (modo backtesting).
+⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY).
 ⚠️ Análisis SWING actualizado cada vela de 1H.
 {slogan}"""
     return msg
-
 
 # ============================================================
 # 🛡️ SAFE MARKDOWN

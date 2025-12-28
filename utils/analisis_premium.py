@@ -240,15 +240,37 @@ def _poi_fibo_band(
 # ------------------------------------------------------------
 # 🔹 Sesión NY + ventana de scalping
 # ------------------------------------------------------------
-def _estado_sesion_ny() -> Tuple[str, bool]:
+def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
+    """
+    Devuelve:
+      - Texto de la sesión actual (NY, Londres, Asia o combinadas)
+      - Flags booleanos por sesión: {"asia": bool, "londres": bool, "ny": bool}
+    Horario Colombia:
+      • ASIA:    17:00 – 02:00
+      • LONDRES: 02:00 – 11:00
+      • NY:      07:00 – 15:00
+    """
     ahora = datetime.now(TZ_COL)
-    start = ahora.replace(hour=8, minute=30, second=0, microsecond=0)
-    end = ahora.replace(hour=16, minute=0, second=0, microsecond=0)
-    activa = start <= ahora <= end
-    return (
-        "✅ Activa (Sesión NY)" if activa else "❌ Cerrada (Fuera de NY)",
-        activa,
-    )
+    m = ahora.hour * 60 + ahora.minute  # minutos desde medianoche
+
+    asia = (m >= 17 * 60) or (m < 2 * 60)
+    londres = 2 * 60 <= m < 11 * 60
+    ny = 7 * 60 <= m < 15 * 60
+
+    if ny and londres:
+        sesion_txt = "Sesión NY-LONDRES (NY 07:00–15:00 | LONDRES 02:00–11:00 COL)"
+    elif londres and asia:
+        sesion_txt = "Sesión ASIA-LONDRES (ASIA 17:00–02:00 | LONDRES 02:00–11:00 COL)"
+    elif ny:
+        sesion_txt = "Sesión NY (07:00–15:00 COL)"
+    elif londres:
+        sesion_txt = "Sesión LONDRES (02:00–11:00 COL)"
+    elif asia:
+        sesion_txt = "Sesión ASIA (17:00–02:00 COL)"
+    else:
+        sesion_txt = "Fuera de sesiones principales (Asia, Londres y NY)."
+
+    return sesion_txt, {"asia": asia, "londres": londres, "ny": ny}
 
 
 def _ventana_scalping_ny() -> bool:
