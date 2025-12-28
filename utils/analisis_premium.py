@@ -540,6 +540,9 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # ============================
     # 🕰️ SWING (H4 + H1)
     # ============================
+    # ============================
+    # 🕰️ SWING (H4 + H1)
+    # ============================
     swing = {
         "activo": False,
         "direccion": "—",
@@ -553,14 +556,12 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "contexto": "Esperando alineación H4/H1 y BOS H1 en zona premium.",
     }
 
-    if (
-        kl_h1
-        and dir_h4 in ("alcista", "bajista")
-        and dir_h1 == dir_h4
-        and precio_num is not None
-        and in_premium
-    ):
-        # BOS H1 en dirección de H4
+    # Condición mínima para mostrar escenario SWING:
+    #   - H4 con tendencia clara
+    #   - H1 a favor de H4
+    #   - Precio dentro de la zona premium H4 (61.8–88.6)
+    if kl_h1 and dir_h4 in ("alcista", "bajista") and dir_h1 == dir_h4 and precio_num is not None and in_premium:
+        # Intentamos detectar si YA hubo BOS en H1 en la dirección de H4
         bos_h1 = detectar_bos(kl_h1)
         bos_ok = bos_h1.get("bos") and (
             (bos_h1.get("tipo") == "alcista" and dir_h4 == "alcista")
@@ -569,25 +570,38 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 
         highs_h1 = [k["high"] for k in kl_h1[-40:]]
         lows_h1 = [k["low"] for k in kl_h1[-40:]]
-        if bos_ok and len(highs_h1) >= 2 and len(lows_h1) >= 2:
+
+        if len(highs_h1) >= 2 and len(lows_h1) >= 2:
             prev_high_h1 = max(highs_h1[:-1])
             prev_low_h1 = min(lows_h1[:-1])
 
+            # Definimos entrada / SL / objetivo H4 según dirección
             if dir_h4 == "alcista":
-                entry = prev_high_h1
-                sl_val = prev_low_h1
+                entry = prev_high_h1           # nivel a quebrar y cerrar
+                sl_val = prev_low_h1           # SL bajo el mínimo previo
                 tp3_val = h4_high
-                direccion_txt = "ALCISTA"
-            else:
-                entry = prev_low_h1
-                sl_val = prev_high_h1
+                direccion_txt = "ALCISTA (a favor de H4)"
+                # Cálculo de RR numérico
+                r = abs(entry - sl_val)
+                if r > 0:
+                    tp1_val = entry + r
+                    tp2_val = entry + 2 * r
+                else:
+                    tp1_val = tp2_val = entry
+            else:  # dir_h4 == "bajista"
+                entry = prev_low_h1           # nivel a quebrar y cerrar
+                sl_val = prev_high_h1         # SL sobre el máximo previo
                 tp3_val = h4_low
-                direccion_txt = "BAJISTA"
+                direccion_txt = "BAJISTA (a favor de H4)"
+                r = abs(entry - sl_val)
+                if r > 0:
+                    tp1_val = entry - r
+                    tp2_val = entry - 2 * r
+                else:
+                    tp1_val = tp2_val = entry
 
-            r = abs(entry - sl_val)
+            # Formateo de textos
             if r > 0:
-                tp1_val = entry + r if dir_h4 == "alcista" else entry - r
-                tp2_val = entry + 2 * r if dir_h4 == "alcista" else entry - 2 * r
                 tp1_txt = f"{tp1_val:,.2f} (1:1 • BE)"
                 tp2_txt = f"{tp2_val:,.2f} (1:2 • 50%)"
             else:
@@ -598,18 +612,24 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             sl_txt = f"{sl_val:,.2f} USD"
             tp3_txt = f"{tp3_val:,.2f} USD" if tp3_val is not None else "Alto/Bajo H4"
 
+            # Si YA hubo BOS en H1 → ACTIVO, si no → EN ESPERA
             swing.update(
                 {
-                    "activo": True,
+                    "activo": bool(bos_ok),
                     "direccion": direccion_txt,
-                    "riesgo": "Medio",
+                    "riesgo": "Medio" if bos_ok else "Alto",
                     "premium_zone": poi_txt,
                     "zona_reaccion": zona_reac,
                     "sl": sl_txt,
                     "tp1_rr": tp1_txt,
                     "tp2_rr": tp2_txt,
                     "tp3_objetivo": tp3_txt,
-                    "contexto": "Operación SWING siguiendo estructura H4, con BOS H1 confirmado en zona premium.",
+                    "contexto": (
+                        "Operación SWING siguiendo estructura H4: "
+                        "BOS H1 ya confirmado en zona premium."
+                        if bos_ok
+                        else "Escenario SWING en zona premium H4: esperando quiebre y cierre de H1 en esa dirección."
+                    ),
                 }
             )
 
