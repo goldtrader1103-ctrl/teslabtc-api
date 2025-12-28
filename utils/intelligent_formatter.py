@@ -228,7 +228,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 ⚠️ Riesgo: {cont.get('riesgo', 'N/A')}
 📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
 
-📥 Zona de reacción: {cont.get('zona_reaccion', '—')}
+📥 Punto de entrada: {cont.get('zona_reaccion', '—')}
 🎯 TP1: {cont.get('tp1_rr', '1:1 (50% + BE)')}
 🎯 TP2: {cont.get('tp2_rr', '1:2 (50%)')}
 🛡️ SL: {cont.get('sl', '—')}
@@ -240,7 +240,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 ⚠️ Riesgo: {corr.get('riesgo', 'N/A')}
 📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
 
-📥 Zona de reacción: {corr.get('zona_reaccion', '—')}
+📥 Punto de entrada: {corr.get('zona_reaccion', '—')}
 🎯 TP1: {corr.get('tp1_rr', '1:1 (50% + BE)')}
 🎯 TP2: {corr.get('tp2_rr', '1:2 (50%)')}
 🛡️ SL: {corr.get('sl', '—')}
