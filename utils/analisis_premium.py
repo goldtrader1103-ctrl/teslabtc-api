@@ -218,12 +218,14 @@ def _poi_fibo_band(
     hi = float(hi)
     lo = float(lo)
 
+    # Aunque la dirección esté lateral, usamos el rango H4 para marcar banda.
     if estado == "alcista":
         base, tope = lo, hi
     elif estado == "bajista":
         base, tope = hi, lo
     else:
-        return None
+        # En rango: tomamos low como base y high como tope igualmente
+        base, tope = lo, hi
 
     amp = tope - base
     if amp <= 0:
@@ -285,9 +287,6 @@ REFLEXIONES = [
 ]
 
 
-# ------------------------------------------------------------
-# 🔹 Cálculo de TP numérico (por si lo necesitas luego)
-# ------------------------------------------------------------
 def _calcular_tp(entrada: float, sl: float, rr: float) -> float:
     try:
         entrada = float(entrada)
@@ -352,7 +351,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         if precio_num is not None and p_lo <= precio_num <= p_hi:
             in_premium = True
 
-    # Sesión actual (solo texto + flags)
+    # Sesión actual
     sesion_txt, ses_flags = _estado_sesiones()
 
     # Modo backtest: scalping siempre permitido
@@ -365,7 +364,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "activo": False,
         "direccion": "—",
         "riesgo": "N/A",
-        "zona_reaccion": "—",   # en el formato será "PUNTO DE ENTRADA"
+        "zona_reaccion": "—",   # se mostrará como PUNTO DE ENTRADA en el formato
         "sl": "—",
         "tp1_rr": "—",
         "tp2_rr": "—",
@@ -472,6 +471,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                         ),
                     }
                 )
+
     # ============================
     # 🕰️ SWING (H4 + H1)
     # ============================
@@ -479,9 +479,8 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "activo": False,
         "direccion": "—",
         "riesgo": "N/A",
-        "premium_zone": poi_txt,   # rango 61.8–88.6 (ZONA DE REACCIÓN)
-        "zona_reaccion": poi_txt,  # alias para compatibilidad: siempre el rango
-        "punto_entrada": "—",      # AQUÍ va el último alto/bajo de H1 cuando el precio esté en la zona
+        "premium_zone": poi_txt,   # rango 61.8–88.6
+        "zona_reaccion": "—",      # sólo se usa en SWING
         "sl": "—",
         "tp1_rr": "—",
         "tp2_rr": "—",
@@ -489,66 +488,89 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "contexto": "Esperando alineación H4/H1 y BOS H1 en zona premium.",
     }
 
-    if kl_h1 and dir_h4 in ("alcista", "bajista") and dir_h1 in ("alcista", "bajista"):
-        # Caso 1: precio AÚN no está en zona premium → SOLO SE MUESTRA LA ZONA
-        if not in_premium and p_lo is not None and p_hi is not None:
-            direccion_txt = "ALCISTA" if dir_h4 == "alcista" else "BAJISTA"
+    # 👉 Nueva lógica: si existe zona premium H4, SIEMPRE la mostramos
+    if poi_h4 and p_lo is not None and p_hi is not None and kl_h1:
+        # Dirección "base" del swing (aunque H4 esté en rango)
+        if dir_h4 == "alcista":
+            base_dir = "ALCISTA"
+        elif dir_h4 == "bajista":
+            base_dir = "BAJISTA"
+        else:
+            base_dir = "RANGO"
+
+        # Caso 1: precio AÚN NO está en la zona premium H4
+        if not in_premium:
             swing.update(
                 {
                     "activo": False,
-                    "direccion": direccion_txt,
-                    "riesgo": "Medio",
-                    "premium_zone": poi_txt,   # ZONA DE REACCIÓN: 61.8–88.6
-                    "zona_reaccion": poi_txt,  # sigue siendo el rango
-                    "punto_entrada": "—",      # PUNTO DE ENTRADA -- (todavía no está en zona)
+                    "direccion": base_dir,
+                    "riesgo": "Medio" if base_dir != "RANGO" else "N/A",
+                    "premium_zone": poi_txt,
+                    "zona_reaccion": poi_txt,   # muestra low–high de la banda
                     "sl": "—",
                     "tp1_rr": "—",
                     "tp2_rr": "—",
                     "tp3_objetivo": "—",
                     "contexto": (
                         "Precio aún fuera de la zona premium H4 (61.8–88.6). "
-                        "Se espera que el precio entre en la zona para definir punto de entrada "
-                        "en el último alto/bajo de H1 tras quiebre y cierre."
+                        "Se espera a que el precio ENTRE en este rango para luego "
+                        "validar un BOS claro en H1 a favor de la estructura superior "
+                        "antes de activar el swing TESLABTC."
                     ),
                 }
             )
         else:
-            # Caso 2: precio DENTRO de la zona premium H4 → definimos PUNTO DE ENTRADA + SL + TPs
+            # Caso 2: precio DENTRO de la zona premium H4
             highs_h1 = [k["high"] for k in kl_h1[-40:]]
             lows_h1 = [k["low"] for k in kl_h1[-40:]]
             if len(highs_h1) >= 2 and len(lows_h1) >= 2:
                 prev_high_h1 = max(highs_h1[:-1])
                 prev_low_h1 = min(lows_h1[:-1])
 
+                # Definimos entrada / SL según dirección principal
                 if dir_h4 == "alcista":
-                    # Entrada en último ALTO de H1 (quiebre y cierre)
                     entry = prev_high_h1
                     sl_val = prev_low_h1
                     tp3_val = h4_high
                     direccion_txt = "ALCISTA"
-                else:
-                    # Entrada en último BAJO de H1 (quiebre y cierre)
+                elif dir_h4 == "bajista":
                     entry = prev_low_h1
                     sl_val = prev_high_h1
                     tp3_val = h4_low
                     direccion_txt = "BAJISTA"
+                else:
+                    # Si H4 está en rango, usamos la dirección de H1 como referencia
+                    if dir_h1 == "alcista":
+                        entry = prev_high_h1
+                        sl_val = prev_low_h1
+                        tp3_val = h4_high
+                        direccion_txt = "ALCISTA"
+                    elif dir_h1 == "bajista":
+                        entry = prev_low_h1
+                        sl_val = prev_high_h1
+                        tp3_val = h4_low
+                        direccion_txt = "BAJISTA"
+                    else:
+                        entry = prev_high_h1
+                        sl_val = prev_low_h1
+                        tp3_val = h4_high
+                        direccion_txt = "RANGO"
 
                 r = abs(entry - sl_val)
-                if r > 0:
-                    if dir_h4 == "alcista":
-                        tp1_val = entry + r        # 1:1
-                        tp2_val = entry + 2 * r    # 1:2
+                if r > 0 and direccion_txt in ("ALCISTA", "BAJISTA"):
+                    if direccion_txt == "ALCISTA":
+                        tp1_val = entry + r
+                        tp2_val = entry + 2 * r
                     else:
-                        tp1_val = entry - r        # 1:1
-                        tp2_val = entry - 2 * r    # 1:2
-
+                        tp1_val = entry - r
+                        tp2_val = entry - 2 * r
                     tp1_txt = f"{tp1_val:,.2f}"
                     tp2_txt = f"{tp2_val:,.2f}"
                 else:
                     tp1_txt = "—"
                     tp2_txt = "—"
 
-                punto_entrada_txt = f"{entry:,.2f}"
+                zona_reac = f"{entry:,.2f}"
                 sl_txt = f"{sl_val:,.2f}"
                 tp3_txt = f"{tp3_val:,.2f}" if tp3_val is not None else "—"
 
@@ -556,10 +578,11 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 bos_ok = False
                 try:
                     bos_h1 = detectar_bos(kl_h1)
-                    bos_ok = bos_h1.get("bos") and (
-                        (bos_h1.get("tipo") == "alcista" and dir_h4 == "alcista")
-                        or (bos_h1.get("tipo") == "bajista" and dir_h4 == "bajista")
-                    )
+                    if dir_h4 in ("alcista", "bajista"):
+                        bos_ok = bos_h1.get("bos") and (
+                            (bos_h1.get("tipo") == "alcista" and dir_h4 == "alcista")
+                            or (bos_h1.get("tipo") == "bajista" and dir_h4 == "bajista")
+                        )
                 except Exception:
                     bos_ok = False
 
@@ -567,26 +590,25 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
 
                 if activo:
                     contexto_txt = (
-                        "Operación SWING ACTIVA: precio en zona premium H4 (61.8–88.6), "
-                        "BOS H1 confirmado en la misma dirección y punto de entrada en el "
-                        "último alto/bajo de H1 tras quiebre y cierre. "
+                        "Operación SWING ACTIVA: H4 y H1 alineados, BOS H1 confirmado "
+                        "dentro de la zona premium TESLABTC (61.8–88.6). "
                         "TP1 1:1 (mover a BE), TP2 1:2 y TP3 en el alto/bajo operativo de H4."
                     )
                 else:
                     contexto_txt = (
-                        "Precio dentro de la zona premium H4 (61.8–88.6) con punto de entrada "
-                        "proyectado en el último alto/bajo de H1 (quiebre y cierre), pero el BOS H1 "
-                        "aún no está totalmente validado a favor de H4. Escenario en espera."
+                        "Precio dentro de la zona premium H4, pero el swing se mantiene "
+                        "EN ESPERA hasta que se confirme un BOS claro en H1 a favor de la "
+                        "estructura superior. La gestión propuesta es: TP1 1:1 (BE), "
+                        "TP2 1:2 y TP3 en el alto/bajo de H4."
                     )
 
                 swing.update(
                     {
                         "activo": activo,
                         "direccion": direccion_txt,
-                        "riesgo": "Medio",
-                        "premium_zone": poi_txt,      # ZONA DE REACCIÓN: RANGO
-                        "zona_reaccion": poi_txt,     # se mantiene igual para mostrar 88600–87900
-                        "punto_entrada": punto_entrada_txt,  # PUNTO DE ENTRADA: último alto/bajo H1
+                        "riesgo": "Medio" if direccion_txt != "RANGO" else "N/A",
+                        "premium_zone": poi_txt,
+                        "zona_reaccion": zona_reac,
                         "sl": sl_txt,
                         "tp1_rr": tp1_txt,
                         "tp2_rr": tp2_txt,
