@@ -262,18 +262,24 @@ def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
       - Texto de la sesión actual (NY, Londres, Asia o combinadas)
       - Flags booleanos por sesión: {"asia": bool, "londres": bool, "ny": bool}
 
-    Horario Colombia:
+    Horario de referencia Colombia:
       • ASIA:    17:00 – 02:00
       • LONDRES: 02:00 – 11:00
       • NY:      07:00 – 15:00
+
+    🔵 MODO 24/7:
+      - Si no cae en ninguna ventana exacta, se asigna por defecto a NY
+        para mantener los análisis activos todo el tiempo.
     """
     ahora = datetime.now(TZ_COL)
     m = ahora.hour * 60 + ahora.minute  # minutos desde medianoche
 
+    # Ventanas estándar
     asia = (m >= 17 * 60) or (m < 2 * 60)
     londres = 2 * 60 <= m < 11 * 60
     ny = 7 * 60 <= m < 15 * 60
 
+    # Texto según combinaciones
     if ny and londres:
         sesion_txt = "Sesión NY-LONDRES (NY 07:00–15:00 | LONDRES 02:00–11:00 COL)"
     elif londres and asia:
@@ -285,7 +291,11 @@ def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
     elif asia:
         sesion_txt = "Sesión ASIA (17:00–02:00 COL)"
     else:
-        sesion_txt = "Fuera de sesiones principales (Asia, Londres y NY)."
+        # 🔵 MODO BACKTEST 24/7:
+        # Si no está en ninguna ventana exacta (p.ej. 15:00–17:00),
+        # lo consideramos como sesión NY para efectos del análisis.
+        sesion_txt = "Sesión NY (07:00–15:00 COL)"
+        ny = True
 
     return sesion_txt, {"asia": asia, "londres": londres, "ny": ny}
 
