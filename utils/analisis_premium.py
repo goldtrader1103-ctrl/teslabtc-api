@@ -268,7 +268,7 @@ def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
     elif asia:
         sesion_txt = "Sesión ASIA (17:00–02:00 COL)"
     else:
-        # Sin huecos "fuera de sesión": lo marcamos como extensión de NY
+        # No queremos "fuera de sesión": lo interpretamos como extensión de NY
         sesion_txt = "Sesión NY (horario extendido fuera de cash RTH)."
 
     return sesion_txt, {"asia": asia, "londres": londres, "ny": ny}
@@ -348,7 +348,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     p_lo = p_hi = None
     if poi_h4:
         p_lo, p_hi = sorted([float(poi_h4[0]), float(poi_h4[1])])
-        poi_txt = f"{p_lo:,.2f}–{p_hi:,.2f} USD"
+        poi_txt = f"{p_lo:,.2f}–{p_hi:,.2f}"
         if precio_num is not None and p_lo <= precio_num <= p_hi:
             in_premium = True
 
@@ -365,10 +365,10 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "activo": False,
         "direccion": "—",
         "riesgo": "N/A",
-        "zona_reaccion": "—",
+        "zona_reaccion": "—",   # en el formato será "PUNTO DE ENTRADA"
         "sl": "—",
-        "tp1_rr": "1:1 (50% + BE)",
-        "tp2_rr": "1:2 (50%)",
+        "tp1_rr": "—",
+        "tp2_rr": "—",
         "contexto": "Sin dirección clara en H1.",
     }
     scalping_corr = dict(scalping_cont)
@@ -393,20 +393,14 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                         "activo": True,
                         "direccion": "ALCISTA (a favor de H1)",
                         "riesgo": "Bajo",
-                        # solo precio:
-                        "zona_reaccion": f"{prev_high:,.2f} USD",
-                        "sl": f"{prev_low:,.2f} USD",
-                        "tp1_rr": (
-                            f"{tp1_cont:,.2f} (1:1 • 50% + BE)"
-                            if r_cont > 0
-                            else "1:1 (50% + BE)"
+                        "zona_reaccion": f"{entry_cont:,.2f}",
+                        "sl": f"{sl_cont:,.2f}",
+                        "tp1_rr": f"{tp1_cont:,.2f}" if r_cont > 0 else "—",
+                        "tp2_rr": f"{tp2_cont:,.2f}" if r_cont > 0 else "—",
+                        "contexto": (
+                            "SCALPING a favor de H1: entrada por ruptura del HIGH M5, "
+                            "SL en el LOW M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
                         ),
-                        "tp2_rr": (
-                            f"{tp2_cont:,.2f} (1:2 • 50%)"
-                            if r_cont > 0
-                            else "1:2 (50%)"
-                        ),
-                        "contexto": "Entrada SCALPING a favor de la estructura intradía H1.",
                     }
                 )
 
@@ -422,19 +416,14 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                         "activo": True,
                         "direccion": "BAJISTA (contra H1)",
                         "riesgo": "Alto",
-                        "zona_reaccion": f"{prev_low:,.2f} USD",
-                        "sl": f"{prev_high:,.2f} USD",
-                        "tp1_rr": (
-                            f"{tp1_corr:,.2f} (1:1 • 50% + BE)"
-                            if r_corr > 0
-                            else "1:1 (50% + BE)"
+                        "zona_reaccion": f"{entry_corr:,.2f}",
+                        "sl": f"{sl_corr:,.2f}",
+                        "tp1_rr": f"{tp1_corr:,.2f}" if r_corr > 0 else "—",
+                        "tp2_rr": f"{tp2_corr:,.2f}" if r_corr > 0 else "—",
+                        "contexto": (
+                            "SCALPING de corrección contra H1: entrada por ruptura del LOW M5, "
+                            "SL en el HIGH M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
                         ),
-                        "tp2_rr": (
-                            f"{tp2_corr:,.2f} (1:2 • 50%)"
-                            if r_corr > 0
-                            else "1:2 (50%)"
-                        ),
-                        "contexto": "Entrada SCALPING de corrección intradía contra H1.",
                     }
                 )
             else:
@@ -450,19 +439,14 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                         "activo": True,
                         "direccion": "BAJISTA (a favor de H1)",
                         "riesgo": "Bajo",
-                        "zona_reaccion": f"{prev_low:,.2f} USD",
-                        "sl": f"{prev_high:,.2f} USD",
-                        "tp1_rr": (
-                            f"{tp1_cont:,.2f} (1:1 • 50% + BE)"
-                            if r_cont > 0
-                            else "1:1 (50% + BE)"
+                        "zona_reaccion": f"{entry_cont:,.2f}",
+                        "sl": f"{sl_cont:,.2f}",
+                        "tp1_rr": f"{tp1_cont:,.2f}" if r_cont > 0 else "—",
+                        "tp2_rr": f"{tp2_cont:,.2f}" if r_cont > 0 else "—",
+                        "contexto": (
+                            "SCALPING a favor de H1: entrada por ruptura del LOW M5, "
+                            "SL en el HIGH M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
                         ),
-                        "tp2_rr": (
-                            f"{tp2_cont:,.2f} (1:2 • 50%)"
-                            if r_cont > 0
-                            else "1:2 (50%)"
-                        ),
-                        "contexto": "Entrada SCALPING a favor de la estructura intradía H1.",
                     }
                 )
 
@@ -478,19 +462,14 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                         "activo": True,
                         "direccion": "ALCISTA (contra H1)",
                         "riesgo": "Alto",
-                        "zona_reaccion": f"{prev_high:,.2f} USD",
-                        "sl": f"{prev_low:,.2f} USD",
-                        "tp1_rr": (
-                            f"{tp1_corr:,.2f} (1:1 • 50% + BE)"
-                            if r_corr > 0
-                            else "1:1 (50% + BE)"
+                        "zona_reaccion": f"{entry_corr:,.2f}",
+                        "sl": f"{sl_corr:,.2f}",
+                        "tp1_rr": f"{tp1_corr:,.2f}" if r_corr > 0 else "—",
+                        "tp2_rr": f"{tp2_corr:,.2f}" if r_corr > 0 else "—",
+                        "contexto": (
+                            "SCALPING de corrección contra H1: entrada por ruptura del HIGH M5, "
+                            "SL en el LOW M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
                         ),
-                        "tp2_rr": (
-                            f"{tp2_corr:,.2f} (1:2 • 50%)"
-                            if r_corr > 0
-                            else "1:2 (50%)"
-                        ),
-                        "contexto": "Entrada SCALPING de corrección intradía contra H1.",
                     }
                 )
 
@@ -501,16 +480,15 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "activo": False,
         "direccion": "—",
         "riesgo": "N/A",
-        "premium_zone": poi_txt,
-        "zona_reaccion": "—",
+        "premium_zone": poi_txt,   # rango 61.8–88.6
+        "zona_reaccion": "—",      # sólo se usa en SWING
         "sl": "—",
-        "tp1_rr": "1:1 (BE)",
-        "tp2_rr": "1:2 (50%)",
+        "tp1_rr": "—",
+        "tp2_rr": "—",
         "tp3_objetivo": "—",
         "contexto": "Esperando alineación H4/H1 y BOS H1 en zona premium.",
     }
 
-    # Solo si H4 y H1 tienen dirección clara (no lateral)
     if kl_h1 and dir_h4 in ("alcista", "bajista") and dir_h1 in ("alcista", "bajista"):
         # Caso 1: precio AÚN no está en zona premium → sólo marcamos la zona
         if not in_premium and p_lo is not None and p_hi is not None:
@@ -521,15 +499,15 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     "direccion": direccion_txt,
                     "riesgo": "Medio",
                     "premium_zone": poi_txt,
-                    "zona_reaccion": f"Zona premium H4: {poi_txt}",
+                    "zona_reaccion": poi_txt,   # rango puro, sin texto
                     "sl": "—",
-                    "tp1_rr": "1:1 (BE)",
-                    "tp2_rr": "1:2 (50%)",
+                    "tp1_rr": "—",
+                    "tp2_rr": "—",
                     "tp3_objetivo": "—",
                     "contexto": (
-                        "Precio aún fuera de la zona premium H4. "
-                        "Cuando el precio entre en esa zona, se buscará BOS en H1 "
-                        "a favor de la dirección de H4 para activar un swing TESLABTC."
+                        "Precio aún fuera de la zona premium H4 (61.8–88.6). "
+                        "Cuando el precio entre en esa zona se buscará un BOS claro en H1, "
+                        "a favor de la dirección de H4, para activar un swing TESLABTC."
                     ),
                 }
             )
@@ -560,15 +538,15 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     else:
                         tp1_val = entry - r
                         tp2_val = entry - 2 * r
-                    tp1_txt = f"{tp1_val:,.2f} (1:1 • BE)"
-                    tp2_txt = f"{tp2_val:,.2f} (1:2 • 50%)"
+                    tp1_txt = f"{tp1_val:,.2f}"
+                    tp2_txt = f"{tp2_val:,.2f}"
                 else:
-                    tp1_txt = "1:1 (BE)"
-                    tp2_txt = "1:2 (50%)"
+                    tp1_txt = "—"
+                    tp2_txt = "—"
 
-                zona_reac = f"Quiebre y cierre de {entry:,.2f} USD"
-                sl_txt = f"{sl_val:,.2f} USD"
-                tp3_txt = f"{tp3_val:,.2f} USD" if tp3_val is not None else "Alto/Bajo H4"
+                zona_reac = f"{entry:,.2f}"
+                sl_txt = f"{sl_val:,.2f}"
+                tp3_txt = f"{tp3_val:,.2f}" if tp3_val is not None else "—"
 
                 # BOS H1 en dirección de H4 (para marcar ACTIVO)
                 bos_ok = False
@@ -586,12 +564,14 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 if activo:
                     contexto_txt = (
                         "Operación SWING ACTIVA: H4 y H1 alineados, BOS H1 confirmado "
-                        "dentro de la zona premium TESLABTC."
+                        "dentro de la zona premium TESLABTC. TP1 1:1 (mover a BE), "
+                        "TP2 1:2 y TP3 en el alto/bajo operativo de H4."
                     )
                 else:
                     contexto_txt = (
-                        "Escenario SWING en espera: el precio ya está en zona premium H4; "
-                        "se requiere BOS claro en H1 a favor de H4 para activar la entrada."
+                        "Escenario SWING en espera dentro de la zona premium H4: "
+                        "se requiere un BOS claro en H1 a favor de H4 para activar la entrada. "
+                        "Gestión propuesta: TP1 1:1 (BE), TP2 1:2 y TP3 en el alto/bajo de H4."
                     )
 
                 swing.update(
