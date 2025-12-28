@@ -42,7 +42,7 @@ from utils.intelligent_formatter import (
     construir_mensaje_free,
     construir_contexto_detallado,
 )
-
+from conceptos_tesla import listar_conceptos, obtener_concepto
 
 # ============================================================
 # ⚙️ CONFIGURACIÓN FASTAPI
@@ -193,6 +193,27 @@ async def obtener_contexto(
         "tipo_escenario": tipo,
         "contexto": contexto,
     }
+# ============================================================
+# 🎓 ENDPOINT EDUCATIVO — /concepto
+# ============================================================
+
+@app.get("/concepto", tags=["Glosario TESLA"])
+async def concepto(nombre: str = Query("todos", description="Nombre del concepto o 'todos'")):
+    """
+    Devuelve conceptos del glosario TESLA STRATEGY.
+
+    - nombre = "todos"  → devuelve la lista completa
+    - nombre = "BOS"    → devuelve solo BOS
+    """
+    try:
+        if nombre.lower() == "todos":
+            conceptos = listar_conceptos()
+            return {"TESLABTC.KG - Concepto": conceptos}
+        else:
+            concepto = obtener_concepto(nombre)
+            return {"TESLABTC.KG - Concepto": concepto}
+    except Exception as e:
+        return {"estado": "❌", "mensaje": f"Error en /concepto: {e}"}
 
 # ============================================================
 # 🧩 OTROS ENDPOINTS (tokens, health, monitor)
