@@ -185,6 +185,33 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
     def estado(activo_flag: Any) -> str:
         return "✅ ACTIVO" if activo_flag else "⏳ En espera"
 
+    # ============================
+    # 🎯 LÓGICA ESPECIAL SWING
+    # ============================
+    swing_punto_entrada = swing.get("punto_entrada", "—")
+    swing_zona = swing.get("premium_zone") or swing.get("zona_reaccion", "—")
+    swing_tp1 = swing.get("tp1_rr", "1:1 (BE)")
+    swing_tp2 = swing.get("tp2_rr", "1:2 (50%)")
+    swing_tp3 = swing.get("tp3_objetivo", "—")
+    swing_sl = swing.get("sl", "—")
+
+    # Si NO hay punto de entrada (precio aún no está en la zona 61.8–88.6)
+    if not swing_punto_entrada or swing_punto_entrada == "—":
+        swing_detalle = f"""📥 Zona de reacción: {swing_zona}
+📍 Punto de entrada: --
+🎯 TP1: --
+🎯 TP2: --
+🎯 TP3: --
+🛡️ SL: --"""
+    else:
+        # Precio DENTRO de la zona: usamos el último alto/bajo de H1 como punto de entrada
+        swing_detalle = f"""📥 Zona de reacción: {swing_zona}
+📍 Punto de entrada: {swing_punto_entrada} (quiebre y cierre H1)
+🎯 TP1: {swing_tp1}
+🎯 TP2: {swing_tp2}
+🎯 TP3: {swing_tp3}
+🛡️ SL: {swing_sl}"""
+
     msg = f"""*📋 SEÑALES ACTIVAS*
 ──────────────────────────────
 📅 Fecha: {fecha}
@@ -225,11 +252,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 ⚠️ Riesgo: {swing.get('riesgo', 'N/A')}
 📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
 
-📥 Zona de reacción: {swing.get('zona_reaccion', '—')}
-🎯 TP1: {swing.get('tp1_rr', '1:1 (BE)')}
-🎯 TP2: {swing.get('tp2_rr', '1:2 (50%)')}
-🎯 TP3: {swing.get('tp3_objetivo', '—')}
-🛡️ SL: {swing.get('sl', '—')}
+{swing_detalle}
 
 *📓 Reflexión TESLABTC A.P.*
 ──────────────────────────────
