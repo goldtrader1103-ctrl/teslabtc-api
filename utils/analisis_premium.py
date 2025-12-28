@@ -2,10 +2,10 @@ from main import VERSION_TESLA
 # ============================================================
 # 🧠 TESLABTC.KG — Análisis Premium (v5.3.1 PRO REAL MARKET)
 # ============================================================
-# Versión simplificada:
+# Versión simplificada TESLABTC:
 #   - Swing: estructura H4/H1 con zona premium H4 (61.8–88.6)
 #   - Scalping: M5 en sesión NY, a favor y contra tendencia H1
-#   - Sin zonas de liquidez ni escenarios antiguos, sólo acción del precio
+#   - Sin zonas de liquidez antiguas, sólo acción del precio
 # ============================================================
 
 import requests
@@ -97,6 +97,12 @@ def _zigzag_pivots(
     deviation: float = 5.0,
     backstep: int = 2,
 ) -> List[Tuple[int, str, float]]:
+    """
+    Pivotes tipo ZigZag:
+    - depth: pivote confirmado con 'depth' velas a cada lado
+    - deviation: % mínimo de cambio desde el último pivote
+    - backstep: si aparece pivote del mismo tipo muy cerca, se reemplaza por el más extremo
+    """
     if not kl or len(kl) < (depth * 2 + 5):
         return []
 
@@ -146,6 +152,10 @@ def _detectar_tendencia_zigzag(
     deviation: float = 5.0,
     backstep: int = 2,
 ) -> Dict[str, Any]:
+    """
+    Tendencia estructural TESLABTC usando ZigZag:
+    - Usa los últimos 2 HIGH y 2 LOW del zigzag.
+    """
     piv = _zigzag_pivots(kl, depth=depth, deviation=deviation, backstep=backstep)
     if not kl or len(piv) < 3:
         return {"estado": "lateral", "BOS": "—"}
@@ -153,6 +163,7 @@ def _detectar_tendencia_zigzag(
     highs = [(i, p) for (i, t, p) in piv if t == "H"]
     lows = [(i, p) for (i, t, p) in piv if t == "L"]
 
+    # Pocos pivotes: inferimos sólo por el último tramo
     if len(highs) < 2 or len(lows) < 2:
         idx_prev, tipo_prev, price_prev = piv[-2]
         idx_last, tipo_last, price_last = piv[-1]
@@ -212,6 +223,11 @@ def _poi_fibo_band(
     hi: Optional[float],
     lo: Optional[float],
 ) -> Optional[Tuple[float, float]]:
+    """
+    Banda POI 61.8–88.6 del último impulso (H4):
+    - En alcista: se mide desde el LOW al HIGH
+    - En bajista: desde el HIGH al LOW
+    """
     if hi is None or lo is None or hi == lo:
         return None
 
@@ -238,13 +254,14 @@ def _poi_fibo_band(
 
 
 # ------------------------------------------------------------
-# 🔹 Sesión NY + ventana de scalping
+# 🔹 Sesiones (Asia, Londres, NY) + ventana SCALPING
 # ------------------------------------------------------------
 def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
     """
     Devuelve:
       - Texto de la sesión actual (NY, Londres, Asia o combinadas)
       - Flags booleanos por sesión: {"asia": bool, "londres": bool, "ny": bool}
+
     Horario Colombia:
       • ASIA:    17:00 – 02:00
       • LONDRES: 02:00 – 11:00
@@ -274,7 +291,10 @@ def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
 
 
 def _ventana_scalping_ny() -> bool:
-    """Ventana operativa para SCALPING en NY: primeras 2 horas."""
+    """
+    Ventana operativa original de SCALPING NY (primeras 2 horas).
+    La dejamos disponible por si más adelante quieres limitarla otra vez.
+    """
     ahora = datetime.now(TZ_COL)
     start = ahora.replace(hour=8, minute=30, second=0, microsecond=0)
     end = start + timedelta(hours=2)
@@ -296,6 +316,10 @@ REFLEXIONES = [
 # 🔹 Cálculo de TP numérico
 # ------------------------------------------------------------
 def _calcular_tp(entrada: float, sl: float, rr: float) -> float:
+    """
+    TP genérico: entrada ± (riesgo * RR).
+    Se dejó por si en el futuro quieres reusarlo para variantes.
+    """
     try:
         entrada = float(entrada)
         sl = float(sl)
@@ -316,10 +340,11 @@ def _calcular_tp(entrada: float, sl: float, rr: float) -> float:
 # 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3, versión simplificada)
 # ============================================================
 def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
-    """Versión simplificada TESLABTC:
-    - Usa estructura H4/H1 para SWING
-    - Usa M5 para señales SCALPING en NY
-    - No muestra zonas de liquidez; sólo acción del precio
+    """
+    Versión simplificada TESLABTC:
+      - Usa estructura H4/H1 para SWING
+      - Usa M5 para señales SCALPING ligadas a H1
+      - No muestra zonas de liquidez; sólo acción del precio
     """
     now = datetime.now(TZ_COL)
     fecha_txt = now.strftime("%d/%m/%Y %H:%M:%S")
@@ -358,9 +383,12 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         if precio_num is not None and p_lo <= precio_num <= p_hi:
             in_premium = True
 
-    # Sesión NY
-    sesion_txt, ny_activa = _estado_sesion_ny()
-    # 🔵 MODO BACKTEST: SCALPING activo durante toda la sesión NY
+    # Sesiones globales (Asia / Londres / NY)
+    sesion_txt, sesiones_flags = _estado_sesiones()
+    ny_activa = bool(sesiones_flags.get("ny", False))
+
+    # 🔵 MODO BACKTEST:
+    # SCALPING activo durante toda la sesión NY
     ventana_scalping = ny_activa
 
     # ============================
@@ -379,7 +407,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     scalping_corr = dict(scalping_cont)
 
     if kl_m5 and ventana_scalping and dir_h1 in ("alcista", "bajista"):
-        # Usamos el último HIGH/LOW operativos de M5
+        # Usamos el último HIGH/LOW operativos de M5 (ventana reciente)
         highs_m5 = [k["high"] for k in kl_m5[-30:]]
         lows_m5 = [k["low"] for k in kl_m5[-30:]]
         if len(highs_m5) >= 2 and len(lows_m5) >= 2:
@@ -515,7 +543,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "contexto": "Esperando alineación H4/H1 y BOS H1 en zona premium.",
     }
 
-    if kl_h1 and dir_h4 in ("alcista", "bajista") and dir_h1 == dir_h4 and precio_num is not None and in_premium:
+    if (
+        kl_h1
+        and dir_h4 in ("alcista", "bajista")
+        and dir_h1 == dir_h4
+        and precio_num is not None
+        and in_premium
+    ):
         # BOS H1 en dirección de H4
         bos_h1 = detectar_bos(kl_h1)
         bos_ok = bos_h1.get("bos") and (
@@ -572,7 +606,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     # Reflexión
     reflexion = random.choice(REFLEXIONES)
 
-    # Estructura / zonas mínimas (para compatibilidad)
+    # Estructura / zonas mínimas (para compatibilidad con formatter)
     estructura_detectada = {
         "H4": dir_h4,
         "H1": dir_h1,
