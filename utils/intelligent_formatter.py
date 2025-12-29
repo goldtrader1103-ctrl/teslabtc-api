@@ -348,7 +348,15 @@ def construir_mensaje_senales(data: Dict[str, Any]) -> str:
 # 🧠 CONTEXTO DETALLADO POR ESCENARIO
 # ============================================================
 
-def construir_contexto_detallado(data: Dict[str, Any], tipo_escenario: str) -> str:
+def construir_contexto_detallado(data: dict, tipo):
+
+    # 🛡 Normalizar el parámetro tipo
+    if isinstance(tipo, dict):
+        tipo = tipo.get("tipo") or tipo.get("escenario") or ""
+
+    tipo = str(tipo).strip().lower()
+    
+    def construir_contexto_detallado(data: Dict[str, Any], tipo_escenario: str) -> str:
     """
     Construye el contexto para:
       - "scalping_continuacion"
