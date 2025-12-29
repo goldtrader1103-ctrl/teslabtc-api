@@ -306,12 +306,31 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
     # Helpers de formato
     # -----------------------------
     def _extra_tf(tf: str):
+        """
+        Extrae estado + rango de una TF, siendo tolerante si `estado`
+        viene raro (por ejemplo como dict en versiones viejas).
+        """
         info = estructura.get(tf, {}) or {}
-        if not isinstance(info, dict):
-            info = {}
-        estado = str(info.get("estado", "sin_datos")).upper()
-        hi = info.get("RANGO_HIGH") or info.get("high") or info.get("swing_high")
-        lo = info.get("RANGO_LOW") or info.get("low") or info.get("swing_low")
+
+        raw_estado = info.get("estado", "sin_datos")
+
+        # 👇 Blindaje: si viene dict u otra cosa rara, lo pisamos
+        if isinstance(raw_estado, dict):
+            estado = "SIN_DATOS"
+        else:
+            estado = str(raw_estado).upper()
+
+        hi = (
+            info.get("RANGO_HIGH")
+            or info.get("high")
+            or info.get("swing_high")
+        )
+        lo = (
+            info.get("RANGO_LOW")
+            or info.get("low")
+            or info.get("swing_low")
+        )
+
         return estado, hi, lo
 
     def _fmt_rango(lo, hi):
