@@ -1,12 +1,11 @@
 # ============================================================
-# 🧠 TESLABTC.KG — Intelligent Formatter (v5.8 PRO FINAL)
+# 🧠 TESLABTC.KG — Intelligent Formatter (v5.8 PRO FINAL SIN .upper)
 # ============================================================
 # - Dirección D, H4 y H1 con RANGO real (High–Low)
 # - Muestra Zonas de Liquidez: PDH, PDL, Asia High/Low, POI H4, POI H1
 # - Escenarios completos (Continuación y Corrección)
-# - Confirmaciones detalladas tipo lista
-# - Setup Activo con etiqueta superior (color dinámica)
 # - Formato seguro para Telegram (Markdown protegido)
+# - SIN USAR .upper() PARA EVITAR ERRORES CON dict
 # ============================================================
 
 import random
@@ -135,10 +134,12 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
     # ========================================================
     etiqueta_setup = ""
     if setup.get("activo"):
-        tipo = str(setup.get("tipo", "")).lower()
-        color_emoji = "🟢" if "compra" in tipo else "🔴" if "venta" in tipo else "💥"
+        tipo_raw = setup.get("tipo", "—")
+        tipo_txt = str(tipo_raw)
+        tipo_lower = tipo_txt.lower()
+        color_emoji = "🟢" if "compra" in tipo_lower else "🔴" if "venta" in tipo_lower else "💥"
         etiqueta_setup = (
-            f"{color_emoji} **SETUP ACTIVO ({str(setup.get('tipo', '—')).upper()}) — PRECIO {precio}** {color_emoji}\n"
+            f"{color_emoji} **SETUP ACTIVO ({tipo_txt}) — PRECIO {precio}** {color_emoji}\n"
             "──────────────────────────────\n"
             f"📍 Zona de entrada: {setup.get('zona_entrada', '—')} | "
             f"🎯 TP1: {setup.get('tp1', '—')} | 🛡️ SL: {setup.get('sl', '—')}\n"
@@ -154,14 +155,11 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 
     def _fmt_linea(tf: Dict[str, Any], nombre: str, icono: str) -> str:
         estado_raw = tf.get("estado", "—")
-        try:
-            estado = str(estado_raw).upper()
-        except Exception:
-            estado = "SIN_DATOS"
+        estado_txt = str(estado_raw)
         bos = tf.get("BOS", "—")
         hi = tf.get("RANGO_HIGH") or zonas.get(f"{nombre}_HIGH", "—")
         lo = tf.get("RANGO_LOW") or zonas.get(f"{nombre}_LOW", "—")
-        return f"{icono} {nombre}: {estado} ({bos}) | RANGO: {hi}–{lo}"
+        return f"{icono} {nombre}: {estado_txt} ({bos}) | RANGO: {hi}–{lo}"
 
     direccion_txt = "\n".join(
         [
@@ -317,7 +315,7 @@ def construir_mensaje_senales(data: Dict[str, Any]) -> str:
 ──────────────────────────────
 📌 Estado: {estado(corr.get('activo'))}
 📈 Dirección: {corr.get('direccion', '—')}
-⚠️ Riesgo: {corr.get('riesgo', 'N/A')}
+⚠️ Riesgo: {cont.get('riesgo', 'N/A')}
 📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
 
 📥 Punto de entrada: {corr.get('zona_reaccion', '—')}
@@ -367,6 +365,7 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
       - scalping_continuacion
       - scalping_correccion
       - swing
+    SIN USAR .upper() EN NINGÚN LADO.
     """
 
     activo = data.get("activo", "BTCUSDT")
@@ -382,23 +381,13 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
     # -----------------------------
     def _extra_tf(tf: str):
         """
-        Extrae estado + rango de una TF, tolerante si `estado`
-        viene como dict u otro tipo raro.
+        Extrae estado + rango de una TF sin usar .upper().
         """
         info = estructura.get(tf, {}) or {}
         raw_estado = info.get("estado", "sin_datos")
-
-        if isinstance(raw_estado, dict):
-            estado = "SIN_DATOS"
-        else:
-            try:
-                estado = str(raw_estado).upper()
-            except Exception:
-                estado = "SIN_DATOS"
-
+        estado = str(raw_estado)  # sin upper
         hi = info.get("RANGO_HIGH") or info.get("high") or info.get("swing_high")
         lo = info.get("RANGO_LOW") or info.get("low") or info.get("swing_low")
-
         return estado, hi, lo
 
     def _fmt_rango(lo, hi):
@@ -440,19 +429,22 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
         f"• H1 — Rango operativo: {rango_h1_txt}\n"
     )
 
-    # Comentario de relación H4 vs H1
-    if estado_h4 in ("ALCISTA", "BAJISTA") and estado_h1 in ("ALCISTA", "BAJISTA"):
-        if estado_h4 == estado_h1:
-            partes.append(
-                "\n🧭 Cuando *H4 y H1 van en la misma dirección* hablamos de "
-                "*continuidad institucional* del movimiento.\n"
-            )
-        else:
-            partes.append(
-                "\n🧭 Cuando *H4 y H1 van en direcciones opuestas*, interpretamos "
-                "que H1 está profundizando hacia la *zona premium de H4* antes de "
-                "reanudarse la tendencia macro.\n"
-            )
+    # Comentario de relación H4 vs H1 (sin upper)
+    if estado_h4 and estado_h1 and isinstance(estado_h4, str) and isinstance(estado_h1, str):
+        eh4 = estado_h4.lower()
+        eh1 = estado_h1.lower()
+        if eh4 in ("alcista", "bajista") and eh1 in ("alcista", "bajista"):
+            if eh4 == eh1:
+                partes.append(
+                    "\n🧭 Cuando *H4 y H1 van en la misma dirección* hablamos de "
+                    "*continuidad institucional* del movimiento.\n"
+                )
+            else:
+                partes.append(
+                    "\n🧭 Cuando *H4 y H1 van en direcciones opuestas*, interpretamos "
+                    "que H1 está profundizando hacia la *zona premium de H4* antes de "
+                    "reanudarse la tendencia macro.\n"
+                )
 
     # =====================================================
     # 🔷 ESCENARIO SCALPING CONTINUACIÓN
@@ -467,10 +459,10 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
 
         partes.append(
             "\n🔷 *Escenario SCALPING de Continuación*\n\n"
-            "Este escenario *siempre opera a favor de la estructura de H1* "
+            "Este escenario siempre opera a favor de la estructura de H1 "
             "(puede ser BUY o SELL, según esté H1 alcista o bajista):\n"
-            "1. Se toma como referencia el *último HIGH/LOW relevante en M5*.\n"
-            "2. Se espera un *BOS claro en M5* en la dirección de H1.\n"
+            "1. Se toma como referencia el último HIGH/LOW relevante en M5.\n"
+            "2. Se espera un BOS claro en M5 en la dirección de H1.\n"
             "3. La operación busca acompañar la direccionalidad intradía, no ir contra ella.\n\n"
         )
 
@@ -494,9 +486,9 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
 
         partes.append(
             "\n🔷 *Escenario SCALPING de Corrección*\n\n"
-            "Este escenario *siempre va en contra de H1* (es el retroceso intradía):\n"
+            "Este escenario siempre va en contra de H1 (es el retroceso intradía):\n"
             "1. H1 marca la dirección principal, pero el precio corrige contra ella.\n"
-            "2. Se busca un *BOS en M5* contra H1, dentro de un rango claro.\n"
+            "2. Se busca un BOS en M5 contra H1, dentro de un rango claro.\n"
             "3. El objetivo es capturar el retroceso, no toda la tendencia.\n\n"
         )
 
@@ -513,7 +505,6 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
     elif tipo_escenario == "swing":
         zona = swing_data.get("zona_reaccion") or swing_data.get("premium_zone") or {}
 
-        # Puede llegar como string "xxxxx–yyyy" o como dict/lista
         if isinstance(zona, dict):
             z_min = zona.get("min") or zona.get("low") or zona.get("zona_min")
             z_max = zona.get("max") or zona.get("high") or zona.get("zona_max")
@@ -530,10 +521,10 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
 
         partes.append(
             "\n📈 *Escenario SWING H4*\n\n"
-            "El swing se construye a partir del *último impulso válido de H4*:\n"
+            "El swing se construye a partir del último impulso válido de H4:\n"
             "1. Se identifica el tramo de impulso actual en H4.\n"
-            "2. Sobre ese impulso se calcula la *zona premium 61.8 % – 88.6 %*.\n"
-            "3. En esa zona se exige *quiebre y cierre de H1* a favor de la "
+            "2. Sobre ese impulso se calcula la zona premium 61.8 % – 88.6 %.\n"
+            "3. En esa zona se exige quiebre y cierre de H1 a favor de la "
             "tendencia de H4 antes de validar el setup.\n\n"
         )
 
@@ -556,8 +547,8 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
     # =====================================================
     partes.append(
         "🕒 *Recomendación operativa TESLABTC:*\n"
-        "• Priorizar las *primeras 2 horas* de la sesión activa (Londres o NY).\n"
-        "• 1 trade por día y por sesión, en *un solo activo*.\n"
+        "• Priorizar las primeras 2 horas de la sesión activa (Londres o NY).\n"
+        "• 1 trade por día y por sesión, en un solo activo.\n"
         "• Si el precio está muy cerca del borde del rango H4/H1, ser más selectiva con las entradas.\n"
         "• Evitar operar en medio de noticias fuertes o en plena zona de indecisión.\n"
     )
