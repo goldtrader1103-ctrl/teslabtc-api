@@ -41,6 +41,69 @@ FRASES_TESLA = [
 
 def frase_motivacional():
     return random.choice(FRASES_TESLA)
+def _fmt_escenarios_operativos(data: Dict[str, Any]) -> str:
+    """
+    Construye el texto de los escenarios operativos a partir de:
+      - data["scalping"]["continuacion"]
+      - data["scalping"]["correccion"]
+      - data["swing"]
+
+    Si no hay datos, devuelve un mensaje neutro.
+    """
+    scalping = data.get("scalping", {}) or {}
+    swing = data.get("swing", {}) or {}
+
+    def _estado(flag: Any) -> str:
+        return "✅ ACTIVO" if flag else "⏳ En espera"
+
+    bloques = []
+
+    # ------------------------
+    # SCALPING CONTINUACIÓN
+    # ------------------------
+    cont = scalping.get("continuacion", {}) or {}
+    if cont:
+        bloques.append(
+            "🔷 *Escenario SCALPING — Continuación*\n"
+            f"• Estado: {_estado(cont.get('activo'))}\n"
+            f"• Dirección: {cont.get('direccion', '—')}\n"
+            f"• Zona de reacción: {cont.get('zona_reaccion', '—')}\n"
+            f"• TP1: {cont.get('tp1_rr', '—')} | TP2: {cont.get('tp2_rr', '—')}\n"
+            f"• SL: {cont.get('sl', '—')}"
+        )
+
+    # ------------------------
+    # SCALPING CORRECCIÓN
+    # ------------------------
+    corr = scalping.get("correccion", {}) or {}
+    if corr:
+        bloques.append(
+            "🔷 *Escenario SCALPING — Corrección*\n"
+            f"• Estado: {_estado(corr.get('activo'))}\n"
+            f"• Dirección: {corr.get('direccion', '—')}\n"
+            f"• Zona de reacción: {corr.get('zona_reaccion', '—')}\n"
+            f"• TP1: {corr.get('tp1_rr', '—')} | TP2: {corr.get('tp2_rr', '—')}\n"
+            f"• SL: {corr.get('sl', '—')}"
+        )
+
+    # ------------------------
+    # SWING
+    # ------------------------
+    if swing:
+        zona = swing.get("zona_reaccion") or swing.get("premium_zone", "—")
+        bloques.append(
+            "📈 *Escenario SWING H4*\n"
+            f"• Estado: {_estado(swing.get('activo'))}\n"
+            f"• Dirección: {swing.get('direccion', '—')}\n"
+            f"• Zona de reacción: {zona}\n"
+            f"• TP1: {swing.get('tp1_rr', '—')} | TP2: {swing.get('tp2_rr', '—')} | TP3: {swing.get('tp3_objetivo', '—')}\n"
+            f"• SL: {swing.get('sl', '—')}"
+        )
+
+    if not bloques:
+        return "No hay escenarios activos por ahora. Esperando BOS + zona institucional."
+
+    return "\n\n".join(bloques)
 
 # ============================================================
 # 🧩 FORMATEADOR PREMIUM
@@ -169,7 +232,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 # 🔹 Escenarios Operativos TESLABTC (Continuación / Corrección)
 # ============================================================
 
-def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
+def construir_mensaje_senales(data: Dict[str, Any]) -> str:
     fecha = data.get("fecha", "—")
     activo = data.get("activo", "BTCUSDT")
     precio = data.get("precio_actual", "—")
