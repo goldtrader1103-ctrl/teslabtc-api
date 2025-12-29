@@ -41,6 +41,7 @@ FRASES_TESLA = [
 
 def frase_motivacional():
     return random.choice(FRASES_TESLA)
+
 def _fmt_escenarios_operativos(data: Dict[str, Any]) -> str:
     """
     Construye el texto de los escenarios operativos a partir de:
