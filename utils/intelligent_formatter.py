@@ -383,6 +383,45 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
     activo = data.get("activo", "BTCUSDT")
     fecha  = data.get("fecha", "")
     sesion = data.get("sesión") or data.get("sesion") or "Sesión NY"
+    # =======================================================
+    # 🟣 CONTEXTO SWING (continúa impulso H4)
+    # =======================================================
+    if tipo_escenario == "swing":
+        partes = ["📘 *Contexto TESLABTC A.P. — SWING*\n"]
+
+        partes.append(texto_rangos)
+
+        if zona_fib_h4:
+            fib_618 = zona_fib_h4["fib_618"]
+            fib_886 = zona_fib_h4["fib_886"]
+
+            partes.append(
+                "🧭 *Lectura del impulso H4:*\n"
+                f"- Impulso actual: *{estado_h4}*\n"
+                "- Zona operativa para swing:\n"
+                f"  • 61.8% a 88.6% del último impulso H4\n"
+                f"  • Rango aproximado: `{fib_618:.2f}` – `{fib_886:.2f}`\n"
+            )
+            partes.append(
+                "🏹 *Regla TESLABTC (swing):*\n"
+                "- Si H4 es alcista → se busca continuación desde *descuento* (demanda H4).\n"
+                "- Si H4 es bajista → se busca continuación desde *premium* (oferta H4).\n"
+                "- Condición clave: *BOS + CIERRE de H1* dentro de esa zona.\n"
+            )
+        else:
+            partes.append(
+                "⚠️ No se pudo calcular zona 61.8–88.6 del impulso H4. "
+                "Esperar una estructura más clara antes de swing.\n"
+            )
+
+        partes.append(
+            "🧠 *Recomendación operativa:*\n"
+            "- Usar esta zona solo como mapa swing.\n"
+            "- Confirmar siempre con estructura limpia en H1 y M15.\n"
+            "- Priorizar sesión NY y evitar operar en mitad de rango sin gatillo claro.\n"
+        )
+
+        return "\n".join(partes)
 
     # ========================================================
     # 🟢 CONTEXTO SCALPING CONTINUACIÓN
@@ -429,6 +468,31 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
   - BOS claro en micro a favor de H1.
   - Estructura respetada (sin velas caóticas rompiendo todo).
 """
+    if tipo_escenario in ("scalping_continuacion", "scalping_correccion"):
+        partes = ["📘 *Contexto TESLABTC A.P. — SCALPING*\n"]
+        partes.append(texto_rangos)
+
+        sentido = "a favor de H1" if tipo_escenario == "scalping_continuacion" else "contra H1 (retroceso)"
+        partes.append(
+            f"🔷 *Escenario actual:* {sentido}\n"
+            "- Continuación → opera alineado con la estructura H1.\n"
+            "- Corrección → trabaja el retroceso contra H1, con riesgo reducido.\n"
+        )
+
+        partes.append(
+            "⏰ *Ventana operativa recomendada:*\n"
+            "- Priorizar gatillos que se formen dentro de las *primeras 2 horas* de la sesión (Londres o NY).\n"
+            "- 1 trade por día, 1 activo por sesión.\n"
+        )
+
+        partes.append(
+            "⚙️ *Gatillo TESLABTC:*\n"
+            "- BOS en M5 a favor del escenario.\n"
+            "- Entrada en la zona marcada por el bot.\n"
+            "- Gestión: BE en 1:1 + parciales según plan (TP1 / TP2).\n"
+        )
+
+        return "\n".join(partes)
 
     # ========================================================
     # 🟠 CONTEXTO SCALPING CORRECCIÓN
@@ -476,6 +540,31 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
   - Extensión hacia extremo de rango.
   - BOS en micro en contra de H1.
 """
+    if tipo_escenario in ("scalping_continuacion", "scalping_correccion"):
+        partes = ["📘 *Contexto TESLABTC A.P. — SCALPING*\n"]
+        partes.append(texto_rangos)
+
+        sentido = "a favor de H1" if tipo_escenario == "scalping_continuacion" else "contra H1 (retroceso)"
+        partes.append(
+            f"🔷 *Escenario actual:* {sentido}\n"
+            "- Continuación → opera alineado con la estructura H1.\n"
+            "- Corrección → trabaja el retroceso contra H1, con riesgo reducido.\n"
+        )
+
+        partes.append(
+            "⏰ *Ventana operativa recomendada:*\n"
+            "- Priorizar gatillos que se formen dentro de las *primeras 2 horas* de la sesión (Londres o NY).\n"
+            "- 1 trade por día, 1 activo por sesión.\n"
+        )
+
+        partes.append(
+            "⚙️ *Gatillo TESLABTC:*\n"
+            "- BOS en M5 a favor del escenario.\n"
+            "- Entrada en la zona marcada por el bot.\n"
+            "- Gestión: BE en 1:1 + parciales según plan (TP1 / TP2).\n"
+        )
+
+        return "\n".join(partes)
 
     # ========================================================
     # 🔵 CONTEXTO SWING (H4 + BOS H1)
