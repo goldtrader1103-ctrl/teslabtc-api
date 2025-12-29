@@ -280,122 +280,267 @@ def safe_markdown(text: str) -> str:
 
 from typing import Dict, Any
 
-def construir_contexto_detallado(data: Dict[str, Any], escenario: str) -> str:
+def construir_contexto_detallado(data: dict, tipo: str) -> str:
     """
-    Escenario puede ser:
-      - 'scalping_continuacion'
-      - 'scalping_correccion'
-      - 'swing'
-    Devuelve un texto explicando el porqué de la operación.
+    Genera un contexto explicativo por escenario:
+      - scalping_continuacion
+      - scalping_correccion
+      - swing
+
+    Incluye:
+      - Dirección H4 / H1
+      - Rango H4 / H1
+      - Explicación pedagógica del gatillo
     """
     estructura = data.get("estructura_detectada", {}) or {}
-    dir_h4 = estructura.get("H4", "sin_datos")
-    dir_h1 = estructura.get("H1", "sin_datos")
-    sesion_ny = estructura.get("sesion_ny_activa", False)
-    ventana_ny = estructura.get("ventana_scalping_ny", False)
 
-    scalping = (data.get("scalping") or {}).copy()
-    swing = (data.get("swing") or {}).copy()
+    def _get_tf_block(*nombres):
+        """Intenta encontrar el bloque de una TF con varios nombres posibles."""
+        for n in nombres:
+            if n in estructura:
+                return estructura.get(n) or {}
+        # búsqueda por contains por si viene como "H4 (macro)" etc
+        for k, v in estructura.items():
+            if any(n.lower() in str(k).lower() for n in nombres):
+                return v or {}
+        return {}
 
-    cont = scalping.get("continuacion") or {}
-    corr = scalping.get("correccion") or {}
+    def _extraer_direccion(info: dict) -> str | None:
+        if not isinstance(info, dict):
+            return None
+        return (
+            info.get("direccion")
+            or info.get("tendencia")
+            or info.get("estado")
+            or info.get("trend")
+        )
 
-    def _txt_sesion():
-        if sesion_ny and ventana_ny:
-            return "Estamos dentro de la ventana operativa de la sesión de Nueva York (primeras 2 horas)."
-        elif sesion_ny and not ventana_ny:
-            return "La sesión de Nueva York está activa, pero fuera de la ventana principal de scalping."
+    def _extraer_rango(info: dict):
+        """
+        Devuelve (min, max) si encuentra algo tipo:
+          - info["rango"] = {"min": x, "max": y}
+          - info["rango"] = {"low": x, "high": y}
+          - info["min"], info["max"]
+          - info["low"], info["high"]
+          - info["rango"] = [x, y] / (x, y)
+        """
+        if not isinstance(info, dict):
+            return None
+
+        r = (
+            info.get("rango")
+            or info.get("rango_operativo")
+            or info.get("rango_h1")
+            or info.get("rango_h4")
+        )
+
+        low = high = None
+
+        if isinstance(r, dict):
+            low = (
+                r.get("min")
+                or r.get("low")
+                or r.get("inferior")
+            )
+            high = (
+                r.get("max")
+                or r.get("high")
+                or r.get("superior")
+            )
+        elif isinstance(r, (list, tuple)) and len(r) >= 2:
+            low, high = r[0], r[1]
         else:
-            return "La sesión de Nueva York está cerrada; este contexto es solo de referencia."
+            low = info.get("min") or info.get("low")
+            high = info.get("max") or info.get("high")
 
-    # ==========================
-    # SCALPING — CONTINUACIÓN
-    # ==========================
-    if escenario == "scalping_continuacion":
-        dir_op = cont.get("direccion", "—")
-        riesgo = cont.get("riesgo", "—")
-        zona = cont.get("zona_reaccion", "—")
-        sl = cont.get("sl", "—")
-        tp1 = cont.get("tp1_rr", "1:1 (50% + BE)")
-        tp2 = cont.get("tp2_rr", "1:2 (50%)")
+        if low is None or high is None:
+            return None
 
-        return (
-            "🎯 *Contexto SCALPING — Escenario de Continuación*\n\n"
-            f"- Estructura H4: *{dir_h4.upper()}*\n"
-            f"- Estructura H1 (intradía): *{dir_h1.upper()}*\n"
-            f"- Operación propuesta: *{dir_op.upper()}* a favor de la estructura intradía.\n"
-            f"- Riesgo estimado: *{riesgo}*.\n\n"
-            f"La idea de esta entrada es aprovechar el *impulso principal del día*.\n"
-            f"Se trabaja con órdenes pendientes en M5, esperando el *quiebre del nivel* definido como zona de reacción:\n"
-            f"- Zona de reacción (quiebre): `{zona}`\n"
-            f"- Stop Loss sugerido: `{sl}`\n"
-            f"- TP1: `{tp1}`\n"
-            f"- TP2: `{tp2}`\n\n"
-            f"{_txt_sesion()}\n\n"
-            "El objetivo es capturar un tramo del movimiento direccional principal con gestión rápida, "
-            "sin buscar el swing completo, sólo el impulso intradía más claro."
-        )
+        try:
+            return float(low), float(high)
+        except Exception:
+            return None
 
-    # ==========================
-    # SCALPING — CORRECCIÓN
-    # ==========================
-    if escenario == "scalping_correccion":
-        dir_op = corr.get("direccion", "—")
-        riesgo = corr.get("riesgo", "—")
-        zona = corr.get("zona_reaccion", "—")
-        sl = corr.get("sl", "—")
-        tp1 = corr.get("tp1_rr", "1:1 (50% + BE)")
-        tp2 = corr.get("tp2_rr", "1:2 (50%)")
+    def _fmt_rango(rango):
+        if not rango:
+            return "N/D"
+        lo, hi = rango
+        try:
+            return f"{lo:,.2f} – {hi:,.2f} USD"
+        except Exception:
+            return f"{lo} – {hi}"
 
-        return (
-            "🎯 *Contexto SCALPING — Escenario de Corrección*\n\n"
-            f"- Estructura H4: *{dir_h4.upper()}*\n"
-            f"- Estructura H1 (intradía): *{dir_h1.upper()}*\n"
-            f"- Operación propuesta: *{dir_op.upper()}* *contra* la estructura intradía.\n"
-            f"- Riesgo estimado: *{riesgo}*.\n\n"
-            "Este escenario busca aprovechar una *corrección profunda* o un posible *falso quiebre* del movimiento principal.\n"
-            "Es una operación más agresiva: el precio puede extender el retroceso antes de retomar la tendencia.\n\n"
-            f"Parámetros sugeridos (M5):\n"
-            f"- Zona de reacción (quiebre): `{zona}`\n"
-            f"- Stop Loss sugerido: `{sl}`\n"
-            f"- TP1: `{tp1}`\n"
-            f"- TP2: `{tp2}`\n\n"
-            f"{_txt_sesion()}\n\n"
-            "El objetivo aquí es capturar el *respiro* del precio, no el impulso macro. "
-            "Por eso se clasifica como operación de mayor riesgo y requiere disciplina absoluta en el SL."
-        )
+    # 🔎 Extraemos H4 y H1
+    h4 = _get_tf_block("H4", "4h", "macro")
+    h1 = _get_tf_block("H1", "1h", "intradía", "intra")
 
-    # ==========================
-    # SWING — A FAVOR DE H4
-    # ==========================
-    if escenario == "swing":
-        dir_op = swing.get("direccion", "—")
-        zona = swing.get("zona_reaccion", "—")
-        tp1 = swing.get("tp1_rr", "1:1 (BE)")
-        tp2 = swing.get("tp2_rr", "1:2 (50%)")
-        tp3 = swing.get("tp3_objetivo", "Alto/Bajo H4")
-        sl = swing.get("sl", "—")
+    dir_h4 = _extraer_direccion(h4) or "N/D"
+    dir_h1 = _extraer_direccion(h1) or "N/D"
 
-        return (
-            "🎯 *Contexto SWING — Estructura H4/H1*\n\n"
-            f"- Estructura H4 (macro): *{dir_h4.upper()}*\n"
-            f"- Estructura H1 (intradía): *{dir_h1.upper()}* alineada con H4.\n"
-            f"- Operación propuesta: *{dir_op.upper()}* siguiendo la tendencia macro.\n\n"
-            "La lógica aquí es operar únicamente cuando H1 confirma la dirección de H4 con un *BOS claro* "
-            "y el precio reacciona en *zona premium* (descuento/prima según el caso).\n\n"
-            f"Condición de activación:\n"
-            f"- Quiebre y cierre del nivel clave de H1 en zona premium: `{zona}`\n\n"
-            "Gestión sugerida:\n"
-            f"- SL: `{sl}` (por detrás del último alto/bajo relevante de H1)\n"
-            f"- TP1: `{tp1}`\n"
-            f"- TP2: `{tp2}`\n"
-            f"- TP3: `{tp3}`\n\n"
-            "Este tipo de operación tiene vocación de *swing*: puede durar varias horas o días, "
-            "buscando acompañar el tramo completo de la estructura de H4."
-        )
+    rango_h4 = _extraer_rango(h4)
+    rango_h1 = _extraer_rango(h1)
 
-    return "No se pudo construir el contexto para el escenario solicitado."
+    rango_h4_txt = _fmt_rango(rango_h4)
+    rango_h1_txt = _fmt_rango(rango_h1)
 
+    # 🧩 Info general del activo (si está)
+    activo = data.get("activo", "BTCUSDT")
+    fecha = data.get("fecha", "")
+    sesion = data.get("sesión") or data.get("sesion") or ""
+
+    # ========================================================
+    # 🟢 CONTEXTO SCALPING CONTINUACIÓN
+    # ========================================================
+    if tipo == "scalping_continuacion":
+        texto = f"""📘 *CONTEXTO SCALPING DE CONTINUACIÓN — {activo}*
+
+📅 *Fecha:* {fecha}
+🕒 *Sesión:* {sesion or 'Sesión NY'}
+📌 *Escenario:* Operar *a favor* de la tendencia intradía (H1).
+
+*1️⃣ Lectura de contexto estructural*
+• H4 (macro): *{dir_h4}*
+• H1 (intradía): *{dir_h1}*
+
+*2️⃣ Rangos de trabajo*
+• 🟣 Rango H4 (macro): `{rango_h4_txt}`
+  → Zona donde se está moviendo la estructura principal.
+• 🔵 Rango H1 (operativo): `{rango_h1_txt}`
+  → Rango donde buscamos el setup intradía.
+
+*3️⃣ Lógica del escenario de CONTINUACIÓN*
+• El escenario de *continuación* no significa siempre compra.
+• Significa operar *en la misma dirección que la tendencia de H1*:
+  - Si H1 está alcista → buscamos compras.
+  - Si H1 está bajista → buscamos ventas.
+• El gatillo se da cuando el precio respeta la estructura y se forma un *BOS (Break of Structure)* en M5/M3/M1 *a favor* de H1.
+
+*4️⃣ Uso práctico dentro del rango*
+• Si H4 también acompaña la dirección de H1:
+  → Escenario de alta alineación (macro + intradía).
+• Si H4 va en contra de H1:
+  → Entendemos que H1 puede estar profundizando dentro de H4 antes de girarse.
+  → Aun así, el escenario de continuación sigue la dirección actual de H1.
+
+*5️⃣ Recomendación operativa TESLA*
+• Ventana de mayor probabilidad: *primeras 2 horas de la sesión NY*.
+• Sugerencia: *1 trade al día* por par.
+• Confirmaciones mínimas:
+  - Tendencia definida en H1.
+  - BOS claro en M5/M3/M1 en la misma dirección.
+  - Respeto de estructura sin rupturas caóticas.
+
+Lee esto como tu “mapa mental” antes de disparar el gatillo.
+Tu trabajo no es adivinar el giro, sino sincronizarte con la dirección que el mercado ya mostró en H1.
+"""
+        return texto
+
+    # ========================================================
+    # 🟠 CONTEXTO SCALPING CORRECCIÓN
+    # ========================================================
+    if tipo == "scalping_correccion":
+        texto = f"""📕 *CONTEXTO SCALPING DE CORRECCIÓN — {activo}*
+
+📅 *Fecha:* {fecha}
+🕒 *Sesión:* {sesion or 'Sesión NY'}
+📌 *Escenario:* Operar el *retroceso* en contra de la tendencia de H1.
+
+*1️⃣ Lectura de contexto estructural*
+• H4 (macro): *{dir_h4}*
+• H1 (intradía): *{dir_h1}*
+
+*2️⃣ Rangos de trabajo*
+• 🟣 Rango H4 (macro): `{rango_h4_txt}`
+  → Marco donde H4 sigue mandando la “historia grande”.
+• 🔵 Rango H1 (operativo): `{rango_h1_txt}`
+  → Ahí es donde se ve el retroceso que queremos aprovechar.
+
+*3️⃣ Lógica del escenario de CORRECCIÓN*
+• El escenario de *corrección* tampoco es siempre venta.
+• Es un movimiento *en contra de la tendencia de H1*:
+  - Si H1 está alcista → la corrección será bajista.
+  - Si H1 está bajista → la corrección será alcista.
+• El gatillo se da cuando:
+  - El precio entra en una zona donde es razonable que corrija (extremos del rango H1, cercanía a rango H4, etc.).
+  - Se forma un *BOS en micro (M5/M3/M1)* en contra de la dirección de H1, mostrando pérdida de fuerza del tramo previo.
+
+*4️⃣ Relación con H4 (macro)*
+• Muchas correcciones de H1 son el “respiro” que necesita el precio dentro de la estructura de H4.
+• Si H4 es bajista y H1 viene alcista:
+  → H1 puede estar profundizando en H4 para luego girarse a favor de H4.
+  → El escenario de corrección puede aprovechar ese agotamiento de H1.
+
+*5️⃣ Recomendación operativa TESLA*
+• Ventana sugerida: *primeras 2 horas de la sesión NY*.
+• Sugerencia: *1 trade al día* por par, sin sobreoperar correcciones.
+• Confirmaciones mínimas:
+  - Tendencia clara de H1.
+  - Movimiento extendido hacia un extremo del rango H1.
+  - BOS en contra de H1 en microestructura.
+
+La corrección es el “respiro”, no el cambio de historia.
+Tu rol es capturar un tramo lógico del retroceso, no enamorarte del giro.
+"""
+        return texto
+
+    # ========================================================
+    # 🔵 CONTEXTO SWING (H4 + BOS H1)
+    # ========================================================
+    if tipo == "swing":
+        texto = f"""📗 *CONTEXTO SWING TESLABTC — {activo}*
+
+📅 *Fecha:* {fecha}
+🕒 *Sesión de referencia:* {sesion or 'NY (pero swing no depende solo de la sesión)'}
+📌 *Escenario:* Operar movimientos amplios guiados por H4, confirmados por H1.
+
+*1️⃣ Lectura de contexto estructural*
+• H4 (macro): *{dir_h4}*
+  → Define la dirección principal del swing.
+• H1 (intradía): *{dir_h1}*
+  → Muestra cómo el precio construye la transición hacia el movimiento grande.
+
+*2️⃣ Rangos clave para el swing*
+• 🟣 Rango H4 (macro swing): `{rango_h4_txt}`
+  → Zona donde identificamos si el precio está en descuento (parte baja) o premium (parte alta).
+• 🔵 Rango H1 (estructura de transición): `{rango_h1_txt}`
+  → Donde se ve el proceso de acumulación / distribución que prepara el swing.
+
+*3️⃣ Condición CLAVE del swing TESLA*
+• El swing no se activa solo porque H4 está en una dirección.
+• Necesitamos:
+  1. *Profundidad en H4*: el precio se adentra en el rango (descuento/premium).
+  2. *BOS + CIERRE de H1*:
+     - Quiebre y CIERRE de H1 por encima del último alto clave → swing alcista.
+     - Quiebre y CIERRE de H1 por debajo del último bajo clave → swing bajista.
+  3. Luego, el pullback sobre esa ruptura es la zona donde se estructura la entrada swing.
+
+*4️⃣ Diferencia con el scalping*
+• Scalping:
+  - Opera tramos dentro del rango intradía (H1) con gatillos en M5/M3/M1.
+  - Depende mucho de la ventana de sesión (primeras horas).
+• Swing:
+  - Opera el “cambio de capítulo” estructural.
+  - Es menos dependiente de la hora exacta; más dependiente de la *estructura H4 + validación H1*.
+
+*5️⃣ Recomendaciones operativas TESLA para swing*
+• Priorizar:
+  - H4 en zona de interés (parte extrema del rango).
+  - BOS de H1 con CIERRE sólido.
+  - Entrada en el retroceso controlado posterior a ese BOS.
+• Gestión:
+  - RRR amplio (1:3 o más).
+  - Parciales en zonas de liquidez importantes.
+  - SL protegido bajo/encima del punto estructural validado por H1.
+
+El swing es donde la historia de H4 se confirma a través de la decisión de H1.
+No es una vela bonita: es estructura limpia validada con quiebre y cierre.
+"""
+        return texto
+
+    # ========================================================
+    # 💤 Tipo desconocido: devolvemos algo genérico
+    # ========================================================
+    return "⚠️ Escenario de contexto no reconocido. Usa scalping_continuacion, scalping_correccion o swing."
 
 # ============================================================
 # 🧩 FORMATEADOR FREE (modo básico)
