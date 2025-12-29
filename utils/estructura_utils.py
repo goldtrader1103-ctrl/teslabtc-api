@@ -1,431 +1,379 @@
 # ============================================================
-# 🧠 TESLABTC.KG — Intelligent Formatter (v5.8 PRO LIMPIO)
+# 🧭 TESLABTC.KG — utils/estructura_utils.py (v3.6.1)
 # ============================================================
-# - Escenarios SCALPING (continuación / corrección) + SWING
-# - Muestra rangos operativos H4 y H1 en el contexto
-# - Soporta claves antiguas y nuevas (punto_entrada / zona_reaccion,
-#   tp1 / tp1_rr, etc.)
-# - Pensado para usarse tanto en la API como en el BOT
+# Compatible con klines en formato dict o lista.
+# Devuelve:
+#   - evaluar_estructura: estado + high/low de zona operativa
+#   - detectar_estructura_simple: HH/HL vs LH/LL
+#   - definir_escenarios: usa estados H4/H1/M15
+#   - detectar_bos / detectar_ob: soporte básico estructural
 # ============================================================
 
+from statistics import mean
+from typing import List, Dict, Optional
 import random
-import re
-from typing import Dict, Any
+
 
 # ============================================================
-# 🌟 FRASES MOTIVACIONALES TESLABTC
+# 🔹 Helpers base
 # ============================================================
 
-FRASES_TESLA = [
-    "Tu mentalidad define tu rentabilidad.",
-    "Disciplina no es hacer lo que amas, sino hacerlo incluso cuando no quieres.",
-    "El mercado premia la paciencia, no la prisa.",
-    "Cada clic debe tener un propósito, no una emoción.",
-    "Tu constancia es tu verdadero edge.",
-    "El dinero sigue a la claridad, no a la confusión.",
-    "Operar menos es ganar más.",
-    "No se trata de acertar siempre, sino de perder correctamente.",
-    "Ser trader es dominarse a uno mismo, no al mercado.",
-    "El trading no se domina; se respeta cada día.",
-    "La consistencia no se busca, se construye.",
-    "La constancia vence al talento indisciplinado.",
-    "No operes por aburrimiento, opera por confirmación.",
-    "El trading recompensa a los que siguen reglas, no impulsos.",
-    "Tu única competencia es tu versión de ayer.",
-    "Sin registro no hay mejora.",
-    "El éxito llega cuando la disciplina se vuelve natural.",
-]
-
-
-def frase_motivacional() -> str:
-    return random.choice(FRASES_TESLA)
-
-# ============================================================
-# 🛡️ SAFE MARKDOWN
-# ============================================================
-
-def safe_markdown(text: str) -> str:
-    """Evita que caracteres sueltos rompan Markdown en Telegram."""
-    if not text:
-        return ""
-    text = re.sub(r"(?<!\*)\*(?!\*)", "✱", text)
-    text = re.sub(r"(?<!_)_(?!_)", "‗", text)
-    text = text.replace("[", "〔").replace("]", "〕").replace("(", "（").replace(")", "）")
-    return text
-
-# Helper común de precios
-def _fmt_precio(v: Any) -> str:
-    if v in (None, "-", "—", ""):
-        return "—"
+def _closes(klines):
+    """
+    Extrae cierres de cualquier formato (lista o dict).
+    """
     try:
-        return f"{float(v):,.2f} USD"
+        if not klines:
+            return []
+        if isinstance(klines[0], dict):
+            return [float(k["close"]) for k in klines]
+        return [float(k[4]) for k in klines]
     except Exception:
-        return str(v)
+        return []
 
-# ============================================================
-# 🧩 FORMATEADOR FREE (modo básico)
-# ============================================================
 
-def construir_mensaje_free(data: Dict[str, Any]) -> str:
-    fecha = data.get("fecha", "—")
-    sesion = data.get("sesión", data.get("sesion", "—"))
-    precio = data.get("precio_actual", "—")
-    estructura = data.get("estructura_detectada", {})
-
-    h4 = estructura.get("H4", {}).get("estado", "—")
-    h1 = estructura.get("H1", {}).get("estado", "—")
-    m15 = estructura.get("M15", {}).get("estado", "—")
-
-    msg = f"""
-📋 **TESLABTC Free — Vista General**
-──────────────────────────────
-📅 Fecha: {fecha}
-💵 Precio actual: {precio}
-🕒 Sesión: {sesion}
-
-🧭 **Estructura Detectada**
-──────────────────────────────
-H4: {h4}
-H1: {h1}
-M15: {m15}
-
-💭 Accede al modo *Premium* para ver zonas, confirmaciones y setups activos.
-"""
-    return safe_markdown(msg.strip())
-
-# ============================================================
-# 🔹 MENSAJE PRINCIPAL PREMIUM — "SEÑALES ACTIVAS"
-# ============================================================
-
-def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
+def _swing_zone(klines, lookback: int = 30):
     """
-    Mensaje que ve el usuario en el chat:
-      - Escenario de Continuación (SCALPING)
-      - Escenario de Corrección (SCALPING)
-      - Escenario SWING
-    Los detalles finos se ven al pulsar el botón de contexto.
+    Calcula zona operativa simple: max/min de los últimos 'lookback' candles.
+    Acepta klines dict o lista.
     """
-    fecha = data.get("fecha", "—")
-    activo = data.get("activo", "BTCUSDT")
-    precio = data.get("precio_actual", "—")
-    sesion = data.get("sesión", data.get("sesion", "—"))
+    if not klines:
+        return None, None
 
-    estructura = data.get("estructura_detectada", {}) or {}
-    scalping = data.get("scalping", {}) or {}
-    swing = data.get("swing", {}) or {}
-    reflexion = data.get("reflexion") or frase_motivacional()
-    slogan = data.get(
-        "slogan",
-        "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!",
-    )
+    data = klines[-lookback:] if len(klines) >= lookback else klines
 
-    cont = scalping.get("continuacion", {}) or {}
-    corr = scalping.get("correccion", {}) or {}
-
-    def estado(flag: Any) -> str:
-        return "✅ ACTIVO" if flag else "⏳ En espera"
-
-    # Dirección basada en H1 si el análisis no manda texto propio
-    estado_h1 = str(estructura.get("H1", {}).get("estado", "—")).upper()
-
-    dir_cont = cont.get("direccion")
-    if not dir_cont:
-        if estado_h1 == "ALCISTA":
-            dir_cont = "BUY a favor de H1"
-        elif estado_h1 == "BAJISTA":
-            dir_cont = "SELL a favor de H1"
+    try:
+        if isinstance(data[0], dict):
+            highs = [float(k["high"]) for k in data]
+            lows = [float(k["low"]) for k in data]
         else:
-            dir_cont = "Esperando claridad en H1"
+            highs = [float(k[2]) for k in data]
+            lows = [float(k[3]) for k in data]
+    except Exception:
+        return None, None
 
-    dir_corr = corr.get("direccion")
-    if not dir_corr:
-        if estado_h1 == "ALCISTA":
-            dir_corr = "SELL contra H1 (retroceso)"
-        elif estado_h1 == "BAJISTA":
-            dir_corr = "BUY contra H1 (retroceso)"
+    return (max(highs) if highs else None, min(lows) if lows else None)
+
+
+# ============================================================
+# 🧩 ESTRUCTURA "MA" (usada en FREE y multi-TF)
+# ============================================================
+
+def evaluar_estructura(klines):
+    """
+    Heurística robusta y compatible con formato dict o lista.
+      - si no hay 25+ velas → sin_datos
+      - calcula MA(10) vs MA(30) y cierre relativo
+      - si el rango es estrecho → rango
+    Retorna:
+      {
+        "estado": "alcista|bajista|rango|sin_datos",
+        "high": float | None,
+        "low": float | None,
+        "estado_operativo": str (opcional),
+        "comentario": str (opcional)
+      }
+    """
+    if not klines or len(klines) < 25:
+        return {"estado": "sin_datos", "high": None, "low": None}
+
+    closes = _closes(klines)
+    if len(closes) < 25:
+        return {"estado": "sin_datos", "high": None, "low": None}
+
+    ma_fast = mean(closes[-10:])
+    ma_slow = mean(closes[-30:]) if len(closes) >= 30 else mean(closes[:-5] or closes)
+    last = closes[-1]
+
+    hi, lo = _swing_zone(klines, 40)
+
+    # Rango si el ancho relativo es muy pequeño
+    if hi and lo and hi > lo:
+        width_pct = (hi - lo) / ((hi + lo) / 2)
+        if width_pct < 0.005:  # <0.5 %
+            estado = "rango"
         else:
-            dir_corr = "Retroceso no definido (H1 en rango)"
-
-    # Campos SCALPING (aceptamos nombres nuevos y viejos)
-    cont_entrada = cont.get("punto_entrada") or cont.get("zona_reaccion") or "—"
-    cont_tp1 = cont.get("tp1") or cont.get("tp1_rr") or "1:1 (50% + BE)"
-    cont_tp2 = cont.get("tp2") or cont.get("tp2_rr") or "1:2 (50%)"
-    cont_sl = cont.get("sl") or cont.get("sl_tecnico") or "—"
-
-    corr_entrada = corr.get("punto_entrada") or corr.get("zona_reaccion") or "—"
-    corr_tp1 = corr.get("tp1") or corr.get("tp1_rr") or "1:1 (50% + BE)"
-    corr_tp2 = corr.get("tp2") or corr.get("tp2_rr") or "1:2 (50%)"
-    corr_sl = corr.get("sl") or corr.get("sl_tecnico") or "—"
-
-    # Campos SWING
-    swing_activo = swing.get("activo", False)
-    swing_dir = swing.get("direccion", "—")
-    swing_riesgo = swing.get("riesgo", "N/A")
-
-    # zona_reaccion puede venir como dict, lista [low, high] o string
-    zona = swing.get("premium_zone") or swing.get("zona_reaccion") or "—"
-    if isinstance(zona, dict):
-        z_min = zona.get("min") or zona.get("low") or zona.get("zona_min")
-        z_max = zona.get("max") or zona.get("high") or zona.get("zona_max")
-        if z_min is not None and z_max is not None:
-            swing_zona_txt = f"{_fmt_precio(z_min)}–{_fmt_precio(z_max)}"
-        else:
-            swing_zona_txt = "—"
-    elif isinstance(zona, (list, tuple)) and len(zona) == 2:
-        swing_zona_txt = f"{_fmt_precio(zona[0])}–{_fmt_precio(zona[1])}"
+            if ma_fast > ma_slow and last > ma_slow:
+                estado = "alcista"
+            elif ma_fast < ma_slow and last < ma_slow:
+                estado = "bajista"
+            else:
+                estado = "rango"
     else:
-        swing_zona_txt = str(zona)
+        estado = "sin_datos"
 
-    swing_punto_entrada = swing.get("punto_entrada") or "—"
-    swing_tp1 = swing.get("tp1") or swing.get("tp1_rr") or "—"
-    swing_tp2 = swing.get("tp2") or swing.get("tp2_rr") or "—"
-    swing_tp3 = swing.get("tp3") or swing.get("tp3_objetivo") or "—"
-    swing_sl = swing.get("sl") or "—"
+    resultado = {"estado": estado, "high": hi, "low": lo}
 
-    # Si no hay entrada de swing todavía, mostramos solo la zona
-    if swing_punto_entrada in ("—", None, ""):
-        swing_detalle = f"""📥 Zona de reacción: {swing_zona_txt}
-🎯 TP1: —
-🎯 TP2: —
-🎯 TP3: —
-🛡️ SL: —"""
+    # Marca estado PRE-BOS si hay estructura pero sin ruptura clara
+    if estado in ("alcista", "bajista") and hi and lo:
+        resultado["estado_operativo"] = "🕐 PRE-BOS (esperando confirmación M5)"
+        resultado["comentario"] = (
+            "Estructura detectada sin ruptura confirmada. "
+            "Esperar BOS M5 para validar entrada."
+        )
+
+    return resultado
+
+
+# ============================================================
+# 🧩 ESTRUCTURA HH/HL vs LH/LL A VELAS (modo "micro")
+# ============================================================
+
+def detectar_estructura_simple(klines, lookback: int = 40):
+    """
+    Lee la estructura reciente solo con altos y bajos de velas.
+    Retorna:
+      {
+        "estado": "alcista|bajista|rango|sin_datos",
+        "ultimo_high": float | None,
+        "ultimo_low": float | None,
+        "high_anterior": float | None,
+        "low_anterior": float | None,
+      }
+    """
+    try:
+        if not klines or len(klines) < 5:
+            return {
+                "estado": "sin_datos",
+                "ultimo_high": None,
+                "ultimo_low": None,
+                "high_anterior": None,
+                "low_anterior": None,
+            }
+
+        data = klines[-lookback:] if len(klines) >= lookback else klines
+
+        if isinstance(data[0], dict):
+            highs = [float(k["high"]) for k in data]
+            lows = [float(k["low"]) for k in data]
+        else:
+            highs = [float(k[2]) for k in data]
+            lows = [float(k[3]) for k in data]
+
+        h1, h2 = highs[-2], highs[-1]
+        l1, l2 = lows[-2], lows[-1]
+
+        if h2 > h1 and l2 > l1:
+            estado = "alcista"
+        elif h2 < h1 and l2 < l1:
+            estado = "bajista"
+        else:
+            estado = "rango"
+
+        ultimo_high = max(highs)
+        ultimo_low = min(lows)
+        high_anterior = h1
+        low_anterior = l1
+
+        return {
+            "estado": estado,
+            "ultimo_high": round(ultimo_high, 2),
+            "ultimo_low": round(ultimo_low, 2),
+            "high_anterior": round(high_anterior, 2),
+            "low_anterior": round(low_anterior, 2),
+        }
+    except Exception:
+        return {
+            "estado": "sin_datos",
+            "ultimo_high": None,
+            "ultimo_low": None,
+            "high_anterior": None,
+            "low_anterior": None,
+        }
+
+
+# ============================================================
+# 🧩 DEFINICIÓN DE ESCENARIOS (texto)
+# ============================================================
+
+def definir_escenarios(estados: Dict[str, str]) -> Dict[str, str]:
+    """
+    estados = {"H4": "alcista|bajista|rango|sin_datos", "H1": ..., "M15": ...}
+    Devuelve un bloque descriptivo del escenario conservador / scalping / rango.
+    """
+    h4 = estados.get("H4", "sin_datos")
+    h1 = estados.get("H1", "sin_datos")
+    m15 = estados.get("M15", "sin_datos")
+
+    if h4 == "alcista" and h1 == "alcista":
+        return {
+            "escenario": "CONSERVADOR (BUY A+)",
+            "nivel": "Direccional principal",
+            "acción": "Esperar retroceso a zona H1/M15 y gatillo BOS M5 para ejecución.",
+            "gestión": "SL en invalidación; TP piscinas de liquidez (RRR ≥ 1:3).",
+            "mensaje": "Estructura macro e intradía alineadas al alza.",
+        }
+
+    if h4 == "bajista" and h1 == "bajista":
+        return {
+            "escenario": "CONSERVADOR (SELL A+)",
+            "nivel": "Direccional principal",
+            "acción": "Esperar retroceso a zona H1/M15 y gatillo BOS M5 para ejecución.",
+            "gestión": "SL en invalidación; TP piscinas de liquidez (RRR ≥ 1:3).",
+            "mensaje": "Estructura macro e intradía alineadas a la baja.",
+        }
+
+    if (h1 in ("alcista", "bajista")) and h4 != h1:
+        sentido = "BUY (contra macro)" if h1 == "alcista" else "SELL (contra macro)"
+        return {
+            "escenario": f"SCALPING {sentido}",
+            "nivel": "Agresivo / riesgo controlado",
+            "acción": "Solo si hay reacción clara M15 y micro-BOS M5 dentro de la zona.",
+            "gestión": "Objetivo corto (1:1 – 1:2). Reducir tamaño y confirmar.",
+            "mensaje": "Operación contra la macro; prioridad siempre a la dirección H4.",
+        }
+
+    return {
+        "escenario": "SIN CONFIRMACIÓN",
+        "nivel": "Neutro / Observación",
+        "acción": "Esperar ruptura limpia (BOS/CHOCH) en H1/M15 antes de ejecutar.",
+        "gestión": "Evitar operar sin gatillo validado.",
+        "mensaje": "Estructuras no alineadas o datos insuficientes.",
+    }
+
+
+# ============================================================
+# 🔍 DETECCIÓN DE BOS
+# ============================================================
+
+def detectar_bos(klines):
+    """
+    Detecta un BOS (Break of Structure) simple:
+    - Si el cierre actual supera el último máximo → BOS alcista
+    - Si el cierre actual rompe el último mínimo → BOS bajista
+    Retorna: {"bos": True/False, "tipo": "alcista"/"bajista"/None}
+    """
+    try:
+        if not klines or len(klines) < 10:
+            return {"bos": False, "tipo": None}
+
+        chunk = klines[-20:]
+        if isinstance(chunk[0], dict):
+            closes = [float(k["close"]) for k in chunk]
+            highs = [float(k["high"]) for k in chunk]
+            lows = [float(k["low"]) for k in chunk]
+        else:
+            closes = [float(k[4]) for k in chunk]
+            highs = [float(k[2]) for k in chunk]
+            lows = [float(k[3]) for k in chunk]
+
+        last_close = closes[-1]
+        prev_high = max(highs[:-1])
+        prev_low = min(lows[:-1])
+
+        if last_close > prev_high:
+            return {"bos": True, "tipo": "alcista"}
+        if last_close < prev_low:
+            return {"bos": True, "tipo": "bajista"}
+        return {"bos": False, "tipo": None}
+    except Exception:
+        return {"bos": False, "tipo": None}
+
+
+# ============================================================
+# 🔍 DETECCIÓN SIMPLE DE ORDER BLOCK
+# ============================================================
+
+def detectar_ob(klines):
+    """
+    Detecta un Order Block simple:
+    - Busca la última vela con cuerpo grande y dirección opuesta al impulso actual.
+    Retorna: {"ob": True/False, "tipo": "oferta"/"demanda"/None}
+    """
+    try:
+        if not klines or len(klines) < 10:
+            return {"ob": False, "tipo": None}
+
+        data = klines[-30:]
+        if isinstance(data[0], dict):
+            bodies = [abs(float(k["close"]) - float(k["open"])) for k in data]
+        else:
+            bodies = [abs(float(k[4]) - float(k[1])) for k in data]
+
+        avg_body = sum(bodies) / len(bodies)
+        threshold = avg_body * 1.5
+
+        for k in reversed(data[-15:]):
+            if isinstance(k, dict):
+                o, c = float(k["open"]), float(k["close"])
+            else:
+                o, c = float(k[1]), float(k[4])
+            body_size = abs(c - o)
+            if body_size > threshold:
+                tipo = "demanda" if c > o else "oferta"
+                return {"ob": True, "tipo": tipo}
+
+        return {"ob": False, "tipo": None}
+    except Exception:
+        return {"ob": False, "tipo": None}
+
+
+# ============================================================
+# 💬 CONTEXTO AUTO (no crítico, pero útil si lo usas)
+# ============================================================
+
+def generar_contexto_auto(
+    tendencia: str,
+    bos_tipo: Optional[str] = None,
+    ob_tipo: Optional[str] = None,
+    sesion_activa: bool = True,
+) -> str:
+    """
+    Genera un contexto narrativo según estado estructural.
+    """
+    frases = []
+
+    if tendencia == "bajista":
+        frases += [
+            "El precio mantiene una estructura bajista clara con presión de venta institucional.",
+            "Mercado dominado por vendedores; posible continuidad hacia mínimos anteriores.",
+            "La estructura sigue siendo bajista, con liquidez limpia pendiente por debajo del PDL.",
+        ]
+        if bos_tipo == "bajista":
+            frases += [
+                "BOS bajista confirmado, reforzando la intención de continuidad descendente.",
+                "Nueva ruptura de estructura a la baja, alineada con la macro dirección.",
+            ]
+        if ob_tipo == "oferta":
+            frases += [
+                "Reacción técnica en OB de oferta; el impulso vendedor domina la sesión.",
+                "El precio rechazó con fuerza el OB de oferta más reciente.",
+            ]
+    elif tendencia == "alcista":
+        frases += [
+            "El mercado mantiene estructura alcista y los compradores controlan el impulso.",
+            "Se consolida una tendencia alcista estable con mínimos ascendentes.",
+            "Presión alcista sostenida tras mitigación de zona de demanda clave.",
+        ]
+        if bos_tipo == "alcista":
+            frases += [
+                "BOS alcista reciente; los compradores recuperan el control del movimiento.",
+                "Confirmación de ruptura al alza que valida continuidad hacia niveles superiores.",
+            ]
+        if ob_tipo == "demanda":
+            frases += [
+                "Reacción positiva en OB de demanda, validando absorción de liquidez bajista.",
+                "Zona de demanda respetada con buen volumen; continuidad esperada.",
+            ]
     else:
-        swing_detalle = f"""📥 Zona de reacción: {swing_zona_txt}
-📍 Punto de entrada: {_fmt_precio(swing_punto_entrada)} (quiebre + cierre H1)
-🎯 TP1: {_fmt_precio(swing_tp1)}
-🎯 TP2: {_fmt_precio(swing_tp2)}
-🎯 TP3: {_fmt_precio(swing_tp3)}
-🛡️ SL: {_fmt_precio(swing_sl)}"""
+        frases += [
+            "Mercado lateral; sin claridad direccional hasta ruptura limpia.",
+            "Estructura neutral entre oferta y demanda; preferible esperar confirmaciones.",
+            "Consolidación sin dirección definida; se sugiere paciencia operativa.",
+        ]
 
-    msg = f"""*📋 SEÑALES ACTIVAS*
-──────────────────────────────
-📅 Fecha: {fecha}
-💰 Activo: {activo}
-💵 Precio actual: {precio}
-🕒 Sesión: {sesion}
+    if sesion_activa:
+        frases += [
+            "La sesión de Nueva York está activa, incrementando la volatilidad esperada.",
+            "Sesión NY abierta; posibles manipulaciones antes del movimiento real.",
+        ]
+    else:
+        frases += [
+            "Fuera de la sesión NY, el volumen institucional se mantiene reducido.",
+            "El mercado opera con menor impulso fuera de la sesión de Nueva York.",
+        ]
 
-*📊 ESCENARIOS OPERATIVOS SCALPING*
-──────────────────────────────
-*🔷 Escenario de Continuación (Tendencia Principal)*
-──────────────────────────────
-📌 Estado: {estado(cont.get("activo"))}
-📈 Dirección: {dir_cont}
-⚠️ Riesgo: {cont.get("riesgo", "N/A")}
-📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
-
-📥 Punto de entrada: {_fmt_precio(cont_entrada)}
-🎯 TP1: {_fmt_precio(cont_tp1)}
-🎯 TP2: {_fmt_precio(cont_tp2)}
-🛡️ SL: {_fmt_precio(cont_sl)}
-
-*🔷 Escenario de Corrección (Contra Tendencia)*
-──────────────────────────────
-📌 Estado: {estado(corr.get("activo"))}
-📈 Dirección: {dir_corr}
-⚠️ Riesgo: {corr.get("riesgo", "N/A")}
-📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
-
-📥 Punto de entrada: {_fmt_precio(corr_entrada)}
-🎯 TP1: {_fmt_precio(corr_tp1)}
-🎯 TP2: {_fmt_precio(corr_tp2)}
-🛡️ SL: {_fmt_precio(corr_sl)}
-
-*📈 ESCENARIO SWING*
-──────────────────────────────
-📌 Estado: {estado(swing_activo)}
-📈 Dirección: {swing_dir}
-⚠️ Riesgo: {swing_riesgo}
-📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
-
-{swing_detalle}
-
-*📓 Reflexión TESLABTC A.P.*
-──────────────────────────────
-💭 {reflexion}
-
-⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY).
-⚠️ Análisis SWING actualizado cada vela de 1H.
-{slogan}"""
-    return msg
-
-# ============================================================
-# 🧠 CONTEXTO DETALLADO TESLABTC (botón de contexto)
-# ============================================================
-
-def construir_contexto_detallado(data: Dict[str, Any], tipo_escenario: str) -> str:
-    """
-    Contexto para:
-      - "scalping_continuacion"
-      - "scalping_correccion"
-      - "swing"
-    Incluye rangos H4/H1 y la recomendación de operar
-    las 2 primeras horas de la sesión.
-    """
-    activo = data.get("activo", "BTCUSDT")
-    precio_actual = data.get("precio_actual", "—")
-    sesion = data.get("sesión", data.get("sesion", "—"))
-
-    estructura = data.get("estructura_detectada", {}) or {}
-    scalping = data.get("scalping", {}) or {}
-    swing_data = data.get("swing", {}) or {}
-    zonas = data.get("zonas_detectadas", {}) or {}
-
-    # --------- helpers de estructura ---------
-    def _extra_tf(tf: str):
-        info = estructura.get(tf, {}) or {}
-        estado = str(info.get("estado", "sin_datos")).upper()
-
-        hi = (
-            info.get("RANGO_HIGH")
-            or info.get("high")
-            or info.get("swing_high")
-            or zonas.get(f"{tf}_HIGH")   # 🔹 FALLBACK A ZONAS
-        )
-        lo = (
-            info.get("RANGO_LOW")
-            or info.get("low")
-            or info.get("swing_low")
-            or zonas.get(f"{tf}_LOW")    # 🔹 FALLBACK A ZONAS
-        )
-        return estado, hi, lo
-
-    def _fmt_rango(lo, hi):
-        if lo is None or hi is None:
-            return "N/D"
-        try:
-            lo_f = float(lo)
-            hi_f = float(hi)
-            return f"{lo_f:,.2f} – {hi_f:,.2f} USD"
-        except Exception:
-            return "N/D"
-
-    estado_h4, hi_h4, lo_h4 = _extra_tf("H4")
-    estado_h1, hi_h1, lo_h1 = _extra_tf("H1")
-
-    rango_h4_txt = _fmt_rango(lo_h4, hi_h4)
-    rango_h1_txt = _fmt_rango(lo_h1, hi_h1)
-
-    partes: list[str] = []
-
-    # ========= CABECERA =========
-    partes.append(
-        "📘 *Contexto TESLABTC A.P.*\n\n"
-        f"• Activo: *{activo}*\n"
-        f"• Precio actual: {precio_actual}\n"
-        f"• Sesión actual: {sesion}\n"
-        f"• Estructura H4: *{estado_h4}*\n"
-        f"• Estructura H1: *{estado_h1}*\n\n"
-        "📐 *Rangos estructurales*\n"
-        f"• H4 — Rango operativo: {rango_h4_txt}\n"
-        f"• H1 — Rango operativo: {rango_h1_txt}\n"
-    )
-
-    if estado_h4 in ("ALCISTA", "BAJISTA") and estado_h1 in ("ALCISTA", "BAJISTA"):
-        if estado_h4 == estado_h1:
-            partes.append(
-                "\n🧭 Cuando *H4 y H1 van en la misma dirección* hablamos de "
-                "*continuidad institucional* del movimiento.\n"
-            )
-        else:
-            partes.append(
-                "\n🧭 Cuando *H4 y H1 van en direcciones opuestas*, interpretamos "
-                "que H1 está profundizando hacia la *zona premium de H4* antes de "
-                "reanudarse la tendencia macro.\n"
-            )
-
-    # ========= SCALPING CONTINUACIÓN =========
-    if tipo_escenario == "scalping_continuacion":
-        esc = scalping.get("continuacion", {}) or {}
-
-        entrada = esc.get("punto_entrada") or esc.get("zona_reaccion") or "—"
-        tp1 = esc.get("tp1") or esc.get("tp1_rr") or "—"
-        tp2 = esc.get("tp2") or esc.get("tp2_rr") or "—"
-        sl = esc.get("sl") or esc.get("sl_tecnico") or "—"
-
-        partes.append(
-            "\n🔷 *Escenario SCALPING de Continuación*\n\n"
-            "Este escenario *siempre opera a favor de la estructura de H1* "
-            "(puede ser BUY o SELL, según esté H1 alcista o bajista):\n"
-            "1. Se toma como referencia el *último HIGH/LOW relevante en M5*.\n"
-            "2. Se espera un *BOS claro en M5* en la dirección de H1.\n"
-            "3. La operación busca acompañar la direccionalidad intradía.\n\n"
-        )
-
-        partes.append(
-            f"📥 Punto de entrada estimado: {_fmt_precio(entrada)}\n"
-            f"🎯 TP1 (1:1 + BE / parciales): {_fmt_precio(tp1)}\n"
-            f"🎯 TP2 (1:2 objetivo completo): {_fmt_precio(tp2)}\n"
-            f"🛡️ SL técnico: {_fmt_precio(sl)}\n\n"
-        )
-
-    # ========= SCALPING CORRECCIÓN =========
-    elif tipo_escenario == "scalping_correccion":
-        esc = scalping.get("correccion", {}) or {}
-
-        entrada = esc.get("punto_entrada") or esc.get("zona_reaccion") or "—"
-        tp1 = esc.get("tp1") or esc.get("tp1_rr") or "—"
-        tp2 = esc.get("tp2") or esc.get("tp2_rr") or "—"
-        sl = esc.get("sl") or esc.get("sl_tecnico") or "—"
-
-        partes.append(
-            "\n🔷 *Escenario SCALPING de Corrección*\n\n"
-            "Este escenario *siempre va en contra de H1* (es el retroceso intradía):\n"
-            "1. H1 marca la dirección principal, pero el precio corrige contra ella.\n"
-            "2. Se espera un *BOS en M5* contra H1 dentro de un rango claro.\n"
-            "3. El objetivo es capturar el retroceso, no la tendencia completa.\n\n"
-        )
-
-        partes.append(
-            f"📥 Punto de entrada estimado: {_fmt_precio(entrada)}\n"
-            f"🎯 TP1 (1:1 + BE / parciales): {_fmt_precio(tp1)}\n"
-            f"🎯 TP2 (1:2 objetivo completo): {_fmt_precio(tp2)}\n"
-            f"🛡️ SL técnico: {_fmt_precio(sl)}\n\n"
-        )
-
-    # ========= SWING =========
-    elif tipo_escenario == "swing":
-        zona = swing_data.get("premium_zone") or swing_data.get("zona_reaccion") or {}
-
-        if isinstance(zona, dict):
-            z_min = zona.get("min") or zona.get("low") or zona.get("zona_min")
-            z_max = zona.get("max") or zona.get("high") or zona.get("zona_max")
-            zona_txt = _fmt_rango(z_min, z_max)
-        elif isinstance(zona, (list, tuple)) and len(zona) == 2:
-            zona_txt = _fmt_rango(zona[0], zona[1])
-        else:
-            zona_txt = str(zona) if zona else "—"
-
-        tp1 = swing_data.get("tp1") or swing_data.get("tp1_rr") or "—"
-        tp2 = swing_data.get("tp2") or swing_data.get("tp2_rr") or "—"
-        tp3 = swing_data.get("tp3") or swing_data.get("tp3_objetivo") or "—"
-        sl = swing_data.get("sl") or "—"
-
-        partes.append(
-            "\n📈 *Escenario SWING H4*\n\n"
-            "El swing se construye a partir del *último impulso válido de H4*:\n"
-            "1. Se identifica el tramo de impulso actual en H4.\n"
-            "2. Sobre ese impulso se calcula la *zona premium 61.8 % – 88.6 %*.\n"
-            "3. En esa zona se exige *quiebre y cierre de H1* a favor de la "
-            "tendencia de H4 antes de validar el setup.\n\n"
-        )
-
-        partes.append(
-            f"📥 Zona de reacción H4 (premium): {zona_txt}\n"
-            f"🎯 TP1: {_fmt_precio(tp1)}\n"
-            f"🎯 TP2: {_fmt_precio(tp2)}\n"
-            f"🎯 TP3: {_fmt_precio(tp3)}\n"
-            f"🛡️ SL técnico: {_fmt_precio(sl)}\n\n"
-        )
-
-    # ========= RECOMENDACIÓN GENERAL =========
-    partes.append(
-        "🕒 *Recomendación operativa TESLABTC:*\n"
-        "• Priorizar las *primeras 2 horas* de la sesión activa (Asia, Londres o NY).\n"
-        "• 1 trade por día y por sesión, en *un solo activo*.\n"
-        "• Si el precio ya está cerca del borde del rango de H4 o H1, "
-        "ser más selectivo con las entradas.\n"
-        "• Evitar operar en medio de noticias fuertes o dentro de zonas de "
-        "alta indecisión.\n"
-    )
-
-    return "".join(partes)
+    try:
+        return random.choice(frases)
+    except Exception:
+        return "Contexto general no disponible."
