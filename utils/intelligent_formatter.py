@@ -289,6 +289,7 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
 
     Incluye:
       - Dirección H4 / H1
+      - Alto y bajo actuales de H4 / H1
       - Rango H4 / H1
       - Explicación pedagógica del gatillo
     """
@@ -299,7 +300,7 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
         for n in nombres:
             if n in estructura:
                 return estructura.get(n) or {}
-        # búsqueda por contains por si viene como "H4 (macro)" etc
+        # búsqueda por contains, por si viene como "H4 (macro)" etc.
         for k, v in estructura.items():
             if any(n.lower() in str(k).lower() for n in nombres):
                 return v or {}
@@ -361,6 +362,68 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
         except Exception:
             return None
 
+    def _extraer_high_low(info: dict):
+        """
+        Intenta sacar ALTO y BAJO explícitos de la TF.
+        Usa varias claves posibles y, si no las encuentra,
+        cae al rango para obtener (min, max).
+        """
+        if not isinstance(info, dict):
+            return None, None
+
+        # posibles nombres de alto
+        high_keys = [
+            "ultimo_alto", "ultimo_high", "high", "max", "alto",
+            "high_actual", "maximo"
+        ]
+        # posibles nombres de bajo
+        low_keys = [
+            "ultimo_bajo", "ultimo_low", "low", "min", "bajo",
+            "low_actual", "minimo"
+        ]
+
+        hi = lo = None
+
+        for k in high_keys:
+            if k in info and info.get(k) is not None:
+                hi = info.get(k)
+                break
+
+        for k in low_keys:
+            if k in info and info.get(k) is not None:
+                lo = info.get(k)
+                break
+
+        # Si no encuentra, intenta usar el rango
+        if hi is None or lo is None:
+            r = _extraer_rango(info)
+            if r:
+                lo_r, hi_r = r
+                if lo is None:
+                    lo = lo_r
+                if hi is None:
+                    hi = hi_r
+
+        try:
+            hi_f = float(hi) if hi is not None else None
+        except Exception:
+            hi_f = None
+
+        try:
+            lo_f = float(lo) if lo is not None else None
+        except Exception:
+            lo_f = None
+
+        return hi_f, lo_f
+
+    def _fmt_precio(v):
+        if v is None:
+            return "N/D"
+        try:
+            return f"{v:,.2f} USD"
+        except Exception:
+            return str(v)
+
     def _fmt_rango(rango):
         if not rango:
             return "N/D"
@@ -383,6 +446,15 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
     rango_h4_txt = _fmt_rango(rango_h4)
     rango_h1_txt = _fmt_rango(rango_h1)
 
+    # 🔼 altos / 🔽 bajos por TF
+    h4_high, h4_low = _extraer_high_low(h4)
+    h1_high, h1_low = _extraer_high_low(h1)
+
+    h4_high_txt = _fmt_precio(h4_high)
+    h4_low_txt = _fmt_precio(h4_low)
+    h1_high_txt = _fmt_precio(h1_high)
+    h1_low_txt = _fmt_precio(h1_low)
+
     # 🧩 Info general del activo (si está)
     activo = data.get("activo", "BTCUSDT")
     fecha = data.get("fecha", "")
@@ -400,7 +472,11 @@ def construir_contexto_detallado(data: dict, tipo: str) -> str:
 
 *1️⃣ Lectura de contexto estructural*
 • H4 (macro): *{dir_h4}*
+  ├─ 🔽 Bajo H4: `{h4_low_txt}`
+  └─ 🔼 Alto H4: `{h4_high_txt}`
 • H1 (intradía): *{dir_h1}*
+  ├─ 🔽 Bajo H1: `{h1_low_txt}`
+  └─ 🔼 Alto H1: `{h1_high_txt}`
 
 *2️⃣ Rangos de trabajo*
 • 🟣 Rango H4 (macro): `{rango_h4_txt}`
@@ -447,7 +523,11 @@ Tu trabajo no es adivinar el giro, sino sincronizarte con la dirección que el m
 
 *1️⃣ Lectura de contexto estructural*
 • H4 (macro): *{dir_h4}*
+  ├─ 🔽 Bajo H4: `{h4_low_txt}`
+  └─ 🔼 Alto H4: `{h4_high_txt}`
 • H1 (intradía): *{dir_h1}*
+  ├─ 🔽 Bajo H1: `{h1_low_txt}`
+  └─ 🔼 Alto H1: `{h1_high_txt}`
 
 *2️⃣ Rangos de trabajo*
 • 🟣 Rango H4 (macro): `{rango_h4_txt}`
@@ -461,11 +541,14 @@ Tu trabajo no es adivinar el giro, sino sincronizarte con la dirección que el m
   - Si H1 está alcista → la corrección será bajista.
   - Si H1 está bajista → la corrección será alcista.
 • El gatillo se da cuando:
-  - El precio entra en una zona donde es razonable que corrija (extremos del rango H1, cercanía a rango H4, etc.).
-  - Se forma un *BOS en micro (M5/M3/M1)* en contra de la dirección de H1, mostrando pérdida de fuerza del tramo previo.
+  - El precio entra en una zona donde es razonable que corrija
+    (extremos del rango H1, cercanía a rango H4, etc.).
+  - Se forma un *BOS en micro (M5/M3/M1)* en contra de la dirección de H1,
+    mostrando pérdida de fuerza del tramo previo.
 
 *4️⃣ Relación con H4 (macro)*
-• Muchas correcciones de H1 son el “respiro” que necesita el precio dentro de la estructura de H4.
+• Muchas correcciones de H1 son el “respiro” que necesita el precio
+  dentro de la estructura de H4.
 • Si H4 es bajista y H1 viene alcista:
   → H1 puede estar profundizando en H4 para luego girarse a favor de H4.
   → El escenario de corrección puede aprovechar ese agotamiento de H1.
@@ -490,14 +573,16 @@ Tu rol es capturar un tramo lógico del retroceso, no enamorarte del giro.
         texto = f"""📗 *CONTEXTO SWING TESLABTC — {activo}*
 
 📅 *Fecha:* {fecha}
-🕒 *Sesión de referencia:* {sesion or 'NY (pero swing no depende solo de la sesión)'}
+🕒 *Sesión de referencia:* {sesion or 'NY (pero el swing no depende solo de la hora)'}
 📌 *Escenario:* Operar movimientos amplios guiados por H4, confirmados por H1.
 
 *1️⃣ Lectura de contexto estructural*
 • H4 (macro): *{dir_h4}*
-  → Define la dirección principal del swing.
-• H1 (intradía): *{dir_h1}*
-  → Muestra cómo el precio construye la transición hacia el movimiento grande.
+  ├─ 🔽 Bajo H4: `{h4_low_txt}`
+  └─ 🔼 Alto H4: `{h4_high_txt}`
+• H1 (transición): *{dir_h1}*
+  ├─ 🔽 Bajo H1: `{h1_low_txt}`
+  └─ 🔼 Alto H1: `{h1_high_txt}`
 
 *2️⃣ Rangos clave para el swing*
 • 🟣 Rango H4 (macro swing): `{rango_h4_txt}`
@@ -520,7 +605,8 @@ Tu rol es capturar un tramo lógico del retroceso, no enamorarte del giro.
   - Depende mucho de la ventana de sesión (primeras horas).
 • Swing:
   - Opera el “cambio de capítulo” estructural.
-  - Es menos dependiente de la hora exacta; más dependiente de la *estructura H4 + validación H1*.
+  - Es menos dependiente de la hora exacta; más dependiente de la
+    *estructura H4 + validación H1*.
 
 *5️⃣ Recomendaciones operativas TESLA para swing*
 • Priorizar:
@@ -538,7 +624,7 @@ No es una vela bonita: es estructura limpia validada con quiebre y cierre.
         return texto
 
     # ========================================================
-    # 💤 Tipo desconocido: devolvemos algo genérico
+    # 💤 Tipo desconocido
     # ========================================================
     return "⚠️ Escenario de contexto no reconocido. Usa scalping_continuacion, scalping_correccion o swing."
 
