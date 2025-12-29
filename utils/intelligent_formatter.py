@@ -42,6 +42,12 @@ FRASES_TESLA = [
 def frase_motivacional():
     return random.choice(FRASES_TESLA)
 
+
+# ============================================================
+# 🔹 Escenarios Operativos TESLABTC (Continuación / Corrección)
+#    Usado en el REPORTE OPERATIVO (análisis completo)
+# ============================================================
+
 def _fmt_escenarios_operativos(data: Dict[str, Any]) -> str:
     """
     Construye el texto de los escenarios operativos a partir de:
@@ -106,8 +112,9 @@ def _fmt_escenarios_operativos(data: Dict[str, Any]) -> str:
 
     return "\n\n".join(bloques)
 
+
 # ============================================================
-# 🧩 FORMATEADOR PREMIUM
+# 🧩 FORMATEADOR PREMIUM (REPORTE GENERAL)
 # ============================================================
 
 def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
@@ -117,7 +124,6 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
     precio = data.get("precio_actual", "—")
     estructura = data.get("estructura_detectada", {})
     zonas = data.get("zonas_detectadas", {})
-    confs = data.get("confirmaciones", {})
     setup = data.get("setup_tesla", {}) or {}
     reflexion = data.get("reflexion") or frase_motivacional()
     slogan = data.get("slogan", "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!")
@@ -145,6 +151,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
     h1 = estructura.get("H1", {}) or {}
 
     def _fmt_linea(tf: Dict[str, Any], nombre: str, icono: str) -> str:
+        # Blindaje: estado siempre a string.upper()
         estado = str(tf.get("estado", "—")).upper()
         bos = tf.get("BOS", "—")
         hi = tf.get("RANGO_HIGH") or zonas.get(f"{nombre}_HIGH", "—")
@@ -191,8 +198,10 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
     # 🧠 CONCLUSIÓN Y REFLEXIÓN
     # ============================================================
     conclusion_txt = (
-        f"🧠 **CONCLUSIÓN OPERATIVA**\n──────────────────────────────\n{data.get('conclusion_general', 'Sin conclusión registrada.')}\n\n"
-        f"📓 **Reflexión TESLABTC A.P.**\n──────────────────────────────\n💭 {reflexion}\n\n"
+        f"🧠 **CONCLUSIÓN OPERATIVA**\n──────────────────────────────\n"
+        f"{data.get('conclusion_general', 'Sin conclusión registrada.')}\n\n"
+        f"📓 **Reflexión TESLABTC A.P.**\n──────────────────────────────\n"
+        f"💭 {reflexion}\n\n"
         f"⚠️ Análisis exclusivo para la sesión NY.\n{slogan}"
     )
 
@@ -230,7 +239,7 @@ def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
 
 
 # ============================================================
-# 🔹 Escenarios Operativos TESLABTC (Continuación / Corrección)
+# 🧨 FORMATEADOR DE SEÑALES (pantalla "SEÑALES ACTIVAS")
 # ============================================================
 
 def construir_mensaje_senales(data: Dict[str, Any]) -> str:
@@ -238,13 +247,13 @@ def construir_mensaje_senales(data: Dict[str, Any]) -> str:
     activo = data.get("activo", "BTCUSDT")
     precio = data.get("precio_actual", "—")
     sesion = data.get("sesión", "—")
-    scalping = data.get("scalping", {})
-    swing = data.get("swing", {})
-    reflexion = data.get("reflexion", "")
+    scalping = data.get("scalping", {}) or {}
+    swing = data.get("swing", {}) or {}
+    reflexion = data.get("reflexion", "") or frase_motivacional()
     slogan = data.get("slogan", "")
 
-    cont = scalping.get("continuacion", {})
-    corr = scalping.get("correccion", {})
+    cont = scalping.get("continuacion", {}) or {}
+    corr = scalping.get("correccion", {}) or {}
 
     def estado(activo_flag: Any) -> str:
         return "✅ ACTIVO" if activo_flag else "⏳ En espera"
@@ -252,8 +261,10 @@ def construir_mensaje_senales(data: Dict[str, Any]) -> str:
     # ============================
     # 🎯 LÓGICA ESPECIAL SWING
     # ============================
-    swing_punto_entrada = swing.get("punto_entrada", "—")
+    # Siempre mostramos la zona premium como referencia,
+    # y usamos zona_reaccion como punto de entrada cuando exista.
     swing_zona = swing.get("premium_zone") or swing.get("zona_reaccion", "—")
+    swing_punto_entrada = swing.get("punto_entrada") or swing.get("zona_reaccion", "—")
     swing_tp1 = swing.get("tp1_rr", "1:1 (BE)")
     swing_tp2 = swing.get("tp2_rr", "1:2 (50%)")
     swing_tp3 = swing.get("tp3_objetivo", "—")
@@ -261,16 +272,16 @@ def construir_mensaje_senales(data: Dict[str, Any]) -> str:
 
     # Si NO hay punto de entrada (precio aún no está en la zona 61.8–88.6)
     if not swing_punto_entrada or swing_punto_entrada == "—":
-        swing_detalle = f"""📥 Zona de reacción: {swing_zona}
+        swing_detalle = f"""📥 Zona de reacción (premium H4): {swing_zona}
 📍 Punto de entrada: --
 🎯 TP1: --
 🎯 TP2: --
 🎯 TP3: --
 🛡️ SL: --"""
     else:
-        # Precio DENTRO de la zona: usamos el último alto/bajo de H1 como punto de entrada
-        swing_detalle = f"""📥 Zona de reacción: {swing_zona}
-📍 Punto de entrada: {swing_punto_entrada} (quiebre y cierre H1)
+        # Precio DENTRO de la zona: usamos la zona_reaccion/punto_entrada calculado
+        swing_detalle = f"""📥 Zona de reacción (premium H4): {swing_zona}
+📍 Punto de entrada: {swing_punto_entrada} (quiebre y cierre H1 en zona premium)
 🎯 TP1: {swing_tp1}
 🎯 TP2: {swing_tp2}
 🎯 TP3: {swing_tp3}
@@ -325,7 +336,8 @@ def construir_mensaje_senales(data: Dict[str, Any]) -> str:
 ⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY).
 ⚠️ Análisis SWING actualizado cada vela de 1H.
 {slogan}"""
-    return msg
+    return safe_markdown(msg.strip())
+
 
 # ============================================================
 # 🛡️ SAFE MARKDOWN
@@ -338,11 +350,11 @@ def safe_markdown(text: str) -> str:
     text = re.sub(r'(?<!_)_(?!_)', '‗', text)
     text = text.replace("[", "〔").replace("]", "〕").replace("(", "（").replace(")", "）")
     return text
+
+
 # ============================================================
 # 🧠 Contexto detallado por escenario
 # ============================================================
-
-from typing import Dict, Any
 
 def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
     """
@@ -378,7 +390,7 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
 
         raw_estado = info.get("estado", "sin_datos")
 
-        # 👇 Blindaje: si viene dict u otra cosa rara, lo pisamos
+        # Blindaje: si viene dict u otra cosa rara, lo pisamos
         if isinstance(raw_estado, dict):
             estado = "SIN_DATOS"
         else:
@@ -556,6 +568,7 @@ def construir_contexto_detallado(data: dict, tipo_escenario: str) -> str:
 
     return "".join(partes)
 
+
 # ============================================================
 # 🧩 FORMATEADOR FREE (modo básico)
 # ============================================================
@@ -564,7 +577,7 @@ def construir_mensaje_free(data: Dict[str, Any]) -> str:
     fecha = data.get("fecha", "—")
     sesion = data.get("sesión", "—")
     precio = data.get("precio_actual", "—")
-    estructura = data.get("estructura_detectada", {})
+    estructura = data.get("estructura_detectada", {}) or {}
 
     h4 = estructura.get("H4", {}).get("estado", "—")
     h1 = estructura.get("H1", {}).get("estado", "—")
