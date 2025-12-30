@@ -1,10 +1,10 @@
 # ============================================================
-# 🧭 TESLABTC.KG — utils/estructura_utils.py (v3.6.1)
+# 🧭 TESLABTC.KG — utils/estructura_utils.py (v3.7.0)
 # ============================================================
 # Compatible con klines en formato dict o lista.
 # Devuelve:
 #   - evaluar_estructura: estado + high/low de zona operativa
-#   - detectar_estructura_simple: HH/HL vs LH/LL
+#   - detectar_estructura_simple: HH/HL vs LH/LL con pivots
 #   - definir_escenarios: usa estados H4/H1/M15
 #   - detectar_bos / detectar_ob: soporte básico estructural
 # ============================================================
@@ -55,16 +55,136 @@ def _swing_zone(klines, lookback: int = 30):
     return (max(highs) if highs else None, min(lows) if lows else None)
 
 
+def _extraer_hl(klines):
+    """
+    Devuelve listas de highs y lows a partir de klines.
+    """
+    if not klines:
+        return [], []
+    if isinstance(klines[0], dict):
+        highs = [float(k["high"]) for k in klines]
+        lows = [float(k["low"]) for k in klines]
+    else:
+        highs = [float(k[2]) for k in klines]
+        lows = [float(k[3]) for k in klines]
+    return highs, lows
+
+
+def _pivot_extremos(highs: List[float], lows: List[float]):
+    """
+    Detecta pivots simples (máximos y mínimos locales).
+    Devuelve listas de índices de pivots high y low.
+    """
+    pivots_high = []
+    pivots_low = []
+    n = len(highs)
+    if n < 3:
+        return pivots_high, pivots_low
+
+    for i in range(1, n - 1):
+        if highs[i] > highs[i - 1] and highs[i] > highs[i + 1]:
+            pivots_high.append(i)
+        if lows[i] < lows[i - 1] and lows[i] < lows[i + 1]:
+            pivots_low.append(i)
+    return pivots_high, pivots_low
+
+
 # ============================================================
-# 🧩 ESTRUCTURA "MA" (usada en FREE y multi-TF)
+# 🧩 ESTRUCTURA HH/HL vs LH/LL (modo "swing")
+# ============================================================
+
+def detectar_estructura_simple(klines, lookback: int = 80):
+    """
+    Lee la estructura reciente con pivots HH/HL vs LH/LL.
+    Retorna:
+      {
+        "estado": "alcista|bajista|rango|sin_datos",
+        "ultimo_high": float | None,
+        "ultimo_low": float | None,
+        "high_anterior": float | None,
+        "low_anterior": float | None,
+      }
+    """
+    try:
+        if not klines or len(klines) < 10:
+            return {
+                "estado": "sin_datos",
+                "ultimo_high": None,
+                "ultimo_low": None,
+                "high_anterior": None,
+                "low_anterior": None,
+            }
+
+        data = klines[-lookback:] if len(klines) >= lookback else klines
+        highs, lows = _extraer_hl(data)
+        if len(highs) < 3:
+            return {
+                "estado": "sin_datos",
+                "ultimo_high": None,
+                "ultimo_low": None,
+                "high_anterior": None,
+                "low_anterior": None,
+            }
+
+        pivots_high, pivots_low = _pivot_extremos(highs, lows)
+
+        # Si no hay suficientes pivots, tratamos como rango suave
+        if len(pivots_high) < 2 or len(pivots_low) < 2:
+            ultimo_high = max(highs)
+            ultimo_low = min(lows)
+            return {
+                "estado": "rango",
+                "ultimo_high": round(ultimo_high, 2),
+                "ultimo_low": round(ultimo_low, 2),
+                "high_anterior": None,
+                "low_anterior": None,
+            }
+
+        # Tomamos los dos últimos pivots de cada tipo
+        ph1, ph2 = pivots_high[-2], pivots_high[-1]
+        pl1, pl2 = pivots_low[-2], pivots_low[-1]
+
+        h1, h2 = highs[ph1], highs[ph2]
+        l1, l2 = lows[pl1], lows[pl2]
+
+        if h2 > h1 and l2 > l1:
+            estado = "alcista"
+        elif h2 < h1 and l2 < l1:
+            estado = "bajista"
+        else:
+            estado = "rango"
+
+        ultimo_high = max(highs)
+        ultimo_low = min(lows)
+
+        return {
+            "estado": estado,
+            "ultimo_high": round(ultimo_high, 2),
+            "ultimo_low": round(ultimo_low, 2),
+            "high_anterior": round(h1, 2),
+            "low_anterior": round(l1, 2),
+        }
+    except Exception:
+        return {
+            "estado": "sin_datos",
+            "ultimo_high": None,
+            "ultimo_low": None,
+            "high_anterior": None,
+            "low_anterior": None,
+        }
+
+
+# ============================================================
+# 🧩 ESTRUCTURA "MA" (respaldo) + RANGO
 # ============================================================
 
 def evaluar_estructura(klines):
     """
-    Heurística robusta y compatible con formato dict o lista.
-      - si no hay 25+ velas → sin_datos
-      - calcula MA(10) vs MA(30) y cierre relativo
-      - si el rango es estrecho → rango
+    Heurística estructural TESLABTC:
+      1) Usa pivots HH/HL vs LH/LL para definir tendencia principal.
+      2) Si no hay pivots claros, cae a MA(10) vs MA(30) como respaldo.
+      3) Devuelve también el rango operativo (high/low últimos 40 candles).
+
     Retorna:
       {
         "estado": "alcista|bajista|rango|sin_datos",
@@ -81,105 +201,46 @@ def evaluar_estructura(klines):
     if len(closes) < 25:
         return {"estado": "sin_datos", "high": None, "low": None}
 
-    ma_fast = mean(closes[-10:])
-    ma_slow = mean(closes[-30:]) if len(closes) >= 30 else mean(closes[:-5] or closes)
-    last = closes[-1]
-
+    # Rango operativo real
     hi, lo = _swing_zone(klines, 40)
 
-    # Rango si el ancho relativo es muy pequeño
-    if hi and lo and hi > lo:
-        width_pct = (hi - lo) / ((hi + lo) / 2)
-        if width_pct < 0.005:  # <0.5 %
-            estado = "rango"
-        else:
-            if ma_fast > ma_slow and last > ma_slow:
-                estado = "alcista"
-            elif ma_fast < ma_slow and last < ma_slow:
-                estado = "bajista"
-            else:
+    # 1) Intentamos leer estructura por swings (pivots)
+    simple = detectar_estructura_simple(klines, lookback=80)
+    estado = simple.get("estado", "sin_datos")
+
+    # 2) Si no hay estructura clara por swings, usamos MA(10) vs MA(30)
+    if estado in ("sin_datos", "rango"):
+        ma_fast = mean(closes[-10:])
+        ma_slow = mean(closes[-30:]) if len(closes) >= 30 else mean(closes[:-5] or closes)
+        last = closes[-1]
+
+        if hi and lo and hi > lo:
+            width_pct = (hi - lo) / ((hi + lo) / 2)
+            if width_pct < 0.003:  # rango muy estrecho < 0.3 %
                 estado = "rango"
-    else:
-        estado = "sin_datos"
+            else:
+                if ma_fast > ma_slow and last > ma_slow:
+                    estado = "alcista"
+                elif ma_fast < ma_slow and last < ma_slow:
+                    estado = "bajista"
+                else:
+                    if estado == "sin_datos":
+                        estado = "rango"
+        else:
+            if estado == "sin_datos":
+                estado = "rango"
 
     resultado = {"estado": estado, "high": hi, "low": lo}
 
-    # Marca estado PRE-BOS si hay estructura pero sin ruptura clara
+    # Marcamos estado PRE-BOS cuando hay dirección clara
     if estado in ("alcista", "bajista") and hi and lo:
         resultado["estado_operativo"] = "🕐 PRE-BOS (esperando confirmación M5)"
         resultado["comentario"] = (
-            "Estructura detectada sin ruptura confirmada. "
-            "Esperar BOS M5 para validar entrada."
+            "Estructura direccional detectada. "
+            "Esperar BOS en la temporalidad de ejecución para validar entrada."
         )
 
     return resultado
-
-
-# ============================================================
-# 🧩 ESTRUCTURA HH/HL vs LH/LL A VELAS (modo "micro")
-# ============================================================
-
-def detectar_estructura_simple(klines, lookback: int = 40):
-    """
-    Lee la estructura reciente solo con altos y bajos de velas.
-    Retorna:
-      {
-        "estado": "alcista|bajista|rango|sin_datos",
-        "ultimo_high": float | None,
-        "ultimo_low": float | None,
-        "high_anterior": float | None,
-        "low_anterior": float | None,
-      }
-    """
-    try:
-        if not klines or len(klines) < 5:
-            return {
-                "estado": "sin_datos",
-                "ultimo_high": None,
-                "ultimo_low": None,
-                "high_anterior": None,
-                "low_anterior": None,
-            }
-
-        data = klines[-lookback:] if len(klines) >= lookback else klines
-
-        if isinstance(data[0], dict):
-            highs = [float(k["high"]) for k in data]
-            lows = [float(k["low"]) for k in data]
-        else:
-            highs = [float(k[2]) for k in data]
-            lows = [float(k[3]) for k in data]
-
-        h1, h2 = highs[-2], highs[-1]
-        l1, l2 = lows[-2], lows[-1]
-
-        if h2 > h1 and l2 > l1:
-            estado = "alcista"
-        elif h2 < h1 and l2 < l1:
-            estado = "bajista"
-        else:
-            estado = "rango"
-
-        ultimo_high = max(highs)
-        ultimo_low = min(lows)
-        high_anterior = h1
-        low_anterior = l1
-
-        return {
-            "estado": estado,
-            "ultimo_high": round(ultimo_high, 2),
-            "ultimo_low": round(ultimo_low, 2),
-            "high_anterior": round(high_anterior, 2),
-            "low_anterior": round(low_anterior, 2),
-        }
-    except Exception:
-        return {
-            "estado": "sin_datos",
-            "ultimo_high": None,
-            "ultimo_low": None,
-            "high_anterior": None,
-            "low_anterior": None,
-        }
 
 
 # ============================================================
