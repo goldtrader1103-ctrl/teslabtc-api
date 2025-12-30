@@ -143,8 +143,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
 
         txt: list[str] = []
         # 🔹 Título del escenario en negrilla
-        txt.append(f"**🔷 {nombre}**")
-        txt.append("──────────────────────────────")
+        txt.append(f"*🔷 {nombre}*")
+        txt.append("─────────────────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
         txt.append(f"⚠️ Riesgo: {riesgo}")
@@ -170,7 +170,6 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
 
         return "\n".join(txt)
 
-
     # ---------------------------
     # 🔹 Bloque SWING
     # ---------------------------
@@ -190,8 +189,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         sl = _safe_num(data.get("sl", "—"))
 
         txt: list[str] = []
-        txt.append("**📈 ESCENARIO SWING**")
-        txt.append("──────────────────────────────")
+        txt.append("*📈 ESCENARIO SWING*")
+        txt.append("─────────────────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
         txt.append(f"⚠️ Riesgo: {riesgo}")
@@ -211,8 +210,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes: list[str] = []
 
     # CABECERA
-    partes.append("**📋 SEÑALES ACTIVAS**")
-    partes.append("──────────────────────────────")
+    partes.append("*📋 SEÑALES ACTIVAS*")
+    partes.append("─────────────────────────")
     partes.append(f"📅 Fecha: {fecha}")
     partes.append(f"💰 Activo: {simbolo}")
     partes.append(f"💵 Precio actual: {precio}")
@@ -220,8 +219,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes.append("")
 
     # SCALPING
-    partes.append("**📊 ESCENARIOS OPERATIVOS SCALPING**")
-    partes.append("──────────────────────────────")
+    partes.append("*📊 ESCENARIOS OPERATIVOS SCALPING*")
+    partes.append("─────────────────────────")
     partes.append(
         _bloque_scalping(
             "Escenario de Continuación (Tendencia Principal)",
@@ -239,8 +238,12 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes.append(_bloque_swing(swing))
 
     # REFLEXIÓN
-    partes.append("**📓 Reflexión TESLABTC A.P.**")
-    
+    partes.append("*📓 Reflexión TESLABTC A.P.*")
+    partes.append("─────────────────────────")
+    partes.append(f"💭 {reflexion}\n")
+    partes.append(
+        "⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY)."
+    )
     partes.append("⚠️ Análisis SWING actualizado cada vela de 1H.")
     partes.append(slogan)
 
@@ -284,15 +287,15 @@ def construir_mensaje_free(body: Dict[str, Any]) -> str:
     m15_txt = _fmt_tf("M15 (reacción)")
 
     partes: list[str] = []
-    partes.append("📋 ANÁLISIS GENERAL (MODO FREE)")
-    partes.append("──────────────────────────────")
+    partes.append("*📋 ANÁLISIS GENERAL (MODO FREE)*")
+    partes.append("──────────────────────────")
     partes.append(f"📅 Fecha: {fecha}")
     partes.append(f"💰 Activo: {simbolo}")
     partes.append(f"💵 Precio actual: {precio}")
     partes.append(f"🕒 Sesión: {sesion}")
     partes.append(f"🌐 Fuente precio: {fuente} (conexión: {conexion})")
     partes.append("")
-    partes.append("🧭 *Estructura por temporalidad*")
+    partes.append("*🧭 Estructura por temporalidad*")
     partes.append(f"• H4 (macro): {h4_txt}")
     partes.append(f"• H1 (intradía): {h1_txt}")
     partes.append(f"• M15 (reacción): {m15_txt}")
