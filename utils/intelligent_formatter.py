@@ -144,7 +144,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         txt: list[str] = []
         # 🔹 Título del escenario en negrilla
         txt.append(f"*🔷 {nombre}*")
-        txt.append("──────────────")
+        txt.append("───────────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
         txt.append(f"⚠️ Riesgo: {riesgo}")
@@ -190,7 +190,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
 
         txt: list[str] = []
         txt.append("*📈 ESCENARIO SWING*")
-        txt.append("──────────────")
+        txt.append("───────────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
         txt.append(f"⚠️ Riesgo: {riesgo}")
@@ -207,19 +207,26 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     # ---------------------------
     # 🧾 Construimos TODO
     # ---------------------------
+    partes: list[str] = []
+
+    # CABECERA
+    partes.append("*📋 SEÑALES ACTIVAS*")
+    partes.append("───────────────────")
+    partes.append(f"📅 Fecha: {fecha}")
+    partes.append(f"💰 Activo: {simbolo}")
+    partes.append(f"💵 Precio actual: {precio}")
+    partes.append(sesion_line)
+    partes.append("")
+
     # SCALPING
-    partes.append("📊 *ESCENARIOS OPERATIVOS SCALPING*")
-    partes.append("──────────────")
+    partes.append("*📊 ESCENARIOS OPERATIVOS SCALPING*")
+    partes.append("───────────────────")
     partes.append(
         _bloque_scalping(
             "Escenario de Continuación (Tendencia Principal)",
             s_cont,
         )
     )
-
-    # 🔹 Separador visual entre Continuación y Corrección
-    partes.append("")                            # línea en blanco
-    partes.append("──────────────")  # nueva barra
     partes.append(
         _bloque_scalping(
             "Escenario de Corrección (Contra Tendencia)",
@@ -227,16 +234,12 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         )
     )
 
-    # 🔹 Separador antes de SWING
-    partes.append("")
-    partes.append("──────────────")
-
     # SWING
     partes.append(_bloque_swing(swing))
 
     # REFLEXIÓN
     partes.append("*📓 Reflexión TESLABTC A.P.*")
-    partes.append("──────────────")
+    partes.append("───────────────────")
     partes.append(f"💭 {reflexion}\n")
     partes.append(
         "⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY)."
@@ -285,7 +288,7 @@ def construir_mensaje_free(body: Dict[str, Any]) -> str:
 
     partes: list[str] = []
     partes.append("*📋 ANÁLISIS GENERAL (MODO FREE)*")
-    partes.append("──────────────")
+    partes.append("───────────────────")
     partes.append(f"📅 Fecha: {fecha}")
     partes.append(f"💰 Activo: {simbolo}")
     partes.append(f"💵 Precio actual: {precio}")
