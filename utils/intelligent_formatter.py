@@ -1,579 +1,390 @@
 # ============================================================
-# 🧠 TESLABTC.KG — Intelligent Formatter (v5.8 PRO FINAL LIMPIO)
-# ============================================================
-# - Dirección D, H4 y H1 con RANGO real (High–Low)
-# - Muestra Zonas de Liquidez: PDH, PDL, Asia High/Low, POI H4, POI H1
-# - Escenarios completos (Continuación y Corrección)
-# - Escenario SWING con zona premium 61.8–88.6
-# - Contexto detallado por escenario (SCALPING / SWING)
-# - Setup Activo con etiqueta superior (color dinámica)
-# - Formato seguro para Telegram (Markdown protegido)
+# 🧠 intelligent_formatter.py — Formateo de mensajes TESLABTC
+# Versión unificada para API (FastAPI) y BOT (Telegram)
+# Compatible con analisis_premium v5.3.1 y estructura_utils
 # ============================================================
 
-import random
-import re
 from typing import Dict, Any
 
-# ============================================================
-# 🌟 FRASES MOTIVACIONALES TESLABTC
-# ============================================================
 
-FRASES_TESLA = [
-    "Tu mentalidad define tu rentabilidad.",
-    "Disciplina no es hacer lo que amas, sino hacerlo incluso cuando no quieres.",
-    "El mercado premia la paciencia, no la prisa.",
-    "Cada clic debe tener un propósito, no una emoción.",
-    "Tu constancia es tu verdadero edge.",
-    "El dinero sigue a la claridad, no a la confusión.",
-    "Operar menos es ganar más.",
-    "No se trata de acertar siempre, sino de perder correctamente.",
-    "Ser trader es dominarse a uno mismo, no al mercado.",
-    "El trading no se domina; se respeta cada día.",
-    "La consistencia no se busca, se construye.",
-    "La constancia vence al talento indisciplinado.",
-    "No operes por aburrimiento, opera por confirmación.",
-    "El trading recompensa a los que siguen reglas, no impulsos.",
-    "Tu única competencia es tu versión de ayer.",
-    "Sin registro no hay mejora.",
-    "El éxito llega cuando la disciplina se vuelve natural.",
-]
-
-
-def frase_motivacional() -> str:
-    return random.choice(FRASES_TESLA)
-
-# ============================================================
-# 🛡️ SAFE MARKDOWN
-# ============================================================
-
-def safe_markdown(text: str) -> str:
-    if not text:
-        return ""
-    text = re.sub(r'(?<!\*)\*(?!\*)', '✱', text)
-    text = re.sub(r'(?<!_)_(?!_)', '‗', text)
-    text = text.replace("[", "〔").replace("]", "〕").replace("(", "（").replace(")", "）")
-    return text
-
-# ============================================================
-# 🔹 Escenarios Operativos TESLABTC (para el REPORTE principal)
-# ============================================================
-
-def _fmt_escenarios_operativos(data: Dict[str, Any]) -> str:
-    """
-    Construye el bloque de escenarios operativos para el REPORTE principal.
-    Usa:
-      - data["scalping"]["continuacion"]
-      - data["scalping"]["correccion"]
-      - data["swing"]
-    """
-    scalping = data.get("scalping", {}) or {}
-    swing = data.get("swing", {}) or {}
-
-    def _estado(flag: Any) -> str:
-        return "✅ ACTIVO" if flag else "⏳ En espera"
-
-    bloques = []
-
-    # ------------------------
-    # SCALPING CONTINUACIÓN
-    # ------------------------
-    cont = scalping.get("continuacion", {}) or {}
-    if cont:
-        bloques.append(
-            "🔷 *Escenario SCALPING — Continuación*\n"
-            f"• Estado: {_estado(cont.get('activo'))}\n"
-            f"• Dirección: {cont.get('direccion', '—')}\n"
-            f"• Zona de reacción / entrada: {cont.get('zona_reaccion', '—')}\n"
-            f"• TP1: {cont.get('tp1_rr', '—')} | TP2: {cont.get('tp2_rr', '—')}\n"
-            f"• SL: {cont.get('sl', '—')}"
-        )
-
-    # ------------------------
-    # SCALPING CORRECCIÓN
-    # ------------------------
-    corr = scalping.get("correccion", {}) or {}
-    if corr:
-        bloques.append(
-            "🔷 *Escenario SCALPING — Corrección*\n"
-            f"• Estado: {_estado(corr.get('activo'))}\n"
-            f"• Dirección: {corr.get('direccion', '—')}\n"
-            f"• Zona de reacción / entrada: {corr.get('zona_reaccion', '—')}\n"
-            f"• TP1: {corr.get('tp1_rr', '—')} | TP2: {corr.get('tp2_rr', '—')}\n"
-            f"• SL: {corr.get('sl', '—')}"
-        )
-
-    # ------------------------
-    # SWING
-    # ------------------------
-    if swing:
-        zona = swing.get("zona_reaccion") or swing.get("premium_zone", "—")
-        bloques.append(
-            "📈 *Escenario SWING H4*\n"
-            f"• Estado: {_estado(swing.get('activo'))}\n"
-            f"• Dirección: {swing.get('direccion', '—')}\n"
-            f"• Zona de reacción (premium 61.8–88.6): {zona}\n"
-            f"• TP1: {swing.get('tp1_rr', '—')} | TP2: {swing.get('tp2_rr', '—')} | TP3: {swing.get('tp3_objetivo', '—')}\n"
-            f"• SL: {swing.get('sl', '—')}"
-        )
-
-    if not bloques:
-        return "No hay escenarios activos por ahora. Esperando BOS + zona institucional."
-
-    return "\n\n".join(bloques)
-
-# ============================================================
-# 🧩 FORMATEADOR PREMIUM — REPORTE PRINCIPAL
-# ============================================================
-
-def construir_mensaje_operativo(data: Dict[str, Any]) -> str:
-    fecha = data.get("fecha", "—")
-    activo = data.get("activo", "BTCUSDT")
-    sesion = data.get("sesión", "—")
-    precio = data.get("precio_actual", "—")
-    estructura = data.get("estructura_detectada", {}) or {}
-    zonas = data.get("zonas_detectadas", {}) or {}
-    setup = data.get("setup_tesla", {}) or {}
-    reflexion = data.get("reflexion") or frase_motivacional()
-    slogan = data.get("slogan", "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!")
-
-    # ========================================================
-    # 💥 ETIQUETA SUPERIOR (SETUP ACTIVO con color dinámico)
-    # ========================================================
-    etiqueta_setup = ""
-    if setup.get("activo"):
-        tipo_raw = setup.get("tipo", "—")
-        tipo_txt = tipo_raw if isinstance(tipo_raw, str) else "—"
-        tipo_lower = tipo_txt.lower()
-        color_emoji = "🟢" if "compra" in tipo_lower else "🔴" if "venta" in tipo_lower else "💥"
-        etiqueta_setup = (
-            f"{color_emoji} **SETUP ACTIVO ({tipo_txt}) — PRECIO {precio}** {color_emoji}\n"
-            f"──────────────────────────────\n"
-            f"📍 Zona de entrada: {setup.get('zona_entrada', '—')} | "
-            f"🎯 TP1: {setup.get('tp1', '—')} | 🛡️ SL: {setup.get('sl', '—')}\n"
-            f"⚙️ Contexto: {setup.get('contexto', 'Ejecución institucional detectada en M5.')}\n\n"
-        )
-
-    # ========================================================
-    # 🧭 DIRECCIÓN GENERAL — RANGO REAL
-    # ========================================================
-    d = estructura.get("D", {}) or {}
-    h4 = estructura.get("H4", {}) or {}
-    h1 = estructura.get("H1", {}) or {}
-
-    def _fmt_linea(tf: Dict[str, Any], nombre: str, icono: str) -> str:
-        estado_raw = tf.get("estado", "—")
-        estado_txt = estado_raw if isinstance(estado_raw, str) else "SIN_DATOS"
-        bos = tf.get("BOS", "—")
-        hi = tf.get("RANGO_HIGH") or zonas.get(f"{nombre}_HIGH", "—")
-        lo = tf.get("RANGO_LOW") or zonas.get(f"{nombre}_LOW", "—")
-        return f"{icono} {nombre}: {estado_txt} ({bos}) | RANGO: {hi}–{lo}"
-
-    direccion_txt = "\n".join([
-        _fmt_linea(d, "D", "📈"),
-        _fmt_linea(h4, "H4", "⚙️"),
-        _fmt_linea(h1, "H1", "🔹"),
-    ])
-
-    # ========================================================
-    # 💎 ZONAS DE LIQUIDEZ
-    # ========================================================
-    zonas_txt = [
-        f"• PDH: {zonas.get('PDH', '—')} | PDL: {zonas.get('PDL', '—')}",
-        f"• ASIA HIGH: {zonas.get('ASIAN_HIGH', '—')} | ASIA LOW: {zonas.get('ASIAN_LOW', '—')}",
-        f"• POI H4: {zonas.get('POI_H4', '—')}",
-        f"• POI H1: {zonas.get('POI_H1', '—')}",
-    ]
-    zonas_final = "\n".join(zonas_txt)
-
-    # ========================================================
-    # 📊 ESCENARIOS OPERATIVOS
-    # ========================================================
+# ------------------------------------------------------------
+# 🔢 Helper numérico seguro
+# ------------------------------------------------------------
+def _safe_num(v) -> str:
     try:
-        escenarios_txt = _fmt_escenarios_operativos(data)
-    except Exception as e:
-        escenarios_txt = f"Error al generar escenarios: {e}"
+        if v is None or v == "—":
+            return "—"
+        if isinstance(v, (int, float)):
+            return f"{v:,.2f}"
+        # si ya viene con formato tipo '87,500.26' lo dejamos
+        return str(v)
+    except Exception:
+        return str(v)
 
-    # ========================================================
-    # ⚙️ SETUP TESLABTC (solo si no está activo)
-    # ========================================================
-    if not setup.get("activo"):
-        setup_txt = (
-            "⏳ **Sin setup activo** — esperando confirmaciones estructurales "
-            "(BOS + POI + Sesión NY)."
-        )
+
+# ------------------------------------------------------------
+# 🧩 Helper para leer estado estructural (H4/H1) en Premium
+# ------------------------------------------------------------
+def _get_estado_estructura(estructura: Dict[str, Any], tf: str) -> str:
+    """
+    Lee estructura_detectada["H4"] / ["H1"] que normalmente tienen:
+      {
+        "estado": "alcista|bajista|lateral|sin_datos",
+        "RANGO_HIGH": float|None,
+        "RANGO_LOW": float|None,
+        ...
+      }
+    y devuelve siempre un string upper seguro.
+    """
+    dato = estructura.get(tf, "lateral")
+
+    if isinstance(dato, dict):
+        est = dato.get("estado", "lateral")
     else:
-        setup_txt = "✅ Setup confirmado en zona institucional (M5)."
+        est = dato
 
-    # ========================================================
-    # 🧠 CONCLUSIÓN Y REFLEXIÓN
-    # ========================================================
-    conclusion_txt = (
-        "🧠 **CONCLUSIÓN OPERATIVA**\n"
-        "──────────────────────────────\n"
-        f"{data.get('conclusion_general', 'Sin conclusión registrada.')}\n\n"
-        "📓 **Reflexión TESLABTC A.P.**\n"
-        "──────────────────────────────\n"
-        f"💭 {reflexion}\n\n"
-        f"⚠️ Análisis exclusivo para la sesión NY.\n{slogan}"
+    if not isinstance(est, str):
+        est = "lateral"
+
+    return est.upper()
+
+
+# ------------------------------------------------------------
+# 📋 MENSAJE PRINCIPAL: SEÑALES ACTIVAS (Premium)
+# ------------------------------------------------------------
+def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
+    """
+    Recibe el payload interno Premium:
+      {
+        "version": ...,
+        "fecha": ...,
+        "activo": "BTCUSDT",
+        "precio_actual": "...",
+        "sesión": "...",
+        "fuente_precio": "...",
+        "estructura_detectada": { ... },
+        "zonas_detectadas": { ... },
+        "scalping": {
+            "continuacion": {...},
+            "correccion": {...}
+        },
+        "swing": {...},
+        "reflexion": "...",
+        "slogan": "..."
+      }
+    y devuelve el texto listo para enviar por Telegram (Markdown).
+    """
+    fecha = body.get("fecha", "⏳")
+    simbolo = body.get("activo", "BTCUSDT")
+    precio = body.get("precio_actual", "—")
+    sesion = body.get("sesión", body.get("sesion", "Sesión no detectada"))
+    reflexion = body.get("reflexion", "Tu disciplina define tu rentabilidad.")
+    slogan = body.get(
+        "slogan",
+        "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!",
     )
 
-    # ========================================================
-    # 📋 MENSAJE FINAL COMPLETO
-    # ========================================================
-    msg = f"""
-{etiqueta_setup}
-📋 **REPORTE TESLABTC A.P. — Sesión NY**
-──────────────────────────────
-📅 Fecha: {fecha}
-💰 Activo: {activo}
-💵 Precio actual: {precio}
-🕒 Sesión: {sesion}
+    zonas_detectadas = body.get("zonas_detectadas", {}) or {}
+    poi_h4 = zonas_detectadas.get("POI_H4", "—")
 
-🧭 **DIRECCIÓN GENERAL**
-──────────────────────────────
-{direccion_txt}
+    scalping = body.get("scalping", {}) or {}
+    s_cont = scalping.get("continuacion", {}) or {}
+    s_corr = scalping.get("correccion", {}) or {}
+    swing = body.get("swing", {}) or {}
 
-💎 **ZONAS DE LIQUIDEZ**
-──────────────────────────────
-{zonas_final}
+    # ---------------------------
+    # 🕒 Sesión (solo texto)
+    # ---------------------------
+    sesion_line = f"🕒 Sesión: {sesion}"
 
-📊 **ESCENARIOS OPERATIVOS**
-──────────────────────────────
-{escenarios_txt}
+    # ---------------------------
+    # 🔹 Helper: bloque scalping
+    # ---------------------------
+    def _bloque_scalping(nombre: str, data: Dict[str, Any]) -> str:
+        activo = bool(data.get("activo", False))
+        estado = "✅ ACTIVO" if activo else "⏳ En espera"
+        direccion = data.get("direccion", "—")
+        riesgo = data.get("riesgo", "N/A")
+        entrada = _safe_num(data.get("zona_reaccion", "—"))
+        tp1 = _safe_num(data.get("tp1_rr", "1:1 (50% + BE)"))
+        tp2 = _safe_num(data.get("tp2_rr", "1:2 (50%)"))
+        sl = _safe_num(data.get("sl", "—"))
 
-⚙️ **SETUP TESLABTC**
-──────────────────────────────
-{setup_txt}
-
-{conclusion_txt}
-"""
-    return safe_markdown(msg.strip())
-
-# ============================================================
-# 🔹 MENSAJE CORTO DE SEÑALES (para el botón "📋 SEÑALES")
-# ============================================================
-
-def construir_mensaje_senales(data: Dict[str, Any]) -> str:
-    fecha = data.get("fecha", "—")
-    activo = data.get("activo", "BTCUSDT")
-    precio = data.get("precio_actual", "—")
-    sesion = data.get("sesión", "—")
-    scalping = data.get("scalping", {}) or {}
-    swing = data.get("swing", {}) or {}
-    reflexion = data.get("reflexion", "")
-    slogan = data.get("slogan", "")
-
-    cont = scalping.get("continuacion", {}) or {}
-    corr = scalping.get("correccion", {}) or {}
-
-    def estado(flag: Any) -> str:
-        return "✅ ACTIVO" if flag else "⏳ En espera"
-
-    # ---------- SWING ----------
-    swing_punto_entrada = swing.get("punto_entrada", "—")
-    swing_zona = swing.get("premium_zone") or swing.get("zona_reaccion", "—")
-    swing_tp1 = swing.get("tp1_rr", "1:1 (BE)")
-    swing_tp2 = swing.get("tp2_rr", "1:2 (50%)")
-    swing_tp3 = swing.get("tp3_objetivo", "—")
-    swing_sl = swing.get("sl", "—")
-
-    if not swing_punto_entrada or swing_punto_entrada == "—":
-        swing_detalle = f"""📥 Zona de reacción: {swing_zona}
-📍 Punto de entrada: --
-🎯 TP1: --
-🎯 TP2: --
-🎯 TP3: --
-🛡️ SL: --"""
-    else:
-        swing_detalle = f"""📥 Zona de reacción: {swing_zona}
-📍 Punto de entrada: {swing_punto_entrada} (quiebre y cierre H1)
-🎯 TP1: {swing_tp1}
-🎯 TP2: {swing_tp2}
-🎯 TP3: {swing_tp3}
-🛡️ SL: {swing_sl}"""
-
-    msg = f"""*📋 SEÑALES ACTIVAS*
-──────────────────────────────
-📅 Fecha: {fecha}
-💰 Activo: {activo}
-💵 Precio actual: {precio}
-🕒 Sesión: {sesion}
-
-*📊 ESCENARIOS OPERATIVOS SCALPING*
-──────────────────────────────
-*🔷 Escenario de Continuación (Tendencia Principal)*
-──────────────────────────────
-📌 Estado: {estado(cont.get('activo'))}
-📈 Dirección: {cont.get('direccion', '—')}
-⚠️ Riesgo: {cont.get('riesgo', 'N/A')}
-📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
-
-📥 Punto de entrada: {cont.get('zona_reaccion', '—')}
-🎯 TP1: {cont.get('tp1_rr', '1:1 (50% + BE)')}
-🎯 TP2: {cont.get('tp2_rr', '1:2 (50%)')}
-🛡️ SL: {cont.get('sl', '—')}
-
-*🔷 Escenario de Corrección (Contra Tendencia)*
-──────────────────────────────
-📌 Estado: {estado(corr.get('activo'))}
-📈 Dirección: {corr.get('direccion', '—')}
-⚠️ Riesgo: {corr.get('riesgo', 'N/A')}
-📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
-
-📥 Punto de entrada: {corr.get('zona_reaccion', '—')}
-🎯 TP1: {corr.get('tp1_rr', '1:1 (50% + BE)')}
-🎯 TP2: {corr.get('tp2_rr', '1:2 (50%)')}
-🛡️ SL: {corr.get('sl', '—')}
-
-*📈 ESCENARIO SWING*
-──────────────────────────────
-📌 Estado: {estado(swing.get('activo'))}
-📈 Dirección: {swing.get('direccion', '—')}
-⚠️ Riesgo: {swing.get('riesgo', 'N/A')}
-📍 Contexto: Pulsa el botón de contexto para ver la explicación completa del trade.
-
-{swing_detalle}
-
-*📓 Reflexión TESLABTC A.P.*
-──────────────────────────────
-💭 {reflexion}
-
-⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY).
-⚠️ Análisis SWING actualizado cada vela de 1H.
-{slogan}"""
-    return msg
-
-# ============================================================
-# 🧠 CONTEXTO DETALLADO POR ESCENARIO
-# ============================================================
-
-def construir_contexto_detallado(data: Dict[str, Any], tipo_escenario: str) -> str:
-    """
-    Construye el contexto para:
-      - "scalping_continuacion"
-      - "scalping_correccion"
-      - "swing"
-    Sin usar .upper() sobre estructuras raras para evitar errores.
-    """
-    activo = data.get("activo", "BTCUSDT")
-    
-    precio_actual = data.get("precio_actual", "—")
-    sesion = data.get("sesión", data.get("sesion", "—"))
-
-    estructura = data.get("estructura_detectada", {}) or {}
-    scalping = data.get("scalping", {}) or {}
-    swing_data = data.get("swing", {}) or {}
-
-    # -----------------------------
-    # Helpers de formato
-    # -----------------------------
-    def _extra_tf(tf: str):
-        info = estructura.get(tf, {}) or {}
-        raw_estado = info.get("estado", "sin_datos")
-        if isinstance(raw_estado, str):
-            estado = raw_estado
-        else:
-            estado = "SIN_DATOS"
-
-        hi = (
-            info.get("RANGO_HIGH")
-            or info.get("high")
-            or info.get("swing_high")
+        txt: list[str] = []
+        txt.append(f"🔷 {nombre}")
+        txt.append("──────────────────────────────")
+        txt.append(f"📌 Estado: {estado}")
+        txt.append(f"📈 Dirección: {direccion}")
+        txt.append(f"⚠️ Riesgo: {riesgo}")
+        txt.append(
+            "📍 Contexto: Usa el botón de contexto para ver la explicación completa del trade.\n"
         )
-        lo = (
-            info.get("RANGO_LOW")
-            or info.get("low")
-            or info.get("swing_low")
+        txt.append(f"📥 Punto de entrada: {entrada}")
+        txt.append(f"🎯 TP1: {tp1}")
+        txt.append(f"🎯 TP2: {tp2}")
+        txt.append(f"🛡️ SL: {sl}\n")
+        return "\n".join(txt)
+
+    # ---------------------------
+    # 🔹 Bloque SWING
+    # ---------------------------
+    def _bloque_swing(data: Dict[str, Any]) -> str:
+        activo = bool(data.get("activo", False))
+        estado = "✅ ACTIVO" if activo else "⏳ En espera"
+        direccion = data.get("direccion", "—")
+        riesgo = data.get("riesgo", "N/A")
+
+        zona_reac = data.get("zona_reaccion")
+        if not zona_reac or zona_reac == "—":
+            zona_reac = data.get("premium_zone") or poi_h4 or "—"
+
+        tp1 = _safe_num(data.get("tp1_rr", "—"))
+        tp2 = _safe_num(data.get("tp2_rr", "—"))
+        tp3 = _safe_num(data.get("tp3_objetivo", "—"))
+        sl = _safe_num(data.get("sl", "—"))
+
+        txt: list[str] = []
+        txt.append("📈 ESCENARIO SWING")
+        txt.append("──────────────────────────────")
+        txt.append(f"📌 Estado: {estado}")
+        txt.append(f"📈 Dirección: {direccion}")
+        txt.append(f"⚠️ Riesgo: {riesgo}")
+        txt.append(
+            "📍 Contexto: Usa el botón de contexto para ver la explicación completa del trade.\n"
         )
-        return estado, hi, lo
+        txt.append(f"📥 Zona de reacción: {zona_reac}")
+        txt.append(f"🎯 TP1: {tp1}")
+        txt.append(f"🎯 TP2: {tp2}")
+        txt.append(f"🎯 TP3: {tp3}")
+        txt.append(f"🛡️ SL: {sl}\n")
+        return "\n".join(txt)
 
-    def _fmt_rango(lo, hi):
-        if lo is None or hi is None:
-            return "N/D"
-        try:
-            return f"{float(lo):,.2f} – {float(hi):,.2f} USD"
-        except Exception:
-            return "N/D"
-
-    def _fmt_precio(v):
-        if v in (None, "-", "—"):
-            return "—"
-        try:
-            return f"{float(v):,.2f} USD"
-        except Exception:
-            return str(v)
-
-    estado_h4, hi_h4, lo_h4 = _extra_tf("H4")
-    estado_h1, hi_h1, lo_h1 = _extra_tf("H1")
-
-    rango_h4_txt = _fmt_rango(lo_h4, hi_h4)
-    rango_h1_txt = _fmt_rango(lo_h1, hi_h1)
-
+    # ---------------------------
+    # 🧾 Construimos TODO
+    # ---------------------------
     partes: list[str] = []
 
-    # =====================================================
-    # 🧩 CABECERA GENERAL
-    # =====================================================
+    # CABECERA
+    partes.append("📋 SEÑALES ACTIVAS")
+    partes.append("──────────────────────────────")
+    partes.append(f"📅 Fecha: {fecha}")
+    partes.append(f"💰 Activo: {simbolo}")
+    partes.append(f"💵 Precio actual: {precio}")
+    partes.append(sesion_line)
+    partes.append("")
+
+    # SCALPING
+    partes.append("📊 ESCENARIOS OPERATIVOS SCALPING")
+    partes.append("──────────────────────────────")
     partes.append(
-        "📘 *Contexto TESLABTC A.P.*\n\n"
-        f"• Activo: *{activo}*\n"
-        f"• Precio actual: {precio_actual}\n"
-        f"• Sesión actual: {sesion}\n"
-        f"• Estructura H4: *{estado_h4}*\n"
-        f"• Estructura H1: *{estado_h1}*\n\n"
-        "📐 *Rangos estructurales*\n"
-        f"• H4 — Rango operativo: {rango_h4_txt}\n"
-        f"• H1 — Rango operativo: {rango_h1_txt}\n"
+        _bloque_scalping(
+            "Escenario de Continuación (Tendencia Principal)",
+            s_cont,
+        )
+    )
+    partes.append(
+        _bloque_scalping(
+            "Escenario de Corrección (Contra Tendencia)",
+            s_corr,
+        )
     )
 
-    # Comentario H4 vs H1 (solo si son strings normales)
-    if isinstance(estado_h4, str) and isinstance(estado_h1, str):
-        if estado_h4 in ("ALCISTA", "BAJISTA") and estado_h1 in ("ALCISTA", "BAJISTA"):
-            if estado_h4 == estado_h1:
-                partes.append(
-                    "\n🧭 Cuando *H4 y H1 van en la misma dirección* hablamos de "
-                    "*continuidad institucional* del movimiento.\n"
-                )
-            else:
-                partes.append(
-                    "\n🧭 Cuando *H4 y H1 van en direcciones opuestas*, interpretamos "
-                    "que H1 está profundizando hacia la *zona premium de H4* antes de "
-                    "reanudarse la tendencia macro.\n"
-                )
+    # SWING
+    partes.append(_bloque_swing(swing))
 
-    # =====================================================
-    # 🔷 ESCENARIO SCALPING CONTINUACIÓN
-    # =====================================================
-    if tipo_escenario == "scalping_continuacion":
-        esc = scalping.get("continuacion", {}) or {}
+    # REFLEXIÓN
+    partes.append("📓 Reflexión TESLABTC A.P.")
+    partes.append("──────────────────────────────")
+    partes.append(f"💭 {reflexion}\n")
+    partes.append(
+        "⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY)."
+    )
+    partes.append("⚠️ Análisis SWING actualizado cada vela de 1H.")
+    partes.append(slogan)
 
-        entrada = esc.get("punto_entrada") or esc.get("zona_reaccion") or "—"
-        tp1 = esc.get("tp1") or esc.get("tp1_rr") or "—"
-        tp2 = esc.get("tp2") or esc.get("tp2_rr") or "—"
-        sl = esc.get("sl") or esc.get("sl_tecnico") or "—"
+    return "\n".join(partes)
 
-        partes.append(
-            "\n🔷 *Escenario SCALPING de Continuación*\n\n"
-            "Este escenario *siempre opera a favor de la estructura de H1* "
-            "(puede ser BUY o SELL, según esté H1 alcista o bajista):\n"
-            "1. Se toma como referencia el *último HIGH/LOW relevante en M5*.\n"
-            "2. Se espera un *BOS claro en M5* en la dirección de H1.\n"
-            "3. La operación busca acompañar la direccionalidad intradía, no ir contra ella.\n\n"
-        )
 
-        partes.append(
-            f"📥 Punto de entrada estimado / zona operativa: {_fmt_precio(entrada)}\n"
-            f"🎯 TP1 (1:1 + BE / parciales): {_fmt_precio(tp1)}\n"
-            f"🎯 TP2 (1:2 objetivo completo): {_fmt_precio(tp2)}\n"
-            f"🛡️ SL técnico: {_fmt_precio(sl)}\n\n"
-        )
+# ------------------------------------------------------------
+# 🆓 MENSAJE FREE: estructura general sin setups
+# ------------------------------------------------------------
+def construir_mensaje_free(body: Dict[str, Any]) -> str:
+    """
+    Mensaje para usuarios Free.
+    Usa la estructura simplificada H4/H1/M15 que construye main.py.
+    """
+    fecha = body.get("fecha", "⏳")
+    simbolo = body.get("activo", "BTCUSDT")
+    precio = body.get("precio_actual", "—")
+    sesion = body.get("sesión", body.get("sesion", "Sesión no detectada"))
+    fuente = body.get("fuente_precio", "Binance")
+    conexion = body.get("conexion_binance", "OK")
 
-    # =====================================================
-    # 🔷 ESCENARIO SCALPING CORRECCIÓN
-    # =====================================================
-    elif tipo_escenario == "scalping_correccion":
-        esc = scalping.get("correccion", {}) or {}
+    estructura = body.get("estructura_detectada", {}) or {}
 
-        entrada = esc.get("punto_entrada") or esc.get("zona_reaccion") or "—"
-        tp1 = esc.get("tp1") or esc.get("tp1_rr") or "—"
-        tp2 = esc.get("tp2") or esc.get("tp2_rr") or "—"
-        sl = esc.get("sl") or esc.get("sl_tecnico") or "—"
-
-        partes.append(
-            "\n🔷 *Escenario SCALPING de Corrección*\n\n"
-            "Este escenario *siempre va en contra de H1* (es el retroceso intradía):\n"
-            "1. H1 marca la dirección principal, pero el precio corrige contra ella.\n"
-            "2. Se busca un *BOS en M5* contra H1, dentro de un rango claro.\n"
-            "3. El objetivo es capturar el retroceso, no toda la tendencia.\n\n"
-        )
-
-        partes.append(
-            f"📥 Punto de entrada estimado / zona operativa: {_fmt_precio(entrada)}\n"
-            f"🎯 TP1 (1:1 + BE / parciales): {_fmt_precio(tp1)}\n"
-            f"🎯 TP2 (1:2 objetivo completo): {_fmt_precio(tp2)}\n"
-            f"🛡️ SL técnico: {_fmt_precio(sl)}\n\n"
-        )
-
-    # =====================================================
-    # 📈 ESCENARIO SWING (H4 + BOS H1)
-    # =====================================================
-    elif tipo_escenario == "swing":
-        zona = swing_data.get("zona_reaccion") or swing_data.get("premium_zone") or {}
-
-        if isinstance(zona, dict):
-            z_min = zona.get("min") or zona.get("low") or zona.get("zona_min")
-            z_max = zona.get("max") or zona.get("high") or zona.get("zona_max")
-            zona_txt = _fmt_rango(z_min, z_max)
-        elif isinstance(zona, (list, tuple)) and len(zona) == 2:
-            zona_txt = _fmt_rango(zona[0], zona[1])
+    def _fmt_tf(key: str) -> str:
+        info = estructura.get(key, {}) or {}
+        if isinstance(info, dict):
+            estado = info.get("estado", "sin_datos")
+            hi = info.get("high")
+            lo = info.get("low")
         else:
-            zona_txt = str(zona) if zona not in (None, "") else "—"
+            # por si en algún caso viene solo texto
+            estado = str(info)
+            hi = lo = None
 
-        tp1 = swing_data.get("tp1") or swing_data.get("tp1_rr") or "—"
-        tp2 = swing_data.get("tp2") or swing_data.get("tp2_rr") or "—"
-        tp3 = swing_data.get("tp3") or swing_data.get("tp3_objetivo") or "—"
-        sl = swing_data.get("sl") or "—"
+        hi_txt = _safe_num(hi) if hi is not None else "N/D"
+        lo_txt = _safe_num(lo) if lo is not None else "N/D"
+        return f"{estado} | Rango: {lo_txt} – {hi_txt}"
 
-        partes.append(
-            "\n📈 *Escenario SWING H4*\n\n"
-            "El swing se construye a partir del *último impulso válido de H4*:\n"
-            "1. Se identifica el tramo de impulso actual en H4.\n"
-            "2. Sobre ese impulso se calcula la *zona premium 61.8 % – 88.6 %*.\n"
-            "3. En esa zona se exige *quiebre y cierre de H1* a favor de la "
-            "tendencia de H4 antes de validar el setup.\n\n"
-        )
+    h4_txt = _fmt_tf("H4 (macro)")
+    h1_txt = _fmt_tf("H1 (intradía)")
+    m15_txt = _fmt_tf("M15 (reacción)")
 
-        partes.append(
-            f"📥 Zona de reacción H4 (premium): {zona_txt}\n"
-            f"🎯 TP1: {_fmt_precio(tp1)}\n"
-            f"🎯 TP2: {_fmt_precio(tp2)}\n"
-            f"🎯 TP3: {_fmt_precio(tp3)}\n"
-            f"🛡️ SL técnico: {_fmt_precio(sl)}\n\n"
-        )
-
-    else:
-        return "⚠️ Escenario de contexto no reconocido. Usa scalping_continuacion, scalping_correccion o swing."
-
-    # =====================================================
-    # 🕒 RECOMENDACIÓN OPERATIVA TESLABTC
-    # =====================================================
+    partes: list[str] = []
+    partes.append("📋 ANÁLISIS GENERAL (MODO FREE)")
+    partes.append("──────────────────────────────")
+    partes.append(f"📅 Fecha: {fecha}")
+    partes.append(f"💰 Activo: {simbolo}")
+    partes.append(f"💵 Precio actual: {precio}")
+    partes.append(f"🕒 Sesión: {sesion}")
+    partes.append(f"🌐 Fuente precio: {fuente} (conexión: {conexion})")
+    partes.append("")
+    partes.append("🧭 *Estructura por temporalidad*")
+    partes.append(f"• H4 (macro): {h4_txt}")
+    partes.append(f"• H1 (intradía): {h1_txt}")
+    partes.append(f"• M15 (reacción): {m15_txt}")
+    partes.append("")
     partes.append(
-        "🕒 *Recomendación operativa TESLABTC:*\n"
-        "• Priorizar las *primeras 2 horas* de la sesión activa (Londres o NY).\n"
-        "• 1 trade por día y por sesión, en *un solo activo*.\n"
-        "• Si el precio está muy cerca del borde del rango H4/H1, ser más selectiva con las entradas.\n"
-        "• Evitar operar en medio de noticias fuertes o en plena zona de indecisión.\n"
+        "⚠️ Esta vista Free resume solo la estructura general del mercado."
+    )
+    partes.append(
+        "   Para ver setups SCALPING y SWING completos, activa tu acceso Premium TESLABTC.KG."
     )
 
-    return "".join(partes)
+    return "\n".join(partes)
 
-# ============================================================
-# 🧩 FORMATEADOR FREE (modo básico)
-# ============================================================
 
-def construir_mensaje_free(data: Dict[str, Any]) -> str:
-    fecha = data.get("fecha", "—")
-    sesion = data.get("sesión", "—")
-    precio = data.get("precio_actual", "—")
-    estructura = data.get("estructura_detectada", {}) or {}
+# ------------------------------------------------------------
+# 📘 CONTEXTO DETALLADO POR ESCENARIO (Premium)
+# ------------------------------------------------------------
+def construir_contexto_detallado(body: Dict[str, Any], escenario: str) -> str:
+    """
+    Genera un texto explicativo para:
+      - 'scalping_continuacion'
+      - 'scalping_correccion'
+      - 'swing'
+    usando el payload Premium ya cacheado (estructura_detectada, scalping, swing).
+    """
+    simbolo = body.get("activo", "BTCUSDT")
+    precio = body.get("precio_actual", "—")
+    sesion = body.get("sesión", body.get("sesion", "Sesión no detectada"))
 
-    h4 = estructura.get("H4", {}).get("estado", "—")
-    h1 = estructura.get("H1", {}).get("estado", "—")
-    m15 = estructura.get("M15", {}).get("estado", "—")
+    estructura = body.get("estructura_detectada", {}) or {}
+    dir_h4 = _get_estado_estructura(estructura, "H4")
+    dir_h1 = _get_estado_estructura(estructura, "H1")
 
-    msg = f"""
-📋 **TESLABTC Free — Vista General**
-──────────────────────────────
-📅 Fecha: {fecha}
-💵 Precio actual: {precio}
-🕒 Sesión: {sesion}
+    scalping = body.get("scalping", {}) or {}
+    s_cont = scalping.get("continuacion", {}) or {}
+    s_corr = scalping.get("correccion", {}) or {}
+    swing = body.get("swing", {}) or {}
+    zonas = body.get("zonas_detectadas", {}) or {}
 
-🧭 **Estructura Detectada**
-──────────────────────────────
-H4: {h4}
-H1: {h1}
-M15: {m15}
+    header = (
+        "📘 *Contexto TESLABTC A.P.*\n\n"
+        f"• Activo: *{simbolo}*\n"
+        f"• Precio actual: *{precio}*\n"
+        f"• Sesión actual: {sesion}\n"
+        f"• Estructura H4: *{dir_h4}*\n"
+        f"• Estructura H1: *{dir_h1}*\n\n"
+    )
 
-💭 Accede al modo *Premium* para ver zonas, confirmaciones y setups activos.
-"""
-    return safe_markdown(msg.strip())
+    # ------------- CONTINUACIÓN SCALPING -------------
+    if escenario == "scalping_continuacion":
+        data = s_cont
+        entrada = _safe_num(data.get("zona_reaccion", "—"))
+        tp1 = _safe_num(data.get("tp1_rr", "1:1 (50% + BE)"))
+        tp2 = _safe_num(data.get("tp2_rr", "1:2 (50%)"))
+        sl = _safe_num(data.get("sl", "—"))
+
+        txt = header
+        txt += "🔷 *Escenario SCALPING de Continuación*\n\n"
+        txt += (
+            "Este escenario busca operar *a favor de la tendencia intradía (H1)*:\n"
+            "1. Se toma como referencia el último HIGH/LOW relevante en M5.\n"
+            "2. Se espera la ruptura de ese nivel para gatillar la entrada con BOS limpio.\n"
+            "3. La operación respeta la dirección estructural de H1 y se ejecuta solo en zona válida.\n\n"
+        )
+        txt += f"📥 Punto de entrada estimado: *{entrada}*\n"
+        txt += f"🎯 TP1 (1:1 + BE / parciales): *{tp1}*\n"
+        txt += f"🎯 TP2 (1:2 objetivo completo): *{tp2}*\n"
+        txt += f"🛡️ SL técnico: *{sl}*\n\n"
+        txt += (
+            "🔎 Gestión sugerida TESLABTC:\n"
+            "• Mover a BE al alcanzar TP1.\n"
+            "• Asegurar parciales en TP1 y dejar correr hacia TP2 si el contexto lo permite.\n"
+            "• Evitar entradas si hay noticias fuertes o el precio está en zona de alta indecisión.\n"
+        )
+        return txt
+
+    # ------------- CORRECCIÓN SCALPING -------------
+    if escenario == "scalping_correccion":
+        data = s_corr
+        entrada = _safe_num(data.get("zona_reaccion", "—"))
+        tp1 = _safe_num(data.get("tp1_rr", "1:1 (50% + BE)"))
+        tp2 = _safe_num(data.get("tp2_rr", "1:2 (50%)"))
+        sl = _safe_num(data.get("sl", "—"))
+
+        txt = header
+        txt += "🔷 *Escenario SCALPING de Corrección*\n\n"
+        txt += (
+            "Este escenario busca capturar movimientos *contra la tendencia intradía (H1)*:\n"
+            "1. La estructura principal va en una dirección, pero se detecta extensión o agotamiento.\n"
+            "2. Se usa el último HIGH/LOW de M5 como gatillo de corrección con BOS contra la tendencia.\n"
+            "3. El riesgo es más alto al ir contra la dirección principal, por lo que se filtra más.\n\n"
+        )
+        txt += f"📥 Punto de entrada estimado: *{entrada}*\n"
+        txt += f"🎯 TP1 (1:1 + BE / parciales): *{tp1}*\n"
+        txt += f"🎯 TP2 (1:2 objetivo de corrección): *{tp2}*\n"
+        txt += f"🛡️ SL técnico: *{sl}*\n\n"
+        txt += (
+            "⚠️ Al ser contra tendencia, este escenario debe filtrarse mejor:\n"
+            "• Confirmar agotamiento (mechas largas, pérdida de fuerza, reacción en zona clave).\n"
+            "• Reducir tamaño de posición si el contexto no es muy limpio.\n"
+            "• Priorizar siempre las operaciones a favor de la estructura principal.\n"
+        )
+        return txt
+
+    # ------------- SWING -------------
+    if escenario == "swing":
+        zona_premium = swing.get("premium_zone") or zonas.get("POI_H4", "—")
+        zona_reac = swing.get("zona_reaccion") or zona_premium
+        tp1 = _safe_num(swing.get("tp1_rr", "1:1 (BE)"))
+        tp2 = _safe_num(swing.get("tp2_rr", "1:2 (50%)"))
+        tp3 = _safe_num(swing.get("tp3_objetivo", "—"))
+        sl = _safe_num(swing.get("sl", "—"))
+
+        txt = header
+        txt += "📈 *Escenario SWING TESLABTC*\n\n"
+        txt += (
+            "La lógica de SWING sigue la estructura de H4 e H1:\n"
+            "1. Se identifica una zona PREMIUM en H4 (rango 61.8%–88.6% del último impulso).\n"
+            "2. Se espera que el precio llegue a esa zona antes de buscar confirmación.\n"
+            "3. En la zona premium, se requiere BOS claro en H1 a favor de la tendencia de H4 antes de validar el trade.\n\n"
+        )
+        txt += f"📥 Zona PREMIUM H4: *{zona_premium}*\n"
+        txt += f"📥 Zona de reacción / gatillo: *{zona_reac}*\n"
+        txt += f"🎯 TP1 referencia (1:1 + BE): *{tp1}*\n"
+        txt += f"🎯 TP2 referencia (1:2 + parciales): *{tp2}*\n"
+        txt += f"🎯 TP3 objetivo estructural (alto/bajo H4): *{tp3}*\n"
+        txt += f"🛡️ SL técnico (H1): *{sl}*\n\n"
+        txt += (
+            "🧩 Idea general:\n"
+            "• No se fuerza la entrada si el precio aún no ha llegado a la zona PREMIUM.\n"
+            "• Una vez en zona, se espera BOS en H1 en la dirección de H4.\n"
+            "• El trade suele tener mayor recorrido y exige más paciencia.\n"
+        )
+        return txt
+
+    # Si llega aquí, escenario desconocido
+    return header + "⚠️ Escenario no reconocido para contexto detallado."
