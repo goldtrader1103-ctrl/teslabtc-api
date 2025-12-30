@@ -16,7 +16,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytz  # por compatibilidad, aunque no se use directamente
 
-from utils.estructura_utils import detectar_bos
+from utils.estructura_utils import detectar_bos, evaluar_estructura
+
 
 # ------------------------------
 # 🌎 Config base
@@ -223,41 +224,31 @@ def _poi_fibo_band(
     lo: Optional[float],
 ) -> Optional[Tuple[float, float]]:
     """
-    Devuelve la banda 61.8–88.6 % del último impulso H4.
+    Devuelve la banda 61.8–88.6 % de retroceso del último impulso H4.
 
     Regla TESLABTC:
-      - Estructura ALCISTA  👉 Fibo de izquierda a derecha, del BAJO al ALTO.
-      - Estructura BAJISTA 👉 Fibo de izquierda a derecha, del ALTO al BAJO.
-      - En rango usamos low→high por defecto.
+      - En alcista: impulso low→high, pero la zona de reacción es el
+        retroceso desde el HIGH hacia el LOW (descuento).
+      - En bajista: impulso high→low, y la zona de reacción es el
+        retroceso desde el HIGH hacia el LOW (pullback para vender).
+
+    Matemáticamente, para ambos casos usamos la misma banda anclada al HIGH.
     """
     if hi is None or lo is None or hi == lo:
         return None
 
     hi = float(hi)
     lo = float(lo)
-
-    estado_norm = (estado or "").strip().lower()
-
-    if estado_norm == "alcista":
-        # impulso de low → high
-        base, tope = lo, hi
-    elif estado_norm == "bajista":
-        # impulso de high → low
-        base, tope = hi, lo
-    else:
-        # lateral / sin_datos: tomamos low → high
-        base, tope = lo, hi
-
-    amp = tope - base
-    if amp <= 0:
+    rango = hi - lo
+    if rango <= 0:
         return None
 
-    # banda 61.8–88.6 % del impulso
-    lvl_618 = base + 0.618 * amp
-    lvl_886 = base + 0.886 * amp
+    # Niveles de retroceso medidos desde el HIGH hacia el LOW
+    lvl_618 = hi - 0.618 * rango
+    lvl_886 = hi - 0.886 * rango
 
-    banda_low = min(lvl_618, lvl_886)
-    banda_high = max(lvl_618, lvl_886)
+    banda_low = min(lvl_886, lvl_618)
+    banda_high = max(lvl_886, lvl_618)
     return round(banda_low, 2), round(banda_high, 2)
 
 # ------------------------------------------------------------
@@ -319,25 +310,25 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     kl_h1 = _safe_get_klines(symbol, "1h", 400)
     kl_m5 = _safe_get_klines(symbol, "5m", 300)
 
-    # Estructura con ZigZag (dirección general)
-    tf_h4 = _detectar_tendencia_zigzag(kl_h4, depth=12, deviation=5.0, backstep=2)
-    tf_h1 = _detectar_tendencia_zigzag(kl_h1, depth=10, deviation=4.0, backstep=2)
-    dir_h4 = tf_h4.get("estado", "lateral")
-    dir_h1 = tf_h1.get("estado", "lateral")
-
-    # Rango H4 para contexto y TP3 swing
+    # Estructura H4/H1 usando heurística TESLABTC (estructura_utils)
     if kl_h4:
-        h4_high = max(k["high"] for k in kl_h4[-60:])
-        h4_low = min(k["low"] for k in kl_h4[-60:])
+        info_h4 = evaluar_estructura(kl_h4)
+        dir_h4 = info_h4.get("estado", "sin_datos")
+        h4_high = info_h4.get("high")
+        h4_low = info_h4.get("low")
     else:
+        dir_h4 = "sin_datos"
         h4_high = None
         h4_low = None
 
-    # Rango H1 para contexto
     if kl_h1:
-        h1_high = max(k["high"] for k in kl_h1[-60:])
-        h1_low = min(k["low"] for k in kl_h1[-60:])
+        info_h1 = evaluar_estructura(kl_h1)
+        dir_h1 = info_h1.get("estado", "sin_dat" \
+        "os")
+        h1_high = info_h1.get("high")
+        h1_low = info_h1.get("low")
     else:
+        dir_h1 = "sin_datos"
         h1_high = None
         h1_low = None
 
