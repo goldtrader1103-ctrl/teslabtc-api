@@ -96,6 +96,41 @@ CONCEPTOS = [
 # 💰 GESTIÓN Y EJECUCIÓN
 # ============================================================
 {
+    "nombre": "Orden Pendiente",
+    "titulo": "⏳ Orden Pendiente",
+    "categoria": "💰 Gestión y Ejecución",
+    "definicion": "Es una orden que no entra de inmediato al mercado. Se activa automáticamente cuando el precio llega al nivel que definiste.",
+    "ejemplo": "Si colocas una orden pendiente en 90 000, la operación solo se abre cuando el precio toque ese nivel."
+},
+{
+    "nombre": "Buy Stop",
+    "titulo": "🟢 Buy Stop",
+    "categoria": "💰 Gestión y Ejecución",
+    "definicion": "Es una orden pendiente de compra colocada por encima del precio actual. Solo se activa si el mercado sube y rompe ese nivel.",
+    "ejemplo": "Si BTC está en 88 000 y colocas una Buy Stop en 89 000, la compra se activará solo cuando el precio llegue a 89 000."
+},
+{
+    "nombre": "Sell Stop",
+    "titulo": "🔴 Sell Stop",
+    "categoria": "💰 Gestión y Ejecución",
+    "definicion": "Es una orden pendiente de venta colocada por debajo del precio actual. Se activa cuando el precio rompe hacia abajo.",
+    "ejemplo": "Si BTC está en 90 000 y colocas una Sell Stop en 89 200, la operación venderá automáticamente cuando el precio llegue allí."
+},
+{
+    "nombre": "Ordenes TESLABTC",
+    "titulo": "⚙️ Cómo usar las señales TESLABTC",
+    "categoria": "💰 Gestión y Ejecución",
+    "definicion": "Las señales TESLABTC entregan Entrada, Stop Loss y Take Profit. El usuario debe crear una orden pendiente (Buy Stop o Sell Stop), colocar el SL y TP sugeridos y dejar que el mercado active la operación solo si confirma la ruptura.",
+    "ejemplo": "Si la señal indica Buy Stop 89 000, SL 88 500 y TP1 90 200, colocas esos niveles en tu plataforma y esperas. Si el precio no rompe, no hay operación."
+},
+{
+    "nombre": "Gestion TESLABTC",
+    "titulo": "🛡️ Gestión del Trade TESLABTC",
+    "categoria": "💰 Gestión y Ejecución",
+    "definicion": "La gestión recomendada es tomar parcial en TP1 y mover el SL a Break-even. Luego se deja correr a TP2 solo si el contexto sigue alineado.",
+    "ejemplo": "Al llegar a 1:1 puedes cerrar el 50% y mover el SL a entrada para asegurar el trade."
+},
+{
     "nombre": "RRR",
     "titulo": "📊 RRR — Riesgo / Recompensa",
     "categoria": "💰 Gestión y Ejecución",
@@ -275,6 +310,20 @@ CONCEPTOS = [
 # ============================================================
 # 🎓 CONCEPTOS GENERALES
 # ============================================================
+{
+    "nombre": "Plataformas de Trading",
+    "titulo": "🌍 Plataformas para operar BTCUSDT",
+    "categoria": "🎓 Conceptos Generales",
+    "definicion": "Son aplicaciones o brokers donde puedes ejecutar las operaciones sugeridas por TESLABTC. Es importante que usen precios de referencia muy cercanos a Binance para mantener coherencia en los niveles.",
+    "ejemplo": "Algunas plataformas populares son QuanFury, Binance, Bybit o MEXC."
+},
+{
+    "nombre": "QuanFury",
+    "titulo": "📱 QuanFury (plataforma recomendada personal)",
+    "categoria": "🎓 Conceptos Generales",
+    "definicion": "Es una plataforma que permite operar criptomonedas, acciones y otros activos con precios referenciados a Binance, sin comisión por operación.",
+    "ejemplo": "Si deseas registrarte en QuanFury puedes hacerlo con el código de invitación: 7632L3BN"
+},
 {
     "nombre": "Trading",
     "titulo": "💼 Trading",
