@@ -116,11 +116,6 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     swing = body.get("swing", {}) or {}
 
     # ---------------------------
-    # 🕒 Sesión (solo texto)
-    # ---------------------------
-    sesion_line = f"🕒 Sesión: {sesion}"
-
-    # ---------------------------
     # 🔹 Helper: bloque scalping
     # ---------------------------
     def _bloque_scalping(nombre: str, data: Dict[str, Any]) -> str:
@@ -128,23 +123,18 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         estado = "✅ ACTIVO" if activo else "⏳ En espera"
         direccion = data.get("direccion", "—")
         riesgo = data.get("riesgo", "N/A")
-
         entrada = _safe_num(data.get("zona_reaccion", "—"))
         tp1 = _safe_num(data.get("tp1_rr", "1:1 (50% + BE)"))
         tp2 = _safe_num(data.get("tp2_rr", "1:2 (50%)"))
-
-        # Guardamos el valor original para cálculo y el formateado para mostrar
-        sl_val = data.get("sl", "—")
-        sl = _safe_num(sl_val)
+        sl = _safe_num(data.get("sl", "—"))
 
         sl_alerta = bool(data.get("sl_alerta", False))
         sl_dist = data.get("sl_dist")
         sl_pct = data.get("sl_pct")
 
         txt: list[str] = []
-        # 🔹 Título del escenario en negrilla
-        txt.append(f"*🔷 {nombre}*")
-        txt.append("───────────────────")
+        txt.append(f"🔷 *{nombre}*")
+        txt.append("──────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
         txt.append(f"⚠️ Riesgo: {riesgo}")
@@ -154,20 +144,15 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         txt.append(f"🎯 TP2: {tp2}")
         txt.append(f"🛡️ SL: {sl}")
 
-        # 🚨 Advertencia SOLO si el SL es exagerado (≥ 1%)
+        # Aviso extra si el SL es exagerado para scalping
         if sl_alerta and sl_dist is not None and sl_pct is not None:
-            try:
-                sl_pct_float = float(sl_pct)
-                if sl_pct_float >= 1.0:
-                    dist_txt = _safe_num(sl_dist)
-                    txt.append(
-                        f"⚠️ Alerta TESLABTC: SL amplio para scalping (~{dist_txt} puntos, {sl_pct_float:.2f}% del precio). "
-                        "El mercado puede estar sobreextendido; considera reducir tamaño o no tomar esta operación."
-                    )
-            except Exception:
-                # Si algo raro pasa con el porcentaje, no rompemos el mensaje
-                pass
+            dist_txt = _safe_num(sl_dist)
+            txt.append(
+                f"⚠️ Alerta TESLABTC: SL amplio para scalping (~{dist_txt} puntos, {sl_pct:.2f}% del precio)."
+            )
 
+        # Línea en blanco para separar bloques
+        txt.append("")
         return "\n".join(txt)
 
     # ---------------------------
@@ -189,8 +174,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         sl = _safe_num(data.get("sl", "—"))
 
         txt: list[str] = []
-        txt.append("*📈 ESCENARIO SWING*")
-        txt.append("───────────────────")
+        txt.append("📈 *ESCENARIO SWING*")
+        txt.append("──────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
         txt.append(f"⚠️ Riesgo: {riesgo}")
@@ -201,7 +186,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         txt.append(f"🎯 TP1: {tp1}")
         txt.append(f"🎯 TP2: {tp2}")
         txt.append(f"🎯 TP3: {tp3}")
-        txt.append(f"🛡️ SL: {sl}\n")
+        txt.append(f"🛡️ SL: {sl}")
+        txt.append("")
         return "\n".join(txt)
 
     # ---------------------------
@@ -210,17 +196,17 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes: list[str] = []
 
     # CABECERA
-    partes.append("*📋 SEÑALES ACTIVAS*")
-    partes.append("───────────────────")
-    partes.append(f"📅 Fecha: {fecha}")
-    partes.append(f"💰 Activo: {simbolo}")
-    partes.append(f"💵 Precio actual: {precio}")
-    partes.append(sesion_line)
+    partes.append("📋 *SEÑALES TESLABTC*")
+    partes.append("──────────────")
+    partes.append(f"📅 *Fecha:* {fecha}")
+    partes.append(f"💰 *Activo:* {simbolo}")
+    partes.append(f"💵 *Precio actual:* {precio}")
+    partes.append(f"🕒 *Sesión:* {sesion}")
     partes.append("")
 
     # SCALPING
-    partes.append("*📊 ESCENARIOS OPERATIVOS SCALPING*")
-    partes.append("───────────────────")
+    partes.append("📊 *ESCENARIOS OPERATIVOS SCALPING*")
+    partes.append("──────────────")
     partes.append(
         _bloque_scalping(
             "Escenario de Continuación (Tendencia Principal)",
@@ -238,9 +224,9 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes.append(_bloque_swing(swing))
 
     # REFLEXIÓN
-    partes.append("*📓 Reflexión TESLABTC A.P.*")
-    partes.append("───────────────────")
-    partes.append(f"💭 {reflexion}\n")
+    partes.append("📓 *Reflexión TESLABTC A.P.*")
+    partes.append("──────────────")
+    partes.append(f"💭 {reflexion}")
     partes.append(
         "⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY)."
     )
@@ -287,15 +273,15 @@ def construir_mensaje_free(body: Dict[str, Any]) -> str:
     m15_txt = _fmt_tf("M15 (reacción)")
 
     partes: list[str] = []
-    partes.append("*📋 ANÁLISIS GENERAL (MODO FREE)*")
-    partes.append("───────────────────")
+    partes.append("📋 *ANÁLISIS GENERAL (MODO FREE)*")
+    partes.append("──────────────")
     partes.append(f"📅 Fecha: {fecha}")
     partes.append(f"💰 Activo: {simbolo}")
     partes.append(f"💵 Precio actual: {precio}")
     partes.append(f"🕒 Sesión: {sesion}")
     partes.append(f"🌐 Fuente precio: {fuente} (conexión: {conexion})")
     partes.append("")
-    partes.append("*🧭 Estructura por temporalidad*")
+    partes.append("🧭 *Estructura por temporalidad*")
     partes.append(f"• H4 (macro): {h4_txt}")
     partes.append(f"• H1 (intradía): {h1_txt}")
     partes.append(f"• M15 (reacción): {m15_txt}")
