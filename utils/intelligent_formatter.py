@@ -23,7 +23,7 @@ def _safe_num(v) -> str:
 
 
 # ------------------------------------------------------------
-# 🧩 Helper para leer estado estructural (H4/H1) en Premium
+# 🧩 Helpers para leer estructura (H4/H1) en Premium
 # ------------------------------------------------------------
 def _get_estado_estructura(estructura: Dict[str, Any], tf: str) -> str:
     """
@@ -34,7 +34,7 @@ def _get_estado_estructura(estructura: Dict[str, Any], tf: str) -> str:
         "RANGO_LOW": float|None,
         ...
       }
-    y devuelve siempre un string upper seguro.
+    y devuelve siempre un string UPPER seguro.
     """
     dato = estructura.get(tf, "lateral")
 
@@ -43,10 +43,32 @@ def _get_estado_estructura(estructura: Dict[str, Any], tf: str) -> str:
     else:
         est = dato
 
+    # Evitamos errores tipo "'dict' object has no attribute 'upper'"
     if not isinstance(est, str):
-        est = "lateral"
+        try:
+            est = str(est)
+        except Exception:
+            est = "lateral"
 
-    return est.upper()
+    est = (est or "lateral").upper()
+    return est
+
+
+def _get_rango_txt(estructura: Dict[str, Any], tf: str) -> str:
+    """
+    Devuelve el rango formateado "LOW – HIGH" para H4/H1
+    usando las claves RANGO_LOW / RANGO_HIGH del payload Premium.
+    """
+    info = estructura.get(tf, {}) or {}
+    if not isinstance(info, dict):
+        return "N/D"
+
+    hi = info.get("RANGO_HIGH")
+    lo = info.get("RANGO_LOW")
+
+    hi_txt = _safe_num(hi) if hi is not None else "N/D"
+    lo_txt = _safe_num(lo) if lo is not None else "N/D"
+    return f"{lo_txt} – {hi_txt}"
 
 
 # ------------------------------------------------------------
@@ -65,8 +87,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         "estructura_detectada": { ... },
         "zonas_detectadas": { ... },
         "scalping": {
-            "continuacion": {...},
-            "correccion": {...}
+          "continuacion": {...},
+          "correccion": {...}
         },
         "swing": {...},
         "reflexion": "...",
@@ -84,6 +106,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         "✨ ¡Tu Mentalidad, Disciplina y Constancia definen tus Resultados!",
     )
 
+    estructura = body.get("estructura_detectada", {}) or {}
     zonas_detectadas = body.get("zonas_detectadas", {}) or {}
     poi_h4 = zonas_detectadas.get("POI_H4", "—")
 
@@ -283,6 +306,8 @@ def construir_contexto_detallado(body: Dict[str, Any], escenario: str) -> str:
     estructura = body.get("estructura_detectada", {}) or {}
     dir_h4 = _get_estado_estructura(estructura, "H4")
     dir_h1 = _get_estado_estructura(estructura, "H1")
+    rango_h4 = _get_rango_txt(estructura, "H4")
+    rango_h1 = _get_rango_txt(estructura, "H1")
 
     scalping = body.get("scalping", {}) or {}
     s_cont = scalping.get("continuacion", {}) or {}
@@ -295,8 +320,8 @@ def construir_contexto_detallado(body: Dict[str, Any], escenario: str) -> str:
         f"• Activo: *{simbolo}*\n"
         f"• Precio actual: *{precio}*\n"
         f"• Sesión actual: {sesion}\n"
-        f"• Estructura H4: *{dir_h4}*\n"
-        f"• Estructura H1: *{dir_h1}*\n\n"
+        f"• Estructura H4: *{dir_h4}* | Rango: {rango_h4}\n"
+        f"• Estructura H1: *{dir_h1}* | Rango: {rango_h1}\n\n"
     )
 
     # ------------- CONTINUACIÓN SCALPING -------------

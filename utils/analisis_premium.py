@@ -217,15 +217,18 @@ def _detectar_tendencia_zigzag(
         "pivotes": piv[-6:],
     }
 
-
 def _poi_fibo_band(
     estado: Optional[str],
     hi: Optional[float],
     lo: Optional[float],
 ) -> Optional[Tuple[float, float]]:
     """
-    Devuelve banda 61.8–88.6 % sobre el impulso H4.
-    Si estado es lateral, igualmente toma low→high.
+    Devuelve la banda 61.8–88.6 % del último impulso H4.
+
+    Regla TESLABTC:
+      - Estructura ALCISTA  👉 Fibo de izquierda a derecha, del BAJO al ALTO.
+      - Estructura BAJISTA 👉 Fibo de izquierda a derecha, del ALTO al BAJO.
+      - En rango usamos low→high por defecto.
     """
     if hi is None or lo is None or hi == lo:
         return None
@@ -233,25 +236,29 @@ def _poi_fibo_band(
     hi = float(hi)
     lo = float(lo)
 
-    if estado == "alcista":
+    estado_norm = (estado or "").strip().lower()
+
+    if estado_norm == "alcista":
+        # impulso de low → high
         base, tope = lo, hi
-    elif estado == "bajista":
+    elif estado_norm == "bajista":
+        # impulso de high → low
         base, tope = hi, lo
     else:
-        # En rango, igualmente usamos low→high
+        # lateral / sin_datos: tomamos low → high
         base, tope = lo, hi
 
     amp = tope - base
     if amp <= 0:
         return None
 
+    # banda 61.8–88.6 % del impulso
     lvl_618 = base + 0.618 * amp
     lvl_886 = base + 0.886 * amp
 
     banda_low = min(lvl_618, lvl_886)
     banda_high = max(lvl_618, lvl_886)
     return round(banda_low, 2), round(banda_high, 2)
-
 
 # ------------------------------------------------------------
 # 🔹 Sesiones (Asia, Londres, NY)
@@ -468,7 +475,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     }
                 )
             else:
-                # 🔁 H1 en rango: proponemos ambos breakouts como oportunidades tácticas
+                # 🔁 H1 en rango: seguimos etiquetando por tipo de escenario
                 entry_long = prev_high
                 sl_long = prev_low
                 r_long = max(entry_long - sl_long, 0)
@@ -479,7 +486,7 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     {
                         "activo": True,
                         "direccion": "ALCISTA (H1 en rango, breakout M5)",
-                        "riesgo": "Medio",
+                        "riesgo": "Bajo",   # continuacion => riesgo bajo
                         "zona_reaccion": f"{entry_long:,.2f}",
                         "sl": f"{sl_long:,.2f}",
                         "tp1_rr": f"{tp1_long:,.2f}" if r_long > 0 else "—",
@@ -491,6 +498,28 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     }
                 )
 
+                entry_short = prev_low
+                sl_short = prev_high
+                r_short = max(sl_short - entry_short, 0)
+                tp1_short = entry_short - r_short
+                tp2_short = entry_short - 2 * r_short
+
+                scalping_corr.update(
+                    {
+                        "activo": True,
+                        "direccion": "BAJISTA (H1 en rango, breakout M5)",
+                        "riesgo": "Alto",   # corrección => riesgo alto
+                        "zona_reaccion": f"{entry_short:,.2f}",
+                        "sl": f"{sl_short:,.2f}",
+                        "tp1_rr": f"{tp1_short:,.2f}" if r_short > 0 else "—",
+                        "tp2_rr": f"{tp2_short:,.2f}" if r_short > 0 else "—",
+                        "contexto": (
+                            "SCALPING en rango: ruptura del LOW M5 dentro del rango de H1; "
+                            "se trabaja el breakout bajista con tamaño controlado."
+                        ),
+                    }
+                )
+                
                 entry_short = prev_low
                 sl_short = prev_high
                 r_short = max(sl_short - entry_short, 0)
