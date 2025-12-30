@@ -250,6 +250,46 @@ def _poi_fibo_band(
     banda_low = min(lvl_886, lvl_618)
     banda_high = max(lvl_886, lvl_618)
     return round(banda_low, 2), round(banda_high, 2)
+# ------------------------------------------------------------
+# 🔹 Filtro de tamaño de SL para scalping
+# ------------------------------------------------------------
+MAX_SCALPING_SL_PCT = 1.0  # 1 % del precio de entrada
+
+
+def _evaluar_riesgo_sl(entry: Optional[float], sl: Optional[float], riesgo_base: str):
+    """Ajusta el riesgo según lo grande que sea el SL en scalping.
+
+    Devuelve una tupla:
+      (riesgo_final: str, alerta_sl: bool, distancia: float|None, porcentaje: float|None)
+    """
+    try:
+        if entry is None or sl is None:
+            return riesgo_base, False, None, None
+
+        entry_f = float(entry)
+        sl_f = float(sl)
+        if entry_f <= 0:
+            return riesgo_base, False, None, None
+
+        dist = abs(entry_f - sl_f)
+        pct = (dist / entry_f) * 100
+
+        # SL aceptable para scalping
+        if pct <= MAX_SCALPING_SL_PCT:
+            return riesgo_base, False, round(dist, 2), round(pct, 2)
+
+        # SL considerado amplio para SCALPING
+        base = riesgo_base.lower()
+        if "bajo" in base:
+            riesgo = "Medio (SL amplio)"
+        elif "medio" in base:
+            riesgo = "Alto (SL amplio)"
+        else:
+            riesgo = "Muy alto (SL amplio)"
+
+        return riesgo, True, round(dist, 2), round(pct, 2)
+    except Exception:
+        return riesgo_base, False, None, None
 
 # ------------------------------------------------------------
 # 🔹 Sesiones (Asia, Londres, NY)
@@ -360,6 +400,9 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         "sl": "—",
         "tp1_rr": "—",
         "tp2_rr": "—",
+        "sl_alerta": False,
+        "sl_dist": None,
+        "sl_pct": None,
         "contexto": "Sin dirección clara en H1.",
     }
     scalping_corr: Dict[str, Any] = dict(scalping_cont)
@@ -372,6 +415,9 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             prev_high = max(highs_m5[:-1])
             prev_low = min(lows_m5[:-1])
 
+            # --------------------------------------------------------
+            # H1 ALCISTA → CONTINUACIÓN LARGA + CORRECCIÓN CORTA
+            # --------------------------------------------------------
             if dir_h1 == "alcista":
                 # ✅ CONTINUACIÓN ALCISTA
                 entry_cont = prev_high
@@ -380,45 +426,64 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 tp1_cont = entry_cont + r_cont
                 tp2_cont = entry_cont + 2 * r_cont
 
+                riesgo_base = "Bajo"
+                riesgo_cont, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
+                    entry_cont, sl_cont, riesgo_base
+                )
+
                 scalping_cont.update(
                     {
                         "activo": True,
                         "direccion": "ALCISTA (a favor de H1)",
-                        "riesgo": "Bajo",
+                        "riesgo": riesgo_cont,
                         "zona_reaccion": f"{entry_cont:,.2f}",
                         "sl": f"{sl_cont:,.2f}",
                         "tp1_rr": f"{tp1_cont:,.2f}" if r_cont > 0 else "—",
                         "tp2_rr": f"{tp2_cont:,.2f}" if r_cont > 0 else "—",
+                        "sl_alerta": alerta_sl,
+                        "sl_dist": dist_sl,
+                        "sl_pct": pct_sl,
                         "contexto": (
-                            "SCALPING a favor de H1: entrada por ruptura del HIGH M5, "
-                            "SL en el LOW M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
+                            "SCALPING a favor de H1: entrada por ruptura del HIGH/LOW M5, "
+                            "SL en el extremo opuesto de M5, TP1 1:1 (mover a BE) y TP2 1:2."
                         ),
                     }
                 )
 
-                # 🔻 CORRECCIÓN BAJISTA
+                # 🔺 CORRECCIÓN ALCISTA (venta contra H1)
                 entry_corr = prev_low
                 sl_corr = prev_high
                 r_corr = max(sl_corr - entry_corr, 0)
                 tp1_corr = entry_corr - r_corr
                 tp2_corr = entry_corr - 2 * r_corr
 
+                riesgo_base = "Alto"
+                riesgo_corr, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
+                    entry_corr, sl_corr, riesgo_base
+                )
+
                 scalping_corr.update(
                     {
                         "activo": True,
                         "direccion": "BAJISTA (contra H1)",
-                        "riesgo": "Alto",
+                        "riesgo": riesgo_corr,
                         "zona_reaccion": f"{entry_corr:,.2f}",
                         "sl": f"{sl_corr:,.2f}",
                         "tp1_rr": f"{tp1_corr:,.2f}" if r_corr > 0 else "—",
                         "tp2_rr": f"{tp2_corr:,.2f}" if r_corr > 0 else "—",
+                        "sl_alerta": alerta_sl,
+                        "sl_dist": dist_sl,
+                        "sl_pct": pct_sl,
                         "contexto": (
-                            "SCALPING de corrección contra H1: entrada por ruptura del LOW M5, "
-                            "SL en el HIGH M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
+                            "SCALPING de corrección: venta contra la estructura de H1, "
+                            "solo si hay agotamiento claro y confirmación limpia."
                         ),
                     }
                 )
 
+            # --------------------------------------------------------
+            # H1 BAJISTA → CONTINUACIÓN CORTA + CORRECCIÓN LARGA
+            # --------------------------------------------------------
             elif dir_h1 == "bajista":
                 # ✅ CONTINUACIÓN BAJISTA
                 entry_cont = prev_low
@@ -427,64 +492,92 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 tp1_cont = entry_cont - r_cont
                 tp2_cont = entry_cont - 2 * r_cont
 
+                riesgo_base = "Bajo"
+                riesgo_cont, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
+                    entry_cont, sl_cont, riesgo_base
+                )
+
                 scalping_cont.update(
                     {
                         "activo": True,
                         "direccion": "BAJISTA (a favor de H1)",
-                        "riesgo": "Bajo",
+                        "riesgo": riesgo_cont,
                         "zona_reaccion": f"{entry_cont:,.2f}",
                         "sl": f"{sl_cont:,.2f}",
                         "tp1_rr": f"{tp1_cont:,.2f}" if r_cont > 0 else "—",
                         "tp2_rr": f"{tp2_cont:,.2f}" if r_cont > 0 else "—",
+                        "sl_alerta": alerta_sl,
+                        "sl_dist": dist_sl,
+                        "sl_pct": pct_sl,
                         "contexto": (
-                            "SCALPING a favor de H1: entrada por ruptura del LOW M5, "
-                            "SL en el HIGH M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
+                            "SCALPING a favor de H1: venta por ruptura del LOW M5, "
+                            "SL en el HIGH M5 previo, TP1 1:1 (BE) y TP2 1:2."
                         ),
                     }
                 )
 
-                # 🔺 CORRECCIÓN ALCISTA
+                # 🔺 CORRECCIÓN BAJISTA (compra contra H1)
                 entry_corr = prev_high
                 sl_corr = prev_low
                 r_corr = max(entry_corr - sl_corr, 0)
                 tp1_corr = entry_corr + r_corr
                 tp2_corr = entry_corr + 2 * r_corr
 
+                riesgo_base = "Alto"
+                riesgo_corr, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
+                    entry_corr, sl_corr, riesgo_base
+                )
+
                 scalping_corr.update(
                     {
                         "activo": True,
                         "direccion": "ALCISTA (contra H1)",
-                        "riesgo": "Alto",
+                        "riesgo": riesgo_corr,
                         "zona_reaccion": f"{entry_corr:,.2f}",
                         "sl": f"{sl_corr:,.2f}",
                         "tp1_rr": f"{tp1_corr:,.2f}" if r_corr > 0 else "—",
                         "tp2_rr": f"{tp2_corr:,.2f}" if r_corr > 0 else "—",
+                        "sl_alerta": alerta_sl,
+                        "sl_dist": dist_sl,
+                        "sl_pct": pct_sl,
                         "contexto": (
-                            "SCALPING de corrección contra H1: entrada por ruptura del HIGH M5, "
-                            "SL en el LOW M5 previo, TP1 1:1 (mover a BE) y TP2 1:2 con 50% restante."
+                            "SCALPING de corrección: compra contra la estructura de H1, "
+                            "solo si hay agotamiento claro y confirmación limpia."
                         ),
                     }
                 )
+
+            # --------------------------------------------------------
+            # H1 EN RANGO → SCALPING EN RANGO (ambos lados)
+            # --------------------------------------------------------
             else:
-                # 🔁 H1 en rango: seguimos etiquetando por tipo de escenario
+                # Rango simple usando extremos recientes de M5
                 entry_long = prev_high
                 sl_long = prev_low
                 r_long = max(entry_long - sl_long, 0)
                 tp1_long = entry_long + r_long
                 tp2_long = entry_long + 2 * r_long
 
+                riesgo_base = "Medio"
+                riesgo_long, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
+                    entry_long, sl_long, riesgo_base
+                )
+
                 scalping_cont.update(
                     {
                         "activo": True,
-                        "direccion": "ALCISTA (H1 en rango, breakout M5)",
-                        "riesgo": "Bajo",   # continuacion => riesgo bajo
+                        "direccion": "ALCISTA (rango H1)",
+                        "riesgo": riesgo_long,
                         "zona_reaccion": f"{entry_long:,.2f}",
                         "sl": f"{sl_long:,.2f}",
                         "tp1_rr": f"{tp1_long:,.2f}" if r_long > 0 else "—",
                         "tp2_rr": f"{tp2_long:,.2f}" if r_long > 0 else "—",
+                        "sl_alerta": alerta_sl,
+                        "sl_dist": dist_sl,
+                        "sl_pct": pct_sl,
                         "contexto": (
                             "SCALPING en rango: ruptura del HIGH M5 dentro del rango de H1; "
-                            "se trabaja como oportunidad táctica con gestión conservadora."
+                            "se trabaja la liquidez superior con tamaño controlado."
                         ),
                     }
                 )
@@ -495,37 +588,23 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 tp1_short = entry_short - r_short
                 tp2_short = entry_short - 2 * r_short
 
-                scalping_corr.update(
-                    {
-                        "activo": True,
-                        "direccion": "BAJISTA (H1 en rango, breakout M5)",
-                        "riesgo": "Alto",   # corrección => riesgo alto
-                        "zona_reaccion": f"{entry_short:,.2f}",
-                        "sl": f"{sl_short:,.2f}",
-                        "tp1_rr": f"{tp1_short:,.2f}" if r_short > 0 else "—",
-                        "tp2_rr": f"{tp2_short:,.2f}" if r_short > 0 else "—",
-                        "contexto": (
-                            "SCALPING en rango: ruptura del LOW M5 dentro del rango de H1; "
-                            "se trabaja el breakout bajista con tamaño controlado."
-                        ),
-                    }
+                riesgo_base = "Medio"
+                riesgo_short, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
+                    entry_short, sl_short, riesgo_base
                 )
-                
-                entry_short = prev_low
-                sl_short = prev_high
-                r_short = max(sl_short - entry_short, 0)
-                tp1_short = entry_short - r_short
-                tp2_short = entry_short - 2 * r_short
 
                 scalping_corr.update(
                     {
                         "activo": True,
-                        "direccion": "BAJISTA (H1 en rango, breakout M5)",
-                        "riesgo": "Medio",
+                        "direccion": "BAJISTA (rango H1)",
+                        "riesgo": riesgo_short,
                         "zona_reaccion": f"{entry_short:,.2f}",
                         "sl": f"{sl_short:,.2f}",
                         "tp1_rr": f"{tp1_short:,.2f}" if r_short > 0 else "—",
                         "tp2_rr": f"{tp2_short:,.2f}" if r_short > 0 else "—",
+                        "sl_alerta": alerta_sl,
+                        "sl_dist": dist_sl,
+                        "sl_pct": pct_sl,
                         "contexto": (
                             "SCALPING en rango: ruptura del LOW M5 dentro del rango de H1; "
                             "se trabaja el breakout bajista con tamaño controlado."

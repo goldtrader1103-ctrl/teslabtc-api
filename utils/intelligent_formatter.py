@@ -133,20 +133,31 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         tp2 = _safe_num(data.get("tp2_rr", "1:2 (50%)"))
         sl = _safe_num(data.get("sl", "—"))
 
+        sl_alerta = bool(data.get("sl_alerta", False))
+        sl_dist = data.get("sl_dist")
+        sl_pct = data.get("sl_pct")
+
         txt: list[str] = []
         txt.append(f"🔷 {nombre}")
         txt.append("──────────────────────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
         txt.append(f"⚠️ Riesgo: {riesgo}")
-        txt.append(
-            "📍 Contexto: Usa el botón de contexto para ver la explicación completa del trade.\n"
-        )
+        txt.append("")
         txt.append(f"📥 Punto de entrada: {entrada}")
         txt.append(f"🎯 TP1: {tp1}")
         txt.append(f"🎯 TP2: {tp2}")
-        txt.append(f"🛡️ SL: {sl}\n")
-        return "\n".join(txt)
+        txt.append(f"🛡️ SL: {sl}")
+
+        # Aviso extra si el SL es exagerado para scalping
+        if sl_alerta and sl_dist is not None and sl_pct is not None:
+            dist_txt = _safe_num(sl_dist)
+            txt.append(
+                f"⚠️ Alerta TESLABTC: SL amplio para scalping (~{dist_txt} puntos, {sl_pct:.2f}% del precio). "
+                "El mercado puede estar sobreextendido; considera reducir tamaño o no tomar esta operación."
+            )
+
+        return "\\n".join(txt)
 
     # ---------------------------
     # 🔹 Bloque SWING
