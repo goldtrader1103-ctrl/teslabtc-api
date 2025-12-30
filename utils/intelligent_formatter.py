@@ -128,17 +128,22 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         estado = "✅ ACTIVO" if activo else "⏳ En espera"
         direccion = data.get("direccion", "—")
         riesgo = data.get("riesgo", "N/A")
+
         entrada = _safe_num(data.get("zona_reaccion", "—"))
         tp1 = _safe_num(data.get("tp1_rr", "1:1 (50% + BE)"))
         tp2 = _safe_num(data.get("tp2_rr", "1:2 (50%)"))
-        sl = _safe_num(data.get("sl", "—"))
+
+        # Guardamos el valor original para cálculo y el formateado para mostrar
+        sl_val = data.get("sl", "—")
+        sl = _safe_num(sl_val)
 
         sl_alerta = bool(data.get("sl_alerta", False))
         sl_dist = data.get("sl_dist")
         sl_pct = data.get("sl_pct")
 
         txt: list[str] = []
-        txt.append(f"🔷 {nombre}")
+        # 🔹 Título del escenario en negrilla
+        txt.append(f"**🔷 {nombre}**")
         txt.append("──────────────────────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
@@ -149,13 +154,19 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         txt.append(f"🎯 TP2: {tp2}")
         txt.append(f"🛡️ SL: {sl}")
 
-        # Aviso extra si el SL es exagerado para scalping
+        # 🚨 Advertencia SOLO si el SL es exagerado (≥ 1%)
         if sl_alerta and sl_dist is not None and sl_pct is not None:
-            dist_txt = _safe_num(sl_dist)
-            txt.append(
-                f"⚠️ Alerta TESLABTC: SL amplio para scalping (~{dist_txt} puntos, {sl_pct:.2f}% del precio). "
-                "El mercado puede estar sobreextendido; considera reducir tamaño o no tomar esta operación."
-            )
+            try:
+                sl_pct_float = float(sl_pct)
+                if sl_pct_float >= 1.0:
+                    dist_txt = _safe_num(sl_dist)
+                    txt.append(
+                        f"⚠️ Alerta TESLABTC: SL amplio para scalping (~{dist_txt} puntos, {sl_pct_float:.2f}% del precio). "
+                        "El mercado puede estar sobreextendido; considera reducir tamaño o no tomar esta operación."
+                    )
+            except Exception:
+                # Si algo raro pasa con el porcentaje, no rompemos el mensaje
+                pass
 
         return "\n".join(txt)
 
@@ -179,7 +190,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
         sl = _safe_num(data.get("sl", "—"))
 
         txt: list[str] = []
-        txt.append("📈 ESCENARIO SWING")
+        txt.append("**📈 ESCENARIO SWING**")
         txt.append("──────────────────────────────")
         txt.append(f"📌 Estado: {estado}")
         txt.append(f"📈 Dirección: {direccion}")
@@ -229,11 +240,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
 
     # REFLEXIÓN
     partes.append("📓 Reflexión TESLABTC A.P.")
-    partes.append("──────────────────────────────")
-    partes.append(f"💭 {reflexion}\n")
-    partes.append(
-        "⚠️ Análisis SCALPING diseñado para la apertura de cada sesión (Asia, Londres y NY)."
-    )
+    
     partes.append("⚠️ Análisis SWING actualizado cada vela de 1H.")
     partes.append(slogan)
 
