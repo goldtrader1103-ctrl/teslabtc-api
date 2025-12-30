@@ -211,7 +211,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes: list[str] = []
 
     # CABECERA
-    partes.append("📋 SEÑALES ACTIVAS")
+    partes.append("**📋 SEÑALES ACTIVAS**")
     partes.append("──────────────────────────────")
     partes.append(f"📅 Fecha: {fecha}")
     partes.append(f"💰 Activo: {simbolo}")
@@ -220,7 +220,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes.append("")
 
     # SCALPING
-    partes.append("📊 ESCENARIOS OPERATIVOS SCALPING")
+    partes.append("**📊 ESCENARIOS OPERATIVOS SCALPING**")
     partes.append("──────────────────────────────")
     partes.append(
         _bloque_scalping(
@@ -239,7 +239,7 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
     partes.append(_bloque_swing(swing))
 
     # REFLEXIÓN
-    partes.append("📓 Reflexión TESLABTC A.P.")
+    partes.append("**📓 Reflexión TESLABTC A.P.**")
     
     partes.append("⚠️ Análisis SWING actualizado cada vela de 1H.")
     partes.append(slogan)
