@@ -157,7 +157,8 @@ def construir_mensaje_operativo(body: Dict[str, Any]) -> str:
                 "El mercado puede estar sobreextendido; considera reducir tamaño o no tomar esta operación."
             )
 
-        return "\\n".join(txt)
+        return "\n".join(txt)
+
 
     # ---------------------------
     # 🔹 Bloque SWING
