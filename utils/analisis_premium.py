@@ -402,7 +402,6 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             # Queremos 0 = premium, 100 = discount respecto a la TENDENCIA
             return 100.0 - base
         elif dir_h1 == "bajista":
-            # 0 = low, 100 = high, pero la tendencia va de high → low
             # 0 = premium (high), 100 = discount (low)
             return base
         else:
