@@ -327,9 +327,8 @@ def _estado_sesiones() -> Tuple[str, Dict[str, bool]]:
 
     return sesion_txt, {"asia": asia, "londres": londres, "ny": ny}
 
-
 # ============================================================
-# 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3 simplificado)
+# 🌟 TESLABTC — ANÁLISIS PREMIUM REAL (v5.3 con Fibo-Riesgo)
 # ============================================================
 def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     """
@@ -350,7 +349,9 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
     kl_h1 = _safe_get_klines(symbol, "1h", 400)
     kl_m5 = _safe_get_klines(symbol, "5m", 300)
 
-    # Estructura H4/H1 usando heurística TESLABTC (estructura_utils)
+    # --------------------------------------------------------
+    # 🧱 Estructura H4
+    # --------------------------------------------------------
     if kl_h4:
         info_h4 = evaluar_estructura(kl_h4)
         dir_h4 = info_h4.get("estado", "sin_datos")
@@ -361,10 +362,12 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         h4_high = None
         h4_low = None
 
+    # --------------------------------------------------------
+    # 🧱 Estructura H1
+    # --------------------------------------------------------
     if kl_h1:
         info_h1 = evaluar_estructura(kl_h1)
-        dir_h1 = info_h1.get("estado", "sin_dat" \
-        "os")
+        dir_h1 = info_h1.get("estado", "sin_datos")
         h1_high = info_h1.get("high")
         h1_low = info_h1.get("low")
     else:
@@ -372,7 +375,42 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         h1_high = None
         h1_low = None
 
+    # --------------------------------------------------------
+    # 🔢 Helper Fibo relativo a la estructura de H1
+    # --------------------------------------------------------
+    def _trend_fibo(p: float | None) -> float:
+        """
+        Devuelve la posición Fibo (0–100) del precio 'p'
+        relativa al impulso actual de H1 y alineada con la
+        dirección de H1.
+
+        - 0   = zona "premium" en la dirección de H1
+        - 100 = zona "discount" en la dirección de H1
+        """
+        if p is None or h1_high is None or h1_low is None:
+            return 50.0
+        if h1_high == h1_low:
+            return 50.0
+
+        lo = min(h1_low, h1_high)
+        hi = max(h1_low, h1_high)
+        base = (p - lo) / (hi - lo) * 100.0
+        base = max(0.0, min(100.0, base))
+
+        if dir_h1 == "alcista":
+            # 0 = low (discount), 100 = high (premium)
+            # Queremos 0 = premium, 100 = discount respecto a la TENDENCIA
+            return 100.0 - base
+        elif dir_h1 == "bajista":
+            # 0 = low, 100 = high, pero la tendencia va de high → low
+            # 0 = premium (high), 100 = discount (low)
+            return base
+        else:
+            return 50.0
+
+    # --------------------------------------------------------
     # POI H4 61.8–88.6 para swing (zona premium)
+    # --------------------------------------------------------
     poi_h4 = _poi_fibo_band(dir_h4, h4_high, h4_low)
     poi_txt = "—"
     in_premium = False
@@ -426,7 +464,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 tp1_cont = entry_cont + r_cont
                 tp2_cont = entry_cont + 2 * r_cont
 
-                riesgo_base = "Bajo"
+                # ⚖️ Riesgo por Fibo: continuación
+                pos_fibo_cont = _trend_fibo(entry_cont)
+                if pos_fibo_cont <= 50.0:
+                    riesgo_base = "Bajo"
+                else:
+                    riesgo_base = "Medio"
+
                 riesgo_cont, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
                     entry_cont, sl_cont, riesgo_base
                 )
@@ -457,7 +501,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 tp1_corr = entry_corr - r_corr
                 tp2_corr = entry_corr - 2 * r_corr
 
-                riesgo_base = "Alto"
+                # ⚖️ Riesgo por Fibo: corrección
+                pos_fibo_corr = _trend_fibo(entry_corr)
+                if pos_fibo_corr <= 61.8:
+                    riesgo_base = "Alto"
+                else:
+                    riesgo_base = "Medio"
+
                 riesgo_corr, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
                     entry_corr, sl_corr, riesgo_base
                 )
@@ -492,7 +542,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 tp1_cont = entry_cont - r_cont
                 tp2_cont = entry_cont - 2 * r_cont
 
-                riesgo_base = "Bajo"
+                # ⚖️ Riesgo por Fibo: continuación
+                pos_fibo_cont = _trend_fibo(entry_cont)
+                if pos_fibo_cont <= 50.0:
+                    riesgo_base = "Bajo"
+                else:
+                    riesgo_base = "Medio"
+
                 riesgo_cont, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
                     entry_cont, sl_cont, riesgo_base
                 )
@@ -523,7 +579,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                 tp1_corr = entry_corr + r_corr
                 tp2_corr = entry_corr + 2 * r_corr
 
-                riesgo_base = "Alto"
+                # ⚖️ Riesgo por Fibo: corrección
+                pos_fibo_corr = _trend_fibo(entry_corr)
+                if pos_fibo_corr <= 61.8:
+                    riesgo_base = "Alto"
+                else:
+                    riesgo_base = "Medio"
+
                 riesgo_corr, alerta_sl, dist_sl, pct_sl = _evaluar_riesgo_sl(
                     entry_corr, sl_corr, riesgo_base
                 )
@@ -707,7 +769,13 @@ def generar_analisis_premium(symbol: str = "BTCUSDT") -> Dict[str, Any]:
                     tp1_txt = "—"
                     tp2_txt = "—"
 
-                zona_reac = f"{entry:,.2f}"
+                # 🔧 Ajuste visual: que la zona de reacción NO quede fuera de la banda premium
+                if in_premium and p_lo is not None and p_hi is not None:
+                    entry_display = min(max(entry, p_lo), p_hi)
+                else:
+                    entry_display = entry
+
+                zona_reac = f"{entry_display:,.2f}"
                 sl_txt = f"{sl_val:,.2f}"
                 tp3_txt = f"{tp3_val:,.2f}" if tp3_val is not None else "—"
 
